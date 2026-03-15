@@ -1,0 +1,196 @@
+conversation_id,participant_id,comment_id,comment_text,is_seed,comment_created_at,vote,reaction_created_at,participant_cluster
+conversation-01,p001,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p002,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p003,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p004,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p005,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p006,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p007,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p008,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p009,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p010,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p011,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p012,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p013,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p014,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p015,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p016,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p017,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p018,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p019,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p020,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p021,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p022,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p023,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p024,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p025,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p026,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p027,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p028,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p029,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p030,s01,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p001,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p002,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p003,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p004,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p005,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p006,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p007,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p008,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p009,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p010,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p011,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p012,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p013,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p014,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p015,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p016,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p017,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p018,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p019,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p020,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p021,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p022,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p023,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p024,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p025,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p026,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p027,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p028,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p029,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p030,s02,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p001,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p002,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p003,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p004,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p005,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p006,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p007,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p008,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p009,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p010,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p011,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p012,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p013,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p014,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p015,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p016,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p017,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p018,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p019,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p020,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p021,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p022,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p023,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p024,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p025,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p026,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p027,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p028,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p029,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p030,s03,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p001,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p002,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p003,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p004,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p005,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p006,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p007,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p008,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p009,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p010,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p011,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p012,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p013,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p014,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p015,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p016,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p017,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p018,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p019,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p020,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p021,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p022,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p023,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p024,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p025,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p026,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p027,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p028,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p029,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p030,s04,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p001,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p002,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p003,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p004,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p005,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p006,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p007,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p008,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Welfare
+conversation-01,p009,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p010,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Welfare
+conversation-01,p011,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p012,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p013,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p014,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p015,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p016,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p017,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Safety
+conversation-01,p018,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p019,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Safety
+conversation-01,p020,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Safety
+conversation-01,p021,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p022,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p023,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p024,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p025,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p026,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p027,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p028,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-12T11:00:00Z,Balanced
+conversation-01,p029,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p030,s05,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-12T11:00:00Z,Balanced
+conversation-01,p002,s01_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p012,s01_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p022,s01_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p004,s01_c2,Give a 6-month grace period before fines start,false,2026-03-10T10:05:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p014,s01_c2,Give a 6-month grace period before fines start,false,2026-03-10T10:05:00Z,pass,2026-03-12T12:00:00Z,Safety
+conversation-01,p024,s01_c2,Give a 6-month grace period before fines start,false,2026-03-10T10:05:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p007,s01_c3,Require registration at adoption and sale points,false,2026-03-10T10:10:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p017,s01_c3,Require registration at adoption and sale points,false,2026-03-10T10:10:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p027,s01_c3,Require registration at adoption and sale points,false,2026-03-10T10:10:00Z,pass,2026-03-12T12:00:00Z,Balanced
+conversation-01,p003,s02_c1,Expand the Animal Monitoring Agency budget for TNVR,false,2026-03-10T10:20:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p013,s02_c1,Expand the Animal Monitoring Agency budget for TNVR,false,2026-03-10T10:20:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p023,s02_c1,Expand the Animal Monitoring Agency budget for TNVR,false,2026-03-10T10:20:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p005,s02_c2,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:25:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p015,s02_c2,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:25:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p025,s02_c2,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:25:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p008,s02_c3,Prioritize rabies vaccination in high-risk areas,false,2026-03-10T10:30:00Z,pass,2026-03-12T12:00:00Z,Welfare
+conversation-01,p018,s02_c3,Prioritize rabies vaccination in high-risk areas,false,2026-03-10T10:30:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p028,s02_c3,Prioritize rabies vaccination in high-risk areas,false,2026-03-10T10:30:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p006,s03_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:40:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p016,s03_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:40:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p026,s03_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:40:00Z,disagree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p009,s03_c2,Create inspections for unlicensed breeders,false,2026-03-10T10:45:00Z,disagree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p019,s03_c2,Create inspections for unlicensed breeders,false,2026-03-10T10:45:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p029,s03_c2,Create inspections for unlicensed breeders,false,2026-03-10T10:45:00Z,disagree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p010,s03_c3,Allow courts to ban offenders from owning animals,false,2026-03-10T10:50:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p020,s03_c3,Allow courts to ban offenders from owning animals,false,2026-03-10T10:50:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p030,s03_c3,Allow courts to ban offenders from owning animals,false,2026-03-10T10:50:00Z,disagree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p002,s04_c1,Improve shelter conditions and veterinary care standards,false,2026-03-10T11:00:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p012,s04_c1,Improve shelter conditions and veterinary care standards,false,2026-03-10T11:00:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p022,s04_c1,Improve shelter conditions and veterinary care standards,false,2026-03-10T11:00:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p004,s04_c2,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T11:05:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p014,s04_c2,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T11:05:00Z,pass,2026-03-12T12:00:00Z,Safety
+conversation-01,p024,s04_c2,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T11:05:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p007,s04_c3,Run public campaigns that encourage adoption over buying,false,2026-03-10T11:10:00Z,agree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p017,s04_c3,Run public campaigns that encourage adoption over buying,false,2026-03-10T11:10:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p027,s04_c3,Run public campaigns that encourage adoption over buying,false,2026-03-10T11:10:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p003,s05_c1,Set response-time targets for aggressive animal reports,false,2026-03-10T11:20:00Z,disagree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p013,s05_c1,Set response-time targets for aggressive animal reports,false,2026-03-10T11:20:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p023,s05_c1,Set response-time targets for aggressive animal reports,false,2026-03-10T11:20:00Z,pass,2026-03-12T12:00:00Z,Balanced
+conversation-01,p005,s05_c2,Use behavioral assessment before relocation or sheltering,false,2026-03-10T11:25:00Z,pass,2026-03-12T12:00:00Z,Welfare
+conversation-01,p015,s05_c2,Use behavioral assessment before relocation or sheltering,false,2026-03-10T11:25:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p025,s05_c2,Use behavioral assessment before relocation or sheltering,false,2026-03-10T11:25:00Z,agree,2026-03-12T12:00:00Z,Balanced
+conversation-01,p008,s05_c3,Keep rapid-response teams with vets and animal handlers,false,2026-03-10T11:30:00Z,disagree,2026-03-12T12:00:00Z,Welfare
+conversation-01,p018,s05_c3,Keep rapid-response teams with vets and animal handlers,false,2026-03-10T11:30:00Z,agree,2026-03-12T12:00:00Z,Safety
+conversation-01,p028,s05_c3,Keep rapid-response teams with vets and animal handlers,false,2026-03-10T11:30:00Z,pass,2026-03-12T12:00:00Z,Balanced

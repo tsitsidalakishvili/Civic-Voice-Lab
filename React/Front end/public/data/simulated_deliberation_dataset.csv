@@ -1,0 +1,66 @@
+conversation_id,participant_id,comment_id,comment_text,is_seed,comment_created_at,vote,reaction_created_at
+sim-hollys-law-2026,p001,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p002,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p003,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p004,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p005,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p006,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p007,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p008,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p009,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p010,c001,Mandate microchipping and registration for all dogs and cats nationwide,true,2026-03-10T09:00:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p001,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p002,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p003,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p004,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p005,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p006,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p007,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p008,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p009,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p010,c002,Guarantee stable funding for TNVR sterilization and vaccination programs,true,2026-03-10T09:03:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p001,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p002,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p003,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p004,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p005,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p006,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p007,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p008,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p009,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p010,c003,Introduce stricter penalties for pet abandonment and unregulated breeding,true,2026-03-10T09:06:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p001,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p002,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p003,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p004,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p005,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p006,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p007,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p008,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p009,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p010,c004,Expand municipal shelters and adoption incentives for stray animals,true,2026-03-10T09:09:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p001,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p002,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p003,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p004,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p005,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p006,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p007,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p008,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,pass,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p009,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,agree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p010,c005,Create a public safety response unit for aggressive stray animals,true,2026-03-10T09:12:00Z,disagree,2026-03-11T10:00:00Z
+sim-hollys-law-2026,p001,c001_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p005,c001_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p009,c001_c1,Offer low-cost microchipping days in every district,false,2026-03-10T10:00:00Z,pass,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p002,c002_c1,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:05:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p006,c002_c1,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:05:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p010,c002_c1,Partner with NGOs and clinics to increase sterilization capacity,false,2026-03-10T10:05:00Z,pass,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p003,c003_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:10:00Z,disagree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p007,c003_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:10:00Z,disagree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p009,c003_c1,Introduce escalating fines for repeat abandonment cases,false,2026-03-10T10:10:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p001,c004_c1,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T10:15:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p004,c004_c1,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T10:15:00Z,pass,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p008,c004_c1,Provide adoption vouchers to cover initial vet costs,false,2026-03-10T10:15:00Z,disagree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p002,c005_c1,Use behavioral assessment before relocation or sheltering,false,2026-03-10T10:20:00Z,pass,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p005,c005_c1,Use behavioral assessment before relocation or sheltering,false,2026-03-10T10:20:00Z,agree,2026-03-11T11:00:00Z
+sim-hollys-law-2026,p010,c005_c1,Use behavioral assessment before relocation or sheltering,false,2026-03-10T10:20:00Z,disagree,2026-03-11T11:00:00Z
