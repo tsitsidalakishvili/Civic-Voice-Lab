@@ -1049,12 +1049,22 @@ def _load_map_data_df() -> pd.DataFrame:
     df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
     df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
     df = df.dropna(subset=["lat", "lon"])
+    df = df[df["lat"].between(-90, 90) & df["lon"].between(-180, 180)]
+    df = df[~((df["lat"].abs() < 1e-6) & (df["lon"].abs() < 1e-6))]
     df["timeAvailability"] = df["timeAvailability"].fillna("Unspecified")
     df["about"] = df["about"].fillna("")
     df["address"] = df["address"].fillna("")
-    df["addressLabel"] = df["address"].apply(
-        lambda value: value if str(value).strip() else "Unspecified"
-    )
+    def _format_address_label(row):
+        address_value = str(row.get("address") or "").strip()
+        if address_value:
+            return address_value
+        lat = row.get("lat")
+        lon = row.get("lon")
+        if pd.notna(lat) and pd.notna(lon):
+            return f"Lat {lat:.4f}, Lon {lon:.4f}"
+        return "Unspecified"
+
+    df["addressLabel"] = df.apply(_format_address_label, axis=1)
     df["involvementAreas"] = df["involvementAreas"].apply(lambda v: v or [])
     df["involvementLabel"] = df["involvementAreas"].apply(_format_list_label)
     df = _enrich_people_core(df)

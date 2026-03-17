@@ -4232,6 +4232,24 @@ function CRMMapTab() {
     motivationQuery: '',
   }
   const [filters, setFilters] = useState(defaultFilters)
+  const normalizeCoord = (value) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : null
+  }
+  const hasValidCoords = (lat, lon) => {
+    if (lat === null || lon === null) return false
+    if (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001) return false
+    return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+  }
+  const normalizedData = useMemo(() => {
+    return mapData
+      .map((row) => {
+        const lat = normalizeCoord(row.lat)
+        const lon = normalizeCoord(row.lon)
+        return { ...row, lat, lon }
+      })
+      .filter((row) => hasValidCoords(row.lat, row.lon))
+  }, [mapData])
 
   useEffect(() => {
     setLoading(true)
@@ -4245,42 +4263,42 @@ function CRMMapTab() {
 
   const genderOptions = useMemo(() => {
     const set = new Set()
-    mapData.forEach((row) => {
+    normalizedData.forEach((row) => {
       if (row.gender) set.add(row.gender)
     })
     return Array.from(set)
-  }, [mapData])
+  }, [normalizedData])
 
   const ageOptions = useMemo(() => {
     const set = new Set()
-    mapData.forEach((row) => {
+    normalizedData.forEach((row) => {
       if (row.ageGroup) set.add(row.ageGroup)
     })
     return Array.from(set)
-  }, [mapData])
+  }, [normalizedData])
 
   const timeOptions = useMemo(() => {
     const set = new Set()
-    mapData.forEach((row) => {
+    normalizedData.forEach((row) => {
       if (row.timeAvailability && row.timeAvailability !== 'Unspecified') {
         set.add(row.timeAvailability)
       }
     })
     return Array.from(set)
-  }, [mapData])
+  }, [normalizedData])
 
   const skillOptions = useMemo(() => {
     const set = new Set()
-    mapData.forEach((row) => {
+    normalizedData.forEach((row) => {
       ;(row.skills || []).forEach((skill) => {
         if (skill) set.add(skill)
       })
     })
     return Array.from(set)
-  }, [mapData])
+  }, [normalizedData])
 
   const filtered = useMemo(() => {
-    return mapData.filter((row) => {
+    return normalizedData.filter((row) => {
       if (!filters.showSupporters && row.group === 'Supporter') return false
       if (!filters.showMembers && row.group === 'Member') return false
       if (filters.genders.length && !filters.genders.includes(row.gender)) return false
@@ -4323,7 +4341,7 @@ function CRMMapTab() {
         return false
       return true
     })
-  }, [mapData, filters])
+  }, [normalizedData, filters])
 
   const center = useMemo(() => {
     if (!filtered.length) return [0, 0]
@@ -4551,6 +4569,14 @@ function CRMMapTab() {
               const color = Array.isArray(row.color)
                 ? `rgba(${row.color[0]}, ${row.color[1]}, ${row.color[2]}, ${row.color[3] / 255})`
                 : '#1d4ed8'
+              const addressLabel =
+                row.addressLabel && row.addressLabel !== 'Unspecified'
+                  ? row.addressLabel
+                  : 'Address not available'
+              const coordsLabel =
+                Number.isFinite(row.lat) && Number.isFinite(row.lon)
+                  ? `${row.lat.toFixed(4)}, ${row.lon.toFixed(4)}`
+                  : null
               return (
               <CircleMarker
                 key={row.email}
@@ -4561,7 +4587,8 @@ function CRMMapTab() {
                 <Popup>
                   <strong>{row.fullName}</strong>
                   <div>{row.email}</div>
-                  <div>{row.addressLabel}</div>
+                  <div>{addressLabel}</div>
+                  {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
                   <div>{row.skillsLabel}</div>
                 </Popup>
               </CircleMarker>

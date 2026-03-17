@@ -1605,10 +1605,44 @@
 
   .app-header {
     text-align: left;
+    padding: 20px;
   }
 
   .app-meta {
     text-align: left;
+  }
+
+  .module-panel,
+  .module-card,
+  .sidebar-card {
+    padding: 14px;
+  }
+
+  .module-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .module-nav {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(180px, 1fr);
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .module-nav__switch {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(140px, auto);
+    overflow-x: auto;
+  }
+
+  .module-nav__item {
+    min-width: 180px;
+  }
+
+  .subtabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 
   .filter-row {
@@ -1643,9 +1677,43 @@
   .questionnaire-card {
     padding: 20px;
   }
+
+  .map-canvas {
+    height: 320px;
+  }
+
+  .dd-embed {
+    height: 440px;
+  }
+
+  .how-tile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .how-tile-modal {
+    padding: 12px;
+  }
+
+  .how-tile-modal__card {
+    max-height: 92vh;
+  }
+
+  .feedback-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .feedback-panel {
+    right: 16px;
+    bottom: 72px;
+  }
 }
 
 @media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
   .module-layout {
     grid-template-columns: 1fr;
   }
@@ -1656,6 +1724,7 @@
 
   .module-nav {
     position: static;
+    max-width: none;
   }
 
   .dashboard-layout {
