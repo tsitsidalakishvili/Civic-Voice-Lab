@@ -1284,56 +1284,6 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
           </aside>
           <div className="module-main">
             {furryError ? <div className="module-alert">{furryError}</div> : null}
-            <div className="module-card module-card__wide panel panel--highlight">
-              <div className="card-header">
-                <div>
-                  <h3>Furry friends directory</h3>
-                  <p className="muted">
-                    Stray dogs and cats by address.
-                  </p>
-                </div>
-                <div className="pill">Network</div>
-              </div>
-              <div className="table">
-                <div className="table-row table-row--furry table-head">
-                  <span>Name</span>
-                  <span>Species</span>
-                  <span>Gender</span>
-                  <span>Age</span>
-                  <span>Neutered</span>
-                  <span>Breed</span>
-                  <span>Address</span>
-                  <span>Chip</span>
-                </div>
-                {furryRows.length === 0 && !furryLoading && (
-                  <div className="table-row empty">No records found.</div>
-                )}
-                {furryRows.map((row) => (
-                  <button
-                    className="table-row table-row--furry table-row__button"
-                    key={row.furryId}
-                    type="button"
-                    onClick={() => setSelectedFurryId(row.furryId)}
-                  >
-                    <span>{row.name || '—'}</span>
-                    <span>{row.species || '—'}</span>
-                    <span>{row.gender || '—'}</span>
-                    <span>{row.age ?? '—'}</span>
-                    <span>
-                      {typeof row.neutered === 'boolean'
-                        ? row.neutered
-                          ? 'Yes'
-                          : 'No'
-                        : '—'}
-                    </span>
-                    <span>{row.breed || '—'}</span>
-                    <span>{row.address || row.municipality || '—'}</span>
-                    <span>{row.chipNumber || '—'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="module-card module-card__wide panel">
               <div className="card-header">
                 <div>
@@ -1383,6 +1333,56 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
                     </CircleMarker>
                   ))}
                 </MapContainer>
+              </div>
+            </div>
+
+            <div className="module-card module-card__wide panel panel--highlight">
+              <div className="card-header">
+                <div>
+                  <h3>Furry friends directory</h3>
+                  <p className="muted">
+                    Stray dogs and cats by address.
+                  </p>
+                </div>
+                <div className="pill">Network</div>
+              </div>
+              <div className="table">
+                <div className="table-row table-row--furry table-head">
+                  <span>Name</span>
+                  <span>Species</span>
+                  <span>Gender</span>
+                  <span>Age</span>
+                  <span>Neutered</span>
+                  <span>Breed</span>
+                  <span>Address</span>
+                  <span>Chip</span>
+                </div>
+                {furryRows.length === 0 && !furryLoading && (
+                  <div className="table-row empty">No records found.</div>
+                )}
+                {furryRows.map((row) => (
+                  <button
+                    className="table-row table-row--furry table-row__button"
+                    key={row.furryId}
+                    type="button"
+                    onClick={() => setSelectedFurryId(row.furryId)}
+                  >
+                    <span>{row.name || '—'}</span>
+                    <span>{row.species || '—'}</span>
+                    <span>{row.gender || '—'}</span>
+                    <span>{row.age ?? '—'}</span>
+                    <span>
+                      {typeof row.neutered === 'boolean'
+                        ? row.neutered
+                          ? 'Yes'
+                          : 'No'
+                        : '—'}
+                    </span>
+                    <span>{row.breed || '—'}</span>
+                    <span>{row.address || row.municipality || '—'}</span>
+                    <span>{row.chipNumber || '—'}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -2416,6 +2416,18 @@ function CRMDataEntryTab() {
   }
 
   return (
+    <div className="stack">
+      <div className="module-card module-card__wide section-intro">
+        <div className="card-header">
+          <div>
+            <h3>Data entry</h3>
+            <p className="muted">
+              Add supporters and members manually or import them from CSV.
+            </p>
+          </div>
+          <div className="pill">Network</div>
+        </div>
+      </div>
       <div className="module-grid">
       <div className="module-card module-card__wide">
         <div className="card-header">
@@ -2545,9 +2557,17 @@ function CRMDataEntryTab() {
             accept=".csv"
             onChange={(event) => setImportFile(event.target.files?.[0] || null)}
           />
-          <a className="button-secondary" href="/data/simulated_crm_people.csv" download>
-            Download sample CSV
-          </a>
+          <div className="stack">
+            <p className="muted">
+              Required columns: <strong>email</strong>, <strong>first_name</strong>,{' '}
+              <strong>last_name</strong>.
+            </p>
+            <p className="muted">
+              Optional columns: gender, age, phone, address, lat, lon, supporter_type,
+              effort_hours, events_attended, tasks_completed, referral_count, education,
+              skills, time_availability.
+            </p>
+          </div>
           <button className="button" type="button" onClick={handleImport}>
             Import CSV
           </button>
@@ -2582,6 +2602,7 @@ function CRMDataEntryTab() {
           </button>
         </div>
       </div>
+    </div>
     </div>
   )
 }
@@ -2659,10 +2680,20 @@ function CRMDashboardTab({ summary, recentPeople }) {
   }
 
   return (
-    <div className="dashboard-layout">
-      {error ? <div className="module-alert">{error}</div> : null}
-      <div className="dashboard-main">
-        <div className="module-grid dashboard-grid">
+    <div className="stack">
+      <div className="module-card module-card__wide section-intro">
+        <div className="card-header">
+          <div>
+            <h3>Network dashboard</h3>
+            <p className="muted">Track engagement, skills, and activity at a glance.</p>
+          </div>
+          <div className="pill">Overview</div>
+        </div>
+      </div>
+      <div className="dashboard-layout">
+        {error ? <div className="module-alert">{error}</div> : null}
+        <div className="dashboard-main">
+          <div className="module-grid dashboard-grid">
           <div className="module-card dashboard-chart">
             <h3>People distribution</h3>
             {groupCounts.length > 0 ? (
@@ -2832,6 +2863,7 @@ function CRMDashboardTab({ summary, recentPeople }) {
         </details>
       </aside>
       </div>
+    </div>
   )
 }
 

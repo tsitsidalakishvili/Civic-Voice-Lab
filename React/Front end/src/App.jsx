@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AdminPage, CRMPage, DeliberationPage, DueDiligencePage } from './modules'
+import {
+  AdminPage,
+  CRMPage,
+  DeliberationPage,
+  DueDiligencePage,
+  HowItWorksPage,
+} from './modules'
 import { API_BASE, getJson, requestJson } from './services/api'
 import { LANGUAGES, createTranslator } from './i18n'
 import './App.css'
@@ -38,6 +44,12 @@ function App() {
       <CRMPage {...props} initialTab="campaigns" hideTabs />
     )
     return [
+      {
+        id: 'how-it-works',
+        label: t('module.howItWorks'),
+        description: t('module.howItWorks.desc'),
+        Component: HowItWorksPage,
+      },
       {
         id: 'crm',
         label: t('module.network'),

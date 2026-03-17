@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = 'http://localhost:8011'
+const DEFAULT_API_BASE = 'http://localhost:8010'
 
 export const API_BASE =
   import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE

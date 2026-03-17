@@ -391,6 +391,11 @@
   grid-column: 1 / -1;
 }
 
+.module-card.section-intro {
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
 .outreach-grid {
   margin-top: 20px;
   display: grid;
@@ -1085,6 +1090,31 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.journey-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.journey-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+  display: grid;
+  gap: 6px;
+}
+
+.journey-card h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.journey-card__actions {
+  margin-top: 4px;
+}
+
 .report-highlights {
   display: grid;
   gap: 16px;
@@ -1106,6 +1136,98 @@
 
 .report-card h4 {
   margin: 0 0 8px;
+}
+
+.polis-card {
+  display: grid;
+  gap: 12px;
+}
+
+.polis-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.polis-map {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.polis-map svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.polis-report-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  display: grid;
+  gap: 10px;
+}
+
+.polis-report-preview__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.polis-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.polis-report-preview__title {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.polis-report-preview__body {
+  display: grid;
+  gap: 8px;
+}
+
+.polis-report-preview__block {
+  height: 28px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.polis-report-preview__block--tall {
+  height: 56px;
+}
+
+.polis-feature-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.code-block {
+  margin: 0;
+  padding: 12px;
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 10px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .report-chart {
@@ -1196,6 +1318,244 @@
   background: #ffffff;
   display: grid;
   gap: 8px;
+}
+
+.how-flow {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: center;
+}
+
+.how-step {
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  text-align: center;
+  font-weight: 600;
+}
+
+.how-arrow {
+  text-align: center;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.how-diagram {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.how-hero {
+  background: #f8fafc;
+}
+
+.how-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.how-tile {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: #ffffff;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.how-tile__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.how-tile__header h4 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.how-tile__title {
+  transition: color 0.2s ease;
+}
+
+.how-tile__desc {
+  transition: color 0.2s ease;
+  font-size: 14px;
+}
+
+.how-tile--active {
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.how-tile--active .how-tile__title {
+  color: var(--accent);
+}
+
+.how-tile--active .how-tile__desc {
+  color: var(--text-h);
+}
+
+.how-tile__diagram {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #f8fafc;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-height: 140px;
+}
+
+.how-tile__diagram svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.how-tile__diagram--double {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.how-tile__diagram--double svg {
+  max-height: 110px;
+}
+
+.how-tile-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 999;
+}
+
+.how-tile-modal__card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  width: min(1120px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  display: grid;
+  gap: 16px;
+}
+
+.how-tile-modal__close {
+  justify-self: end;
+}
+
+.how-tile--expanded {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.how-tile__detail-intro {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.how-tile__details {
+  display: grid;
+  gap: 16px;
+}
+
+.how-tile__details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.how-tile__details-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  display: grid;
+  gap: 8px;
+}
+
+.how-tile__details-card h5 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.how-tile__details-card ul {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.how-tile__flow {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.how-tile__flow svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.how-tile--expanded .how-tile__diagram {
+  min-height: 220px;
+}
+
+.how-tile--expanded .how-tile__diagram--double svg {
+  max-height: 160px;
+}
+
+.how-step-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.how-step-card strong {
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.how-diagram svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.how-diagram--tall {
+  min-height: 520px;
+}
+
+.how-diagram-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .venn-wrap {

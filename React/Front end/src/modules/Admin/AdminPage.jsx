@@ -214,8 +214,18 @@ export function AdminPage({ t }) {
       </div>
 
       {activeTab === 'admin' && (
-        <div className="module-grid">
-          <div className="module-card">
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Settings overview</h3>
+                <p className="muted">Monitor system health and manage admin tools.</p>
+              </div>
+              <div className="pill">Admin</div>
+            </div>
+          </div>
+          <div className="module-grid">
+            <div className="module-card">
             <h3>System status</h3>
             <p className="muted">Live connectivity + config.</p>
             <div className="metric-row">
@@ -379,12 +389,23 @@ export function AdminPage({ t }) {
               ))}
             </div>
           </div>
+          </div>
         </div>
       )}
 
       {activeTab === 'data' && (
-        <div className="module-grid">
-          <div className="module-card">
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Data management</h3>
+                <p className="muted">Export summaries and monitor data quality.</p>
+              </div>
+              <div className="pill">Data</div>
+            </div>
+          </div>
+          <div className="module-grid">
+            <div className="module-card">
             <h3>People data quality</h3>
             <div className="metric-row">
               <span>Total people</span>
@@ -401,6 +422,7 @@ export function AdminPage({ t }) {
             <button className="button-secondary" type="button" onClick={handleExportSummary}>
               Export people summary
             </button>
+          </div>
           </div>
         </div>
       )}

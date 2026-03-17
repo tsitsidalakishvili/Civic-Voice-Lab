@@ -630,7 +630,7 @@ export function DueDiligencePage({ t }) {
       </div>
 
       {activeTab === 'how-it-works' && (
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
               <h3>How the workflow runs</h3>
@@ -640,26 +640,27 @@ export function DueDiligencePage({ t }) {
           </div>
           <div className="stack">
             <p>
-              1) Set a subject (person or organization) and run internal checks against Network
-              and the competitor watchlist.
+              1) Choose a subject (person or organization) and confirm the Network context.
             </p>
             <p>
-              2) Configure external sources (Wikidata, OpenSanctions, News/Web) to scope
-              the analysis.
+              2) Configure sources (Wikidata, OpenSanctions, News/Web) to scope the analysis.
             </p>
             <p>
-              3) Save or select a watchlist entry for repeat monitoring.
+              3) Run analysis to generate the risk summary, source hits, and a PDF report.
             </p>
             <p>
-              4) Launch the external due diligence app with prefilled parameters or embed
-              it here.
+              4) Use Debate prep to map themes, counterpoints, and evidence cards for live debates.
+            </p>
+            <p>
+              5) Save the subject to the watchlist or launch the external DD app with prefilled
+              parameters.
             </p>
           </div>
         </div>
       )}
 
       {activeTab === 'analysis' && (
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
               <h3>Subject analysis</h3>
@@ -1025,7 +1026,7 @@ export function DueDiligencePage({ t }) {
       )}
 
       {activeTab === 'debate-prep' && (
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
               <h3>Debate prep</h3>
@@ -1309,7 +1310,17 @@ export function DueDiligencePage({ t }) {
       )}
 
       {activeTab === 'configure' && (
-        <div className="module-grid">
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Configure sources</h3>
+                <p className="muted">Set the active subject and context for analysis.</p>
+              </div>
+              <div className="pill">Configure</div>
+            </div>
+          </div>
+          <div className="module-grid">
           <div className="module-card">
             <h3>Network context</h3>
             <div className="metric-row">
@@ -1354,11 +1365,12 @@ export function DueDiligencePage({ t }) {
               Set active subject
             </button>
           </div>
+          </div>
         </div>
       )}
 
       {activeTab === 'watchlist' && (
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
               <h3>Competitor watchlist</h3>
@@ -1408,9 +1420,9 @@ export function DueDiligencePage({ t }) {
               onChange={(event) => handleImportWatchlist(event.target.files?.[0] || null)}
               disabled={importing}
             />
-            <a className="button-secondary" href="/data/due_diligence_watchlist_simulated.csv" download>
-              Download sample watchlist CSV
-            </a>
+            <p className="muted">
+              Required column: <strong>name</strong>. Optional: competitor_type, notes.
+            </p>
           </div>
 
           <div className="table">
@@ -1451,7 +1463,7 @@ export function DueDiligencePage({ t }) {
       )}
 
       {activeTab === 'launch' && (
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
               <h3>Launch</h3>

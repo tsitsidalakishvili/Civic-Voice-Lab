@@ -1,9 +1,29 @@
-# React sample downloads
+# CSV upload guidance
 
-These CSV files are linked directly from the React UI as sample downloads:
+Sample files have been removed. Use these column names when preparing uploads:
 
-- `simulated_crm_people.csv` (Network > People import)
-- `simulated_deliberation_dataset.csv` (Survey > CSV upload)
-- `due_diligence_watchlist_simulated.csv` (Due Diligence > Watchlist import)
-- `seed_comments_topics/Civic_Services_Quality.csv` (Survey seed comments)
-- `seed_comments_topics/Freedom_Square_Manifesto.csv` (Survey seed comments)
+## Network (people import)
+Required:
+- `email`, `first_name`, `last_name`
+
+Optional:
+- `gender`, `age`, `phone`, `address`, `lat`, `lon`, `supporter_type`
+- `effort_hours`, `events_attended`, `tasks_completed`, `referral_count`
+- `education`, `skills`, `time_availability`
+
+## Survey & Consensus (dataset import)
+Required:
+- `conversation_id`, `participant_id`, `comment_id`, `comment_text`, `is_seed`, `vote`
+
+Optional:
+- `comment_created_at`, `reaction_created_at`, `participant_cluster`
+
+Seed comments CSV:
+- `comment_text`
+
+## Due Diligence (watchlist import)
+Required:
+- `name`
+
+Optional:
+- `competitor_type`, `notes`

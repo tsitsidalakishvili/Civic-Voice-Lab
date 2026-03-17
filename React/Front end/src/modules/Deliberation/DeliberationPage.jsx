@@ -201,6 +201,9 @@ export function DeliberationPage({ t }) {
   const [whatsappError, setWhatsappError] = useState('')
   const [whatsappStatus, setWhatsappStatus] = useState('')
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false)
+  const [polisSiteId, setPolisSiteId] = useState('polis_site_id_dZO8TFLSfUGNe651NN')
+  const [polisPageId, setPolisPageId] = useState('PAGE_ID')
+  const [polisConversationId, setPolisConversationId] = useState('')
 
   const vennData = useMemo(() => {
     const summaries = report?.cluster_summaries || []
@@ -268,6 +271,99 @@ export function DeliberationPage({ t }) {
       clusterLabels: clusterSummaries.map((row) => row.cluster_id),
       clusterSizes: clusterSummaries.map((row) => Number(row?.size || 0)),
     }
+  }, [report])
+
+  const topicMap = useMemo(() => {
+    const points = report?.points || []
+    if (!points.length) return null
+    const summaries = report?.cluster_summaries || []
+    const summaryMap = new Map(
+      summaries.map((row) => [
+        row.cluster_id,
+        {
+          size: Number(row?.size || 0),
+          labelTopic: sanitizeStatement(
+            row?.top_agree?.[0] || row?.top_disagree?.[0] || row?.cluster_id || 'Cluster',
+          ),
+        },
+      ]),
+    )
+    const minX = Math.min(...points.map((point) => Number(point?.x || 0)))
+    const maxX = Math.max(...points.map((point) => Number(point?.x || 0)))
+    const minY = Math.min(...points.map((point) => Number(point?.y || 0)))
+    const maxY = Math.max(...points.map((point) => Number(point?.y || 0)))
+    const spanX = maxX - minX || 1
+    const spanY = maxY - minY || 1
+    const scaleX = (value) => 0.08 + ((value - minX) / spanX) * 0.84
+    const scaleY = (value) => 0.08 + ((value - minY) / spanY) * 0.84
+
+    const clusterAgg = new Map()
+    points.forEach((point) => {
+      const id = point.cluster_id || 'cluster-0'
+      if (!clusterAgg.has(id)) {
+        clusterAgg.set(id, { sumX: 0, sumY: 0, count: 0 })
+      }
+      const entry = clusterAgg.get(id)
+      entry.sumX += Number(point.x || 0)
+      entry.sumY += Number(point.y || 0)
+      entry.count += 1
+    })
+
+    const totalFromSummaries = summaries.reduce(
+      (acc, row) => acc + Number(row?.size || 0),
+      0,
+    )
+    const totalParticipants =
+      Number(report.metrics?.total_participants || 0) || totalFromSummaries || points.length || 1
+
+    const clusters = Array.from(clusterAgg.entries()).map(([clusterId, agg], idx) => {
+      const summary = summaryMap.get(clusterId)
+      const size = summary?.size || agg.count
+      const share = size / totalParticipants
+      const label = `${share.toFixed(2)}: ${truncateText(summary?.labelTopic || clusterId, 32)}`
+      return {
+        id: clusterId,
+        size,
+        share,
+        centerX: scaleX(agg.sumX / agg.count),
+        centerY: scaleY(agg.sumY / agg.count),
+        label,
+        index: idx,
+      }
+    })
+
+    const colorById = clusters.reduce((acc, cluster, idx) => {
+      acc[cluster.id] = idx + 1
+      return acc
+    }, {})
+
+    const scaledPoints = points.map((point) => ({
+      x: scaleX(Number(point?.x || 0)),
+      y: scaleY(Number(point?.y || 0)),
+      clusterId: point.cluster_id || 'cluster-0',
+    }))
+
+    return { clusters, points: scaledPoints, colorById }
+  }, [report])
+
+  const statementLandscape = useMemo(() => {
+    if (!report?.metrics) return null
+    const rows = [...(report.metrics.consensus || []), ...(report.metrics.polarizing || [])]
+    if (!rows.length) return null
+    const points = rows.map((row) => ({
+      id: row.id,
+      text: sanitizeStatement(row.text),
+      consensus: Number(row?.consensus_score || 0),
+      polarity: Number(row?.polarity_score || 0),
+      participation: Number(row?.participation || 0),
+    }))
+    const labelIds = new Set()
+    const addLabels = (items) => items.forEach((item) => labelIds.add(item.id))
+    addLabels([...points].sort((a, b) => b.consensus - a.consensus).slice(0, 3))
+    addLabels([...points].sort((a, b) => b.polarity - a.polarity).slice(0, 3))
+    addLabels([...points].sort((a, b) => b.participation - a.participation).slice(0, 3))
+    const labels = points.filter((point) => labelIds.has(point.id))
+    return { points, labels }
   }, [report])
 
   const clusterCards = useMemo(() => {
@@ -900,10 +996,11 @@ export function DeliberationPage({ t }) {
 
       <div className="subtabs">
         {[
-        { id: 'overview', label: translate('deliberation.tabs.overview') },
-        { id: 'setup', label: translate('deliberation.tabs.setup') },
-        { id: 'insights', label: translate('deliberation.tabs.insights') },
-        { id: 'data', label: translate('deliberation.tabs.dataEntry') },
+          { id: 'overview', label: translate('deliberation.tabs.overview') },
+          { id: 'setup', label: translate('deliberation.tabs.setup') },
+          { id: 'distribute', label: translate('deliberation.tabs.distribute') },
+          { id: 'insights', label: translate('deliberation.tabs.insights') },
+          { id: 'data', label: translate('deliberation.tabs.dataEntry') },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -917,109 +1014,188 @@ export function DeliberationPage({ t }) {
       </div>
 
       {activeTab === 'overview' && (
-        <div className="module-card module-card__wide">
-          <div className="card-header">
-            <div>
-              <h3>Conversation control center</h3>
-              <p className="muted">Select the active conversation to manage.</p>
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Survey journey</h3>
+                <p className="muted">Follow a clear flow from setup to insights.</p>
+              </div>
+            </div>
+            <div className="journey-grid">
+              <div className="journey-card">
+                <span className="pill">Step 1</span>
+                <h4>Setup the conversation</h4>
+                <p className="muted">Define topic, rules, and participation settings.</p>
+                <div className="journey-card__actions">
+                  <button className="button-secondary" type="button" onClick={() => setActiveTab('setup')}>
+                    Go to Setup
+                  </button>
+                </div>
+              </div>
+              <div className="journey-card">
+                <span className="pill">Step 2</span>
+                <h4>Collect responses</h4>
+                <p className="muted">Launch participation and moderate comments.</p>
+                <div className="journey-card__actions">
+                  <button className="button-secondary" type="button" onClick={() => setActiveTab('overview')}>
+                    Manage conversations
+                  </button>
+                </div>
+              </div>
+              <div className="journey-card">
+                <span className="pill">Step 3</span>
+                <h4>Analyze the survey</h4>
+                <p className="muted">Generate consensus, polarization, and clusters.</p>
+                <div className="journey-card__actions">
+                  <button className="button-secondary" type="button" onClick={() => setActiveTab('insights')}>
+                    View Insights
+                  </button>
+                </div>
+              </div>
+              <div className="journey-card">
+                <span className="pill">Step 4</span>
+                <h4>Import or export data</h4>
+                <p className="muted">Upload datasets or download exports.</p>
+                <div className="journey-card__actions">
+                  <button className="button-secondary" type="button" onClick={() => setActiveTab('data')}>
+                    Go to Data
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-          <select
-            className="select"
-            value={activeId}
-            onChange={(event) => setActiveId(event.target.value)}
-          >
-            <option value="">Select conversation</option>
-            {conversations.map((convo) => (
-              <option key={convo.id} value={convo.id}>
-                {convo.topic}
-              </option>
-            ))}
-          </select>
-          {activeConvo ? (
-            <div className="stack">
-              <p className="muted">
-                Status: {activeConvo.is_open ? 'Open' : 'Closed'} | Comments:{' '}
-                {activeConvo.allow_comment_submission ? 'Enabled' : 'Disabled'}
-              </p>
-              <p className="muted">{activeConvo.description}</p>
-              <p className="muted">
-                Approved comments: {approvedComments.length} | Pending:{' '}
-                {pendingComments.length}
-              </p>
-            </div>
-          ) : (
-            <p className="muted">Select a conversation to continue.</p>
-          )}
 
-          <div className="card-divider">
-            <h4>Conversation manager</h4>
-          </div>
-          <div className="table">
-            <div className="table-row table-head">
-              <span>Topic</span>
-              <span>Status</span>
-              <span>Action</span>
-              <span>Set active</span>
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Conversation control center</h3>
+                <p className="muted">Select the active conversation to manage.</p>
+              </div>
             </div>
-            {activeConversations.map((convo) => (
-              <div className="table-row" key={convo.id}>
-                <span>{convo.topic}</span>
-                <span>Open</span>
-                <div className="table-actions">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleToggleConversation(convo.id, false)}
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="table-actions">
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => setActiveId(convo.id)}
-                  >
-                    Use
-                  </button>
-                </div>
+            <select
+              className="select"
+              value={activeId}
+              onChange={(event) => setActiveId(event.target.value)}
+            >
+              <option value="">Select conversation</option>
+              {conversations.map((convo) => (
+                <option key={convo.id} value={convo.id}>
+                  {convo.topic}
+                </option>
+              ))}
+            </select>
+            {activeConvo ? (
+              <div className="stack">
+                <p className="muted">
+                  Status: {activeConvo.is_open ? 'Open' : 'Closed'} | Comments:{' '}
+                  {activeConvo.allow_comment_submission ? 'Enabled' : 'Disabled'}
+                </p>
+                <p className="muted">{activeConvo.description}</p>
+                <p className="muted">
+                  Approved comments: {approvedComments.length} | Pending:{' '}
+                  {pendingComments.length}
+                </p>
               </div>
-            ))}
-            {closedConversations.map((convo) => (
-              <div className="table-row" key={convo.id}>
-                <span>{convo.topic}</span>
-                <span>Closed</span>
-                <div className="table-actions">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleToggleConversation(convo.id, true)}
-                  >
-                    Reopen
-                  </button>
-                </div>
-                <div className="table-actions">
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => setActiveId(convo.id)}
-                  >
-                    Use
-                  </button>
-                </div>
-              </div>
-            ))}
-            {conversations.length === 0 && (
-              <div className="table-row empty">No conversations yet.</div>
+            ) : (
+              <p className="muted">Select a conversation to continue.</p>
             )}
+
+            <div className="card-divider">
+              <h4>Conversation manager</h4>
+            </div>
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Topic</span>
+                <span>Status</span>
+                <span>Action</span>
+                <span>Set active</span>
+              </div>
+              {activeConversations.map((convo) => (
+                <div className="table-row" key={convo.id}>
+                  <span>{convo.topic}</span>
+                  <span>Open</span>
+                  <div className="table-actions">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleToggleConversation(convo.id, false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="table-actions">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => setActiveId(convo.id)}
+                    >
+                      Use
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {closedConversations.map((convo) => (
+                <div className="table-row" key={convo.id}>
+                  <span>{convo.topic}</span>
+                  <span>Closed</span>
+                  <div className="table-actions">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleToggleConversation(convo.id, true)}
+                    >
+                      Reopen
+                    </button>
+                  </div>
+                  <div className="table-actions">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => setActiveId(convo.id)}
+                    >
+                      Use
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {conversations.length === 0 && (
+                <div className="table-row empty">No conversations yet.</div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {activeTab === 'setup' && (
-      <div className="module-grid">
-        <div className="module-card">
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Setup checklist</h3>
+                <p className="muted">
+                  Define the conversation, seed statements, and set participation rules before launch.
+                </p>
+              </div>
+            </div>
+            <ul className="compact-list">
+              <li>
+                <span>Create or update the conversation</span>
+                <strong>Topic + description</strong>
+              </li>
+              <li>
+                <span>Seed the initial statements</span>
+                <strong>CSV or manual entry</strong>
+              </li>
+              <li>
+                <span>Share participation link</span>
+                <strong>Invite supporters and members</strong>
+              </li>
+            </ul>
+          </div>
+
+          <div className="module-grid">
+            <div className="module-card">
             <h3>Create conversation</h3>
             <input
               className="input"
@@ -1174,71 +1350,6 @@ export function DeliberationPage({ t }) {
           </div>
 
         <div className="module-card">
-            <h3>Shareable link</h3>
-            {slackError ? <div className="module-alert">{slackError}</div> : null}
-            {slackStatus ? (
-              <div className="module-alert module-alert--success">{slackStatus}</div>
-            ) : null}
-            {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
-            {whatsappStatus ? (
-              <div className="module-alert module-alert--success">{whatsappStatus}</div>
-            ) : null}
-            <div className="stack">
-              <div>
-                <label className="label">Participant link</label>
-                <input className="input" value={questionnaireLink} readOnly />
-          </div>
-              <div>
-                <label className="label">Admin link</label>
-                <input className="input" value={adminQuestionnaireLink} readOnly />
-        </div>
-              <textarea
-                className="textarea"
-                value={slackMessage}
-                onChange={(event) => setSlackMessage(event.target.value)}
-                placeholder="Slack message"
-              />
-              <button
-                className="button"
-                type="button"
-                onClick={handleSendSlack}
-                disabled={sendingSlack}
-              >
-                {sendingSlack ? 'Sending…' : 'Send to Slack'}
-              </button>
-              <div className="card-divider">
-                <h4>WhatsApp share</h4>
-              </div>
-              <select
-                className="select"
-                value={whatsappGroupId}
-                onChange={(event) => setWhatsappGroupId(event.target.value)}
-              >
-                <option value="">Select WhatsApp group</option>
-                {whatsappGroups.map((group) => (
-                  <option key={group.groupId} value={group.groupId}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-              <textarea
-                className="textarea"
-                value={whatsappMessage}
-                onChange={(event) => setWhatsappMessage(event.target.value)}
-                placeholder="WhatsApp message"
-              />
-              <button
-                className="button"
-                type="button"
-                onClick={handleSendWhatsapp}
-                disabled={sendingWhatsapp}
-              >
-                {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
-              </button>
-            </div>
-          </div>
-
-        <div className="module-card">
             <h3>Seed comments</h3>
             <textarea
               className="textarea"
@@ -1286,6 +1397,136 @@ export function DeliberationPage({ t }) {
             <button className="button" type="button" onClick={handleSimulateVotes}>
               Generate votes
             </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+      {activeTab === 'distribute' && (
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Distribute the survey</h3>
+                <p className="muted">
+                  Share the participation link or embed the survey into your site.
+                </p>
+              </div>
+              <div className="pill">Distribute</div>
+            </div>
+          </div>
+
+          <div className="module-grid">
+            <div className="module-card">
+              <h3>Shareable links</h3>
+              {slackError ? <div className="module-alert">{slackError}</div> : null}
+              {slackStatus ? (
+                <div className="module-alert module-alert--success">{slackStatus}</div>
+              ) : null}
+              {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
+              {whatsappStatus ? (
+                <div className="module-alert module-alert--success">{whatsappStatus}</div>
+              ) : null}
+              <div className="stack">
+                <div>
+                  <label className="label">Participant link</label>
+                  <input className="input" value={questionnaireLink} readOnly />
+                </div>
+                <div>
+                  <label className="label">Admin link</label>
+                  <input className="input" value={adminQuestionnaireLink} readOnly />
+                </div>
+                <textarea
+                  className="textarea"
+                  value={slackMessage}
+                  onChange={(event) => setSlackMessage(event.target.value)}
+                  placeholder="Slack message"
+                />
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleSendSlack}
+                  disabled={sendingSlack}
+                >
+                  {sendingSlack ? 'Sending…' : 'Send to Slack'}
+                </button>
+                <div className="card-divider">
+                  <h4>WhatsApp share</h4>
+                </div>
+                <select
+                  className="select"
+                  value={whatsappGroupId}
+                  onChange={(event) => setWhatsappGroupId(event.target.value)}
+                >
+                  <option value="">Select WhatsApp group</option>
+                  {whatsappGroups.map((group) => (
+                    <option key={group.groupId} value={group.groupId}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  className="textarea"
+                  value={whatsappMessage}
+                  onChange={(event) => setWhatsappMessage(event.target.value)}
+                  placeholder="WhatsApp message"
+                />
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleSendWhatsapp}
+                  disabled={sendingWhatsapp}
+                >
+                  {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
+                </button>
+              </div>
+            </div>
+
+            <div className="module-card">
+              <h3>Embed on your site</h3>
+              <p className="muted">
+                Use a stable page id for persistent conversations, or embed a single
+                conversation id.
+              </p>
+              <div className="stack">
+                <input
+                  className="input"
+                  value={polisPageId}
+                  onChange={(event) => setPolisPageId(event.target.value)}
+                  placeholder="PAGE_ID"
+                />
+                <input
+                  className="input"
+                  value={polisSiteId}
+                  onChange={(event) => setPolisSiteId(event.target.value)}
+                  placeholder="Polis site id"
+                />
+                <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}"></div>
+<script async src="https://pol.is/embed.js"></script>`}</pre>
+                <div className="card-divider">
+                  <h4>Single conversation embed</h4>
+                </div>
+                <input
+                  className="input"
+                  value={polisConversationId}
+                  onChange={(event) => setPolisConversationId(event.target.value)}
+                  placeholder="Polis conversation id"
+                />
+                <pre className="code-block">{`<div class="polis" data-conversation_id="${polisConversationId || 'CONVERSATION_ID'}"></div>
+<script async src="https://pol.is/embed.js"></script>`}</pre>
+              </div>
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <h3>Participant identity (XID)</h3>
+            <p className="muted">
+              If you have known users, attach an xid to match participants with your data.
+            </p>
+            <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
+            <p className="muted">
+              Use a stable id like a GUID. Avoid personal emails unless required.
+            </p>
           </div>
         </div>
       )}
@@ -1502,6 +1743,161 @@ export function DeliberationPage({ t }) {
                 </div>
               </div>
 
+              {topicMap ? (
+                <>
+                  <div className="report-visual-grid">
+                    <div className="module-card report-card polis-card">
+                      <div className="polis-card__header">
+                        <h4>Advanced statistical analysis</h4>
+                        <span className="pill">Topic map</span>
+                      </div>
+                      <p className="muted">Layer 0 interactive visualization</p>
+                      <div className="polis-map">
+                        <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
+                          <rect
+                            x="8"
+                            y="8"
+                            width="344"
+                            height="244"
+                            rx="14"
+                            fill="#ffffff"
+                            stroke="#E2E8F0"
+                          />
+                          {topicMap.points.map((point, idx) => (
+                            <circle
+                              key={`${point.clusterId}-${idx}`}
+                              cx={point.x * 360}
+                              cy={point.y * 260}
+                              r="2.4"
+                              fill={clusterColor(
+                                point.clusterId,
+                                topicMap.colorById?.[point.clusterId] || idx + 1,
+                              )}
+                              opacity="0.75"
+                            />
+                          ))}
+                          {topicMap.clusters.map((cluster) => (
+                            <text
+                              key={`label-${cluster.id}`}
+                              x={cluster.centerX * 360}
+                              y={cluster.centerY * 260}
+                              textAnchor="middle"
+                              fontSize="10"
+                              fill="#334155"
+                            >
+                              {cluster.label}
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+                      <p className="muted">
+                        Go beyond opinion groups with topic maps and cluster overlays.
+                      </p>
+                    </div>
+                    {statementLandscape ? (
+                      <div className="module-card report-card polis-card">
+                        <div className="polis-card__header">
+                          <h4>Statement landscape</h4>
+                          <span className="pill">Consensus vs divisive</span>
+                        </div>
+                        <div className="polis-map">
+                          <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
+                            <rect
+                              x="8"
+                              y="8"
+                              width="344"
+                              height="244"
+                              rx="14"
+                              fill="#ffffff"
+                              stroke="#E2E8F0"
+                            />
+                            <line x1="36" y1="220" x2="320" y2="220" stroke="#E2E8F0" />
+                            <line x1="36" y1="220" x2="36" y2="28" stroke="#E2E8F0" />
+                            {statementLandscape.points.map((point) => {
+                              const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                              const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                              const size = 3 + Math.min(5, point.participation / 12)
+                              const color =
+                                point.polarity > point.consensus
+                                  ? '#f97316'
+                                  : point.consensus > 0.35
+                                    ? '#22c55e'
+                                    : '#94a3b8'
+                              return (
+                                <circle
+                                  key={point.id}
+                                  cx={x}
+                                  cy={y}
+                                  r={size}
+                                  fill={color}
+                                  opacity="0.75"
+                                />
+                              )
+                            })}
+                            {statementLandscape.labels.map((point) => {
+                              const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                              const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                              return (
+                                <text
+                                  key={`label-${point.id}`}
+                                  x={x}
+                                  y={y - 6}
+                                  textAnchor="middle"
+                                  fontSize="9"
+                                  fill="#0f172a"
+                                >
+                                  {truncateText(point.text, 28)}
+                                </text>
+                              )
+                            })}
+                            <text x="36" y="236" fontSize="9" fill="#64748b">
+                              Divisive →
+                            </text>
+                            <text x="10" y="32" fontSize="9" fill="#64748b">
+                              ↑ Consensus
+                            </text>
+                          </svg>
+                        </div>
+                        <p className="muted">
+                          See which statements build consensus versus spark polarization.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="report-visual-grid">
+                    <div className="module-card report-card polis-card">
+                      <div className="polis-card__header">
+                        <h4>AI-generated reports</h4>
+                        <span className="pill">Summary</span>
+                      </div>
+                      <div className="polis-report-preview">
+                        <div className="polis-report-preview__header">
+                          <span className="polis-dot" />
+                          <span className="polis-dot" />
+                          <span className="polis-dot" />
+                          <span className="polis-report-preview__title">Report</span>
+                        </div>
+                        <div className="polis-report-preview__body">
+                          <div className="polis-report-preview__block" />
+                          <div className="polis-report-preview__block polis-report-preview__block--tall" />
+                          <div className="polis-report-preview__block" />
+                        </div>
+                      </div>
+                      <p className="muted">
+                        Let Survey and Consensus do the heavy lifting: generate summaries,
+                        consensus statements, and topic insights.
+                      </p>
+                      <ul className="polis-feature-list">
+                        <li>Conversation summaries</li>
+                        <li>Automated topic reporting</li>
+                        <li>Consensus statement identification</li>
+                        <li>Divisive comment analysis</li>
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
               {clusterCards.length ? (
                 <>
                   <h4>Cluster profiles</h4>
@@ -1633,32 +2029,6 @@ export function DeliberationPage({ t }) {
                   </div>
                 ) : null}
 
-                {report.points?.length ? (
-                  <div className="module-card report-card">
-                    <h4>Opinion clusters</h4>
-                    <div className="chart-frame">
-                      <svg viewBox="0 0 400 260" className="cluster-chart">
-                        <rect x="0" y="0" width="400" height="260" rx="16" fill="#f8fafc" />
-                        {report.points.map((point) => {
-                          const x = 200 + Number(point.x || 0) * 80
-                          const y = 130 - Number(point.y || 0) * 80
-                          const color = `hsl(${(Number(point.cluster_id?.replace?.(/\\D/g, '') || 1) * 57) % 360} 70% 45%)`
-                          return (
-                            <circle
-                              key={`${point.participant_id}-${point.cluster_id}`}
-                              cx={x}
-                              cy={y}
-                              r="4"
-                              fill={color}
-                              opacity="0.85"
-                            />
-                          )
-                        })}
-                      </svg>
-                    </div>
-                    <p className="muted">Each point is a participant positioned by voting similarity.</p>
-                  </div>
-                ) : null}
               </div>
 
               <details className="dashboard-detail">
@@ -1713,63 +2083,6 @@ export function DeliberationPage({ t }) {
                 </div>
               </details>
 
-              {report.cluster_summaries?.length ? (
-                <details className="dashboard-detail">
-                  <summary>Cluster summary table</summary>
-                  <div className="dashboard-detail__body">
-                    <div className="table">
-                      <div className="table-row table-head">
-                        <span>Cluster</span>
-                        <span>Size</span>
-                        <span>Top agree</span>
-                        <span>Top disagree</span>
-                      </div>
-                      {report.cluster_summaries.map((row) => (
-                        <div className="table-row" key={row.cluster_id}>
-                          <span>{row.cluster_id}</span>
-                          <span>{row.size}</span>
-                          <span>
-                            {(row.top_agree || [])
-                              .map((item) => sanitizeStatement(item))
-                              .filter(Boolean)
-                              .slice(0, 3)
-                              .join(' · ')}
-                          </span>
-                          <span>
-                            {(row.top_disagree || [])
-                              .map((item) => sanitizeStatement(item))
-                              .filter(Boolean)
-                              .slice(0, 3)
-                              .join(' · ')}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              ) : null}
-
-              {report.cluster_similarity?.length ? (
-                <details className="dashboard-detail">
-                  <summary>Cluster similarity</summary>
-                  <div className="dashboard-detail__body">
-                    <div className="table">
-                      <div className="table-row table-head">
-                        <span>Cluster A</span>
-                        <span>Cluster B</span>
-                        <span>Similarity</span>
-                      </div>
-                      {report.cluster_similarity.map((row, idx) => (
-                        <div className="table-row" key={`${row.cluster_a}-${row.cluster_b}-${idx}`}>
-                          <span>{row.cluster_a}</span>
-                          <span>{row.cluster_b}</span>
-                          <span>{row.similarity?.toFixed?.(2) ?? row.similarity}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              ) : null}
             </div>
           ) : (
             <p className="muted">Run analysis to view insights.</p>
@@ -1778,52 +2091,73 @@ export function DeliberationPage({ t }) {
       )}
 
       {activeTab === 'data' && (
-        <div className="module-card module-card__wide">
-          <h3>CSV import</h3>
-          <input
-            className="input"
-            type="file"
-            accept=".csv"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) parseCsvFile(file)
-            }}
-          />
-          <div className="stack">
-            <a className="button-secondary" href="/data/simulated_deliberation_dataset.csv" download>
-              Download sample dataset CSV
-            </a>
-            <a
-              className="button-secondary"
-              href="/data/seed_comments_topics/Civic_Services_Quality.csv"
-              download
-            >
-              Download seed comments CSV
-            </a>
-            <a
-              className="button-secondary"
-              href="/data/seed_comments_topics/Freedom_Square_Manifesto.csv"
-              download
-            >
-              Download Freedom Square manifesto statements
-            </a>
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Data entry and import</h3>
+                <p className="muted">
+                  Bring your own dataset or use the templates to seed new surveys.
+                </p>
+              </div>
+            </div>
+            <ul className="compact-list">
+              <li>
+                <span>Import votes and comments</span>
+                <strong>CSV upload</strong>
+              </li>
+              <li>
+                <span>Seed statements quickly</span>
+                <strong>Download templates</strong>
+              </li>
+              <li>
+                <span>Run analysis after import</span>
+                <strong>Optional</strong>
+              </li>
+            </ul>
           </div>
-          {csvColumns.length ? (
-            <div className="form-grid">
-              <select
-                className="select"
-                value={csvMap.conversation_id || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
-                }
-              >
-                <option value="">Conversation ID column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
+
+          <div className="module-card module-card__wide">
+            <h3>CSV import</h3>
+            <input
+              className="input"
+              type="file"
+              accept=".csv"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) parseCsvFile(file)
+              }}
+            />
+            <div className="stack">
+              <p className="muted">
+                Required columns: <strong>conversation_id</strong>,{' '}
+                <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
+                <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
+                <strong>vote</strong>.
+              </p>
+              <p className="muted">
+                Optional columns: comment_created_at, reaction_created_at, participant_cluster.
+              </p>
+              <p className="muted">
+                Seed comments CSV: <strong>comment_text</strong> column required.
+              </p>
+            </div>
+            {csvColumns.length ? (
+              <div className="form-grid">
+                <select
+                  className="select"
+                  value={csvMap.conversation_id || ''}
+                  onChange={(event) =>
+                    setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
+                  }
+                >
+                  <option value="">Conversation ID column</option>
+                  {csvColumns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
               <select
                 className="select"
                 value={csvMap.comment_id || ''}
@@ -1975,6 +2309,7 @@ export function DeliberationPage({ t }) {
             </label>
           </div>
           {csvStatus ? <p className="muted">{csvStatus}</p> : null}
+        </div>
         </div>
       )}
 
