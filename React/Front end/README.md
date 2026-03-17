@@ -18,6 +18,7 @@ Env:
 4. Output directory: `dist`
 5. Set environment variable:
    - `VITE_API_BASE_URL=https://fs-udmk.onrender.com`
+   - Ensure Render `CORS_ORIGINS` includes `https://fs-frontend-puce.vercel.app`
 6. Deploy.
 
 ---

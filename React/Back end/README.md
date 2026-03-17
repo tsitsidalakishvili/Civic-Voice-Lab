@@ -2,7 +2,7 @@
 
 Run:
 ```
-python -m uvicorn app:app --host 0.0.0.0 --port 8011
+python -m uvicorn app:app --host 0.0.0.0 --port 8010
 ```
 
 Env:
@@ -19,7 +19,7 @@ Environment variables (Render dashboard):
 - `DELIBERATION_NEO4J_USER` (or `DELIBERATION_NEO4J_USERNAME`)
 - `DELIBERATION_NEO4J_PASSWORD`
 - `DELIBERATION_NEO4J_DATABASE`
-- `CORS_ORIGINS` (set to your Vercel URL)
+- `CORS_ORIGINS` (set to your Vercel URL, e.g. `https://fs-frontend-puce.vercel.app`)
 # React backend shell
 
 This folder wraps the existing deliberation FastAPI service so the React UI
