@@ -547,6 +547,148 @@ export function HowItWorksPage({ t }) {
         </div>
       ),
     },
+    {
+      id: 'audience-discovery',
+      title: translate('module.audienceDiscovery'),
+      pill: 'Discover',
+      desc: translate('module.audienceDiscovery.desc'),
+      detailIntro:
+        'Extract cited evidence from product pages, build audience segments, and draft tailored messaging.',
+      details: [
+        {
+          title: 'Inputs',
+          items: [
+            'Product pages and docs',
+            'Brand positioning',
+            'Competitor references',
+            'Target geography',
+          ],
+        },
+        {
+          title: 'Actions',
+          items: [
+            'Clean and chunk content',
+            'Extract claims and citations',
+            'Cluster audience signals',
+            'Draft messaging hooks',
+          ],
+        },
+        {
+          title: 'Outputs',
+          items: [
+            'Audience segments',
+            'Cited evidence',
+            'Messaging angles',
+            'Exportable briefs',
+          ],
+        },
+        {
+          title: 'Signals',
+          items: [
+            'Citation coverage',
+            'Segment density',
+            'Top claims',
+            'Sentiment cues',
+          ],
+        },
+      ],
+      flow: (
+        <svg viewBox="0 0 720 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker
+              id="arrow-audience"
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" fill="#64748B" />
+            </marker>
+          </defs>
+          <rect x="20" y="44" width="120" height="44" rx="10" fill="#F1F5F9" stroke="#CBD5E1" />
+          <rect x="160" y="44" width="120" height="44" rx="10" fill="#E0F2FE" stroke="#7DD3FC" />
+          <rect x="300" y="44" width="120" height="44" rx="10" fill="#F5F3FF" stroke="#C4B5FD" />
+          <rect x="440" y="44" width="120" height="44" rx="10" fill="#FFF7ED" stroke="#FDBA74" />
+          <rect x="580" y="44" width="120" height="44" rx="10" fill="#ECFDF3" stroke="#86EFAC" />
+          <line x1="140" y1="66" x2="160" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-audience)" />
+          <line x1="280" y1="66" x2="300" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-audience)" />
+          <line x1="420" y1="66" x2="440" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-audience)" />
+          <line x1="560" y1="66" x2="580" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-audience)" />
+          <text x="80" y="62" fontSize="9" textAnchor="middle" fill="#334155">
+            <tspan x="80" dy="-2">Pages</tspan>
+            <tspan x="80" dy="12">ingest</tspan>
+          </text>
+          <text x="220" y="62" fontSize="9" textAnchor="middle" fill="#1E3A8A">
+            <tspan x="220" dy="-2">Clean</tspan>
+            <tspan x="220" dy="12">&amp; chunk</tspan>
+          </text>
+          <text x="360" y="62" fontSize="9" textAnchor="middle" fill="#6D28D9">
+            <tspan x="360" dy="-2">Claims</tspan>
+            <tspan x="360" dy="12">&amp; evidence</tspan>
+          </text>
+          <text x="500" y="62" fontSize="9" textAnchor="middle" fill="#9A3412">
+            <tspan x="500" dy="-2">Segments</tspan>
+            <tspan x="500" dy="12">cluster</tspan>
+          </text>
+          <text x="640" y="62" fontSize="9" textAnchor="middle" fill="#166534">
+            <tspan x="640" dy="-2">Messaging</tspan>
+            <tspan x="640" dy="12">briefs</tspan>
+          </text>
+        </svg>
+      ),
+      diagram: (
+        <div className="how-tile__diagram how-tile__diagram--double">
+          <svg viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="18" y="10" width="60" height="92" rx="8" fill="#F8FAFC" stroke="#CBD5E1" />
+            <line x1="28" y1="28" x2="66" y2="28" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="28" y1="40" x2="66" y2="40" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="28" y1="52" x2="66" y2="52" stroke="#94A3B8" strokeWidth="2" />
+            <rect x="92" y="20" width="50" height="18" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+            <rect x="92" y="50" width="50" height="18" rx="6" fill="#F5F3FF" stroke="#C4B5FD" />
+            <rect x="92" y="80" width="50" height="18" rx="6" fill="#ECFDF3" stroke="#86EFAC" />
+            <text x="117" y="33" fontSize="9" textAnchor="middle" fill="#1E3A8A">
+              Claims
+            </text>
+            <text x="117" y="63" fontSize="9" textAnchor="middle" fill="#6D28D9">
+              Evidence
+            </text>
+            <text x="117" y="93" fontSize="9" textAnchor="middle" fill="#166534">
+              Hooks
+            </text>
+          </svg>
+          <svg viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="152" height="112" rx="10" fill="#F8FAFC" stroke="#E2E8F0" />
+            {samplePoints.slice(0, 26).map((point, idx) => {
+              const x = 80 + point.x * 50
+              const y = 58 - point.y * 46
+              return (
+                <circle
+                  key={`${point.clusterId}-${idx}`}
+                  cx={x}
+                  cy={y}
+                  r="2.4"
+                  fill={clusterColor(point.clusterId)}
+                  opacity="0.85"
+                />
+              )
+            })}
+            <rect x="16" y="84" width="40" height="18" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+            <rect x="60" y="84" width="40" height="18" rx="6" fill="#F5F3FF" stroke="#C4B5FD" />
+            <rect x="104" y="84" width="40" height="18" rx="6" fill="#FFF7ED" stroke="#FDBA74" />
+            <text x="36" y="96" fontSize="8" textAnchor="middle" fill="#1E3A8A">
+              Segment A
+            </text>
+            <text x="80" y="96" fontSize="8" textAnchor="middle" fill="#6D28D9">
+              Segment B
+            </text>
+            <text x="124" y="96" fontSize="8" textAnchor="middle" fill="#9A3412">
+              Segment C
+            </text>
+          </svg>
+        </div>
+      ),
+    },
   ]
 
   const renderTileContent = (tile, { expanded = false } = {}) => (
@@ -593,7 +735,6 @@ export function HowItWorksPage({ t }) {
 
         <div className="module-card module-card__wide">
           <h3>How each module works</h3>
-          <p className="muted">Each module follows the same pattern: inputs → actions → outputs.</p>
           <div className="how-tile-grid">
             {tiles.map((tile) => (
               <button

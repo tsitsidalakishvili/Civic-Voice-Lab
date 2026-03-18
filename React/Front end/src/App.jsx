@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AdminPage,
+  AudienceDiscoveryPage,
   CRMPage,
   DeliberationPage,
   DueDiligencePage,
@@ -73,6 +74,12 @@ function App() {
         label: t('module.dueDiligence'),
         description: t('module.dueDiligence.desc'),
         Component: DueDiligencePage,
+      },
+      {
+        id: 'audience-discovery',
+        label: t('module.audienceDiscovery'),
+        description: t('module.audienceDiscovery.desc'),
+        Component: AudienceDiscoveryPage,
       },
       {
         id: 'admin',

@@ -368,6 +368,15 @@
   gap: 8px;
 }
 
+.drop-zone {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  display: grid;
+  gap: 8px;
+}
+
 .dashboard-detail .table {
   font-size: 12px;
 }
@@ -394,6 +403,46 @@
 .module-card.section-intro {
   background: #ffffff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.ade-hero {
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  border-color: #dbe7ff;
+}
+
+.ade-hero .pill {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.ade-hero .journey-card {
+  background: #ffffff;
+}
+
+.segment-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+  display: grid;
+  gap: 8px;
+}
+
+.segment-preview__header {
+  display: grid;
+  gap: 6px;
+}
+
+.segment-preview__title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.segment-preview__quote {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0;
 }
 
 .outreach-grid {

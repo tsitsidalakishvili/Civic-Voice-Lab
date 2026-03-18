@@ -18,6 +18,7 @@ from .db import close_driver, db_health, init_constraints
 from .routes import router
 from .routes_crm import router as crm_router
 from .routes_due_diligence import router as dd_router
+from .routes_audience_discovery import router as audience_router
 from .routes_deliberation_extra import router as delib_extra_router
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ app.include_router(router)
 app.include_router(delib_extra_router, prefix="/deliberation", tags=["deliberation"])
 app.include_router(crm_router, prefix="/crm", tags=["crm"])
 app.include_router(dd_router, prefix="/due-diligence", tags=["due-diligence"])
+app.include_router(
+    audience_router, prefix="/audience-discovery", tags=["audience-discovery"]
+)
 
 
 @app.get("/")

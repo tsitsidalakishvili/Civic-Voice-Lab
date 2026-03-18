@@ -20,6 +20,9 @@ export const TRANSLATIONS = {
     'module.dueDiligence': 'Due Diligence',
     'module.dueDiligence.desc':
       'Investigate people or organizations, manage watchlists, and assess risk context.',
+    'module.audienceDiscovery': 'Audience Discovery Engine',
+    'module.audienceDiscovery.desc':
+      'Turn product pages into audience segments with cited evidence and messaging.',
     'module.settings': 'Settings',
     'module.settings.desc': 'System status, deletion, and data quality.',
     'feedback.button': 'Feedback',
@@ -117,6 +120,9 @@ export const TRANSLATIONS = {
     'module.dueDiligence': 'სათანადო შემოწმება',
     'module.dueDiligence.desc':
       'შეამოწმე პირები ან ორგანიზაციები, მართე სიები და შეაფასე რისკი.',
+    'module.audienceDiscovery': 'აუდიტორიის აღმოჩენის ძრავა',
+    'module.audienceDiscovery.desc':
+      'პროდუქტის გვერდებიდან ამოიღე აუდიტორიები, მტკიცებულებები და მესიჯები.',
     'module.settings': 'პარამეტრები',
     'module.settings.desc': 'სისტემის სტატუსი, წაშლა და მონაცემთა ხარისხი.',
     'feedback.button': 'უკუკავშირი',

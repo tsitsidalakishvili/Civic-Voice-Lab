@@ -3,6 +3,7 @@ import json
 import os
 import re
 import smtplib
+from functools import lru_cache
 from email.message import EmailMessage
 from typing import List, Optional, Tuple
 from uuid import uuid4
@@ -24,6 +25,75 @@ TASK_STATUSES = ["Open", "In Progress", "Done", "Cancelled"]
 EVENT_STATUSES = ["Planned", "Scheduled", "Completed", "Cancelled"]
 EVENT_REGISTRATION_STATUSES = ["Registered", "Attended", "Cancelled", "No Show"]
 CAMPAIGN_STATUSES = ["Planned", "Active", "Paused", "Completed"]
+
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+GOOGLE_MAPS_GEOCODE_URL = os.getenv(
+    "GOOGLE_MAPS_GEOCODE_URL", "https://maps.googleapis.com/maps/api/geocode/json"
+).strip()
+CRM_GEOCODE_STRATEGY = os.getenv("CRM_GEOCODE_STRATEGY", "always").strip().lower()
+CRM_GEOCODE_CITY_HINT = os.getenv("CRM_GEOCODE_CITY_HINT", "Tbilisi, Georgia").strip()
+
+
+def _safe_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+CRM_GEOCODE_MAX_PER_REQUEST = _safe_int(
+    os.getenv("CRM_GEOCODE_MAX_PER_REQUEST", "25"), 25
+)
+CRM_GEOCODE_TIMEOUT_S = _safe_float(os.getenv("CRM_GEOCODE_TIMEOUT_S", "4"), 4.0)
+
+
+def _normalize_geocode_address(address: str) -> Optional[str]:
+    cleaned = _clean_text(address)
+    if not cleaned:
+        return None
+    if CRM_GEOCODE_CITY_HINT:
+        hint = CRM_GEOCODE_CITY_HINT.strip()
+        if hint and hint.lower() not in cleaned.lower():
+            return f"{cleaned}, {hint}"
+    return cleaned
+
+
+@lru_cache(maxsize=1024)
+def _geocode_address(query: str) -> Optional[dict]:
+    if not GOOGLE_MAPS_API_KEY or not query:
+        return None
+    try:
+        response = requests.get(
+            GOOGLE_MAPS_GEOCODE_URL,
+            params={"address": query, "key": GOOGLE_MAPS_API_KEY},
+            timeout=CRM_GEOCODE_TIMEOUT_S,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    payload = response.json()
+    if payload.get("status") != "OK":
+        return None
+    results = payload.get("results") or []
+    if not results:
+        return None
+    location = (results[0].get("geometry") or {}).get("location") or {}
+    lat = location.get("lat")
+    lon = location.get("lng")
+    if lat is None or lon is None:
+        return None
+    return {
+        "lat": float(lat),
+        "lon": float(lon),
+        "formatted_address": results[0].get("formatted_address"),
+    }
 
 
 class PersonOut(BaseModel):
@@ -987,6 +1057,96 @@ def _load_supporter_summary_df() -> pd.DataFrame:
     return _enrich_people_core(df)
 
 
+def _needs_geocode(strategy: str, lat, lon, address: str) -> bool:
+    if strategy == "off" or not address:
+        return False
+    if strategy == "always":
+        return True
+    if lat is None or lon is None:
+        return True
+    if pd.isna(lat) or pd.isna(lon):
+        return True
+    if lat < -90 or lat > 90:
+        return True
+    if lon < -180 or lon > 180:
+        return True
+    return False
+
+
+def _persist_geocode_updates(rows: List[dict]) -> None:
+    if not rows:
+        return
+    driver = get_driver()
+    with _db_session(driver) as session:
+        _execute_write(
+            session,
+            """
+            UNWIND $rows AS row
+            WITH row
+            MATCH (p:Person {email: row.email})
+            SET p.lat = row.lat,
+                p.lon = row.lon,
+                p.address = CASE
+                    WHEN p.address IS NULL OR trim(p.address) = '' THEN row.address
+                    ELSE p.address
+                END
+            WITH p, row
+            FOREACH (_ IN CASE WHEN row.address IS NULL OR row.address = '' THEN [] ELSE [1] END |
+                MERGE (a:Address {fullAddress: row.address})
+                ON CREATE SET a.latitude = row.lat, a.longitude = row.lon
+                ON MATCH SET a.latitude = coalesce(row.lat, a.latitude),
+                            a.longitude = coalesce(row.lon, a.longitude)
+                MERGE (p)-[:LIVES_AT]->(a)
+            )
+            """,
+            {"rows": rows},
+        )
+
+
+def _apply_geocoding(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or not GOOGLE_MAPS_API_KEY or CRM_GEOCODE_STRATEGY == "off":
+        return df
+    budget = max(0, CRM_GEOCODE_MAX_PER_REQUEST)
+    if budget == 0:
+        return df
+    updates = []
+    for idx, row in df.iterrows():
+        if budget <= 0:
+            break
+        address_value = row.get("address")
+        address = "" if address_value is None or pd.isna(address_value) else str(address_value).strip()
+        lat = row.get("lat")
+        lon = row.get("lon")
+        if not _needs_geocode(CRM_GEOCODE_STRATEGY, lat, lon, address):
+            continue
+        query = _normalize_geocode_address(address)
+        if not query:
+            continue
+        result = _geocode_address(query)
+        if not result:
+            continue
+        df.at[idx, "lat"] = result["lat"]
+        df.at[idx, "lon"] = result["lon"]
+        formatted_address = result.get("formatted_address")
+        address_value = address or formatted_address or None
+        if not address and formatted_address:
+            df.at[idx, "address"] = formatted_address
+        email = row.get("email")
+        if email:
+            updates.append(
+                {
+                    "email": email,
+                    "lat": result["lat"],
+                    "lon": result["lon"],
+                    "address": address_value,
+                }
+            )
+            budget -= 1
+    if updates:
+        _persist_geocode_updates(updates)
+    return df
+
+
 def _load_map_data_df() -> pd.DataFrame:
     df = _query_df(
         """
@@ -996,7 +1156,6 @@ def _load_map_data_df() -> pd.DataFrame:
              coalesce(p.lat, a.latitude) AS lat,
              coalesce(p.lon, a.longitude) AS lon,
              coalesce(p.address, a.fullAddress) AS address
-        WHERE lat IS NOT NULL AND lon IS NOT NULL
         OPTIONAL MATCH (p)-[:IS_SUPPORTER]->(s:Supporter)
         OPTIONAL MATCH (p)-[:CLASSIFIED_AS]->(st:SupporterType)
         OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(a:Activity)
@@ -1048,6 +1207,7 @@ def _load_map_data_df() -> pd.DataFrame:
         return df
     df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
     df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+    df = _apply_geocoding(df)
     df = df.dropna(subset=["lat", "lon"])
     df = df[df["lat"].between(-90, 90) & df["lon"].between(-180, 180)]
     df = df[~((df["lat"].abs() < 1e-6) & (df["lon"].abs() < 1e-6))]

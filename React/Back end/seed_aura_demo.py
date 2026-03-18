@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import csv
+import os
 import random
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from functools import lru_cache
 
 from dotenv import load_dotenv
+import requests
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
@@ -43,6 +46,12 @@ from deliberation.api.app.schemas import (  # noqa: E402
     ConversationDatasetImportRow,
 )
 
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+GOOGLE_MAPS_GEOCODE_URL = os.getenv(
+    "GOOGLE_MAPS_GEOCODE_URL", "https://maps.googleapis.com/maps/api/geocode/json"
+).strip()
+CRM_GEOCODE_CITY_HINT = os.getenv("CRM_GEOCODE_CITY_HINT", "Tbilisi, Georgia").strip()
+
 
 def _find_repo_root() -> Path:
     for parent in ROOT_DIR.parents:
@@ -61,7 +70,49 @@ def _load_addresses() -> list[str]:
         return [row.get("address", "").strip() for row in reader if row.get("address")]
 
 
+def _normalize_geocode_address(address: str) -> str | None:
+    cleaned = str(address or "").strip()
+    if not cleaned:
+        return None
+    if CRM_GEOCODE_CITY_HINT and CRM_GEOCODE_CITY_HINT.lower() not in cleaned.lower():
+        return f"{cleaned}, {CRM_GEOCODE_CITY_HINT}"
+    return cleaned
+
+
+@lru_cache(maxsize=1024)
+def _geocode_address(address: str) -> tuple[float, float] | None:
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    query = _normalize_geocode_address(address)
+    if not query:
+        return None
+    try:
+        response = requests.get(
+            GOOGLE_MAPS_GEOCODE_URL,
+            params={"address": query, "key": GOOGLE_MAPS_API_KEY},
+            timeout=4,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    payload = response.json()
+    if payload.get("status") != "OK":
+        return None
+    results = payload.get("results") or []
+    if not results:
+        return None
+    location = (results[0].get("geometry") or {}).get("location") or {}
+    lat = location.get("lat")
+    lon = location.get("lng")
+    if lat is None or lon is None:
+        return None
+    return float(lat), float(lon)
+
+
 def _coords_from_address(address: str) -> tuple[float, float]:
+    geocoded = _geocode_address(address)
+    if geocoded:
+        return round(geocoded[0], 6), round(geocoded[1], 6)
     base_lat, base_lon = 41.7151, 44.8271
     seed = abs(hash(address)) % 10000
     rng = random.Random(seed)

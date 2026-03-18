@@ -19,4 +19,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ['leaflet'],
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+  },
 })
