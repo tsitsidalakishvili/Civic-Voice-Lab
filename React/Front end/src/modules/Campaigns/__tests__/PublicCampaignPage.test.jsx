@@ -68,6 +68,6 @@ describe('PublicCampaignPage', () => {
     render(<PublicCampaignPage campaignId="123" />)
 
     expect(await screen.findByText('Clean the river')).toBeInTheDocument()
-    expect(await screen.findByText('Contribute now')).toBeInTheDocument()
+    expect(await screen.findByText('Overview')).toBeInTheDocument()
   })
 })

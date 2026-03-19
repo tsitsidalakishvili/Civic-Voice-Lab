@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getJson, requestJson } from '../../services/api'
-import { Field, FormSection, StatusMessage } from '../../ui'
+import { Field, FormSection, LanguageSelect, StatusMessage } from '../../ui'
 
-export function PublicCampaignPage({ campaignId, t }) {
+export function PublicCampaignPage({
+  campaignId,
+  t,
+  language,
+  languages,
+  onLanguageChange,
+}) {
   const [campaign, setCampaign] = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [fundingSummary, setFundingSummary] = useState(null)
@@ -44,6 +50,7 @@ export function PublicCampaignPage({ campaignId, t }) {
   })
   const [contributionStatus, setContributionStatus] = useState('')
   const [contributionError, setContributionError] = useState('')
+  const [activeSection, setActiveSection] = useState('overview')
 
   const isDetail = Boolean(campaignId)
   const settledContributions = useMemo(
@@ -156,6 +163,12 @@ export function PublicCampaignPage({ campaignId, t }) {
       .finally(() => setLoading(false))
   }, [campaignId])
 
+  useEffect(() => {
+    if (campaignId) {
+      setActiveSection('overview')
+    }
+  }, [campaignId])
+
   const handleContributionSubmit = async (event) => {
     event.preventDefault()
     if (!campaignId) return
@@ -265,6 +278,14 @@ export function PublicCampaignPage({ campaignId, t }) {
   if (!isDetail) {
     return (
       <div className="public-campaign">
+        <div className="page-language">
+          <LanguageSelect
+            language={language}
+            languages={languages}
+            onLanguageChange={onLanguageChange}
+            label={t?.('language.label') || 'Language'}
+          />
+        </div>
         <header className="public-campaign__header">
           <h1>{t?.('campaign.public.title') || 'Problem-Solving Campaigns'}</h1>
           <p className="muted">
@@ -417,9 +438,40 @@ export function PublicCampaignPage({ campaignId, t }) {
     fundingSummary?.allocatedExecution ??
     fundingSummary?.allocated_execution ??
     0
+  const sectionTabs = [
+    {
+      id: 'overview',
+      label: t?.('campaign.public.tabOverview') || 'Overview',
+      description:
+        t?.('campaign.public.tabOverviewDesc') ||
+        'Problem, budget, and timeline summary.',
+    },
+    {
+      id: 'support',
+      label: t?.('campaign.public.tabSupport') || 'Support',
+      description:
+        t?.('campaign.public.tabSupportDesc') ||
+        'Contribute funding or volunteer.',
+    },
+    {
+      id: 'updates',
+      label: t?.('campaign.public.tabUpdates') || 'Updates',
+      description:
+        t?.('campaign.public.tabUpdatesDesc') ||
+        'Progress, proof, and partners.',
+    },
+  ]
 
   return (
     <div className="public-campaign">
+      <div className="page-language">
+        <LanguageSelect
+          language={language}
+          languages={languages}
+          onLanguageChange={onLanguageChange}
+          label={t?.('language.label') || 'Language'}
+        />
+      </div>
       {error ? <div className="module-alert">{error}</div> : null}
       {loading && !campaign ? <p className="muted">Loading campaign…</p> : null}
       {campaign && (
@@ -466,432 +518,552 @@ export function PublicCampaignPage({ campaignId, t }) {
             </div>
           </div>
 
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>{t?.('campaign.public.problem') || 'Problem statement'}</h3>
-              <p className="muted">
-                {campaign.problemDescription ||
-                  campaign.objective ||
-                  'Campaign problem statement not yet defined.'}
-              </p>
-              <div className="metric-row">
-                <span>{t?.('campaign.public.location') || 'Location'}</span>
-                <strong>
-                  {[campaign.locationCity, campaign.locationDistrict]
-                    .filter(Boolean)
-                    .join(', ') || '—'}
-                </strong>
-              </div>
-              <div className="metric-row">
-                <span>{t?.('campaign.public.timeline') || 'Timeline'}</span>
-                <strong>
-                  {timelineStart} → {timelineEnd}
-                </strong>
-              </div>
-            </div>
-            <div className="module-card">
-              <h3>{t?.('campaign.public.budget') || 'Budget breakdown'}</h3>
-              <div className="metric-row">
-                <span>{t?.('campaign.public.operationalFee') || 'Operational fee'}</span>
-                <strong>
-                  {campaign.operationalFeeAmount || 0} {displayCurrency}
-                </strong>
-              </div>
-              <div className="metric-row">
-                <span>{t?.('campaign.public.executionBudget') || 'Execution budget'}</span>
-                <strong>
-                  {campaign.executionBudgetAmount || 0} {displayCurrency}
-                </strong>
-              </div>
-              <div className="metric-row">
-                <span>
-                  {t?.('campaign.public.allocatedOperations') ||
-                    'Allocated to operations'}
-                </span>
-                <strong>
-                  {allocatedOperations} {displayCurrency}
-                </strong>
-              </div>
-              <div className="metric-row">
-                <span>
-                  {t?.('campaign.public.allocatedExecution') ||
-                    'Allocated to execution'}
-                </span>
-                <strong>
-                  {allocatedExecution} {displayCurrency}
-                </strong>
-              </div>
-              <p className="muted">
-                {t?.('campaign.public.budgetHint') ||
-                  'Operations cover platform and verification costs.'}
-              </p>
-            </div>
+          <div
+            className="module-tabs"
+            role="tablist"
+            aria-label={t?.('campaign.public.tabLabel') || 'Campaign sections'}
+          >
+            {sectionTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={activeSection === tab.id ? 'tab-button tab-active' : 'tab-button'}
+                onClick={() => setActiveSection(tab.id)}
+                role="tab"
+                id={`campaign-tab-${tab.id}`}
+                aria-selected={activeSection === tab.id}
+                aria-controls={`campaign-section-${tab.id}`}
+              >
+                <div>{tab.label}</div>
+                <small>{tab.description}</small>
+              </button>
+            ))}
           </div>
 
-          {transparency ? (
-            <div className="module-card">
-              <h3>{t?.('campaign.public.transparency') || 'Transparency summary'}</h3>
+          {activeSection === 'overview' && (
+            <section
+              id="campaign-section-overview"
+              role="tabpanel"
+              aria-labelledby="campaign-tab-overview"
+              className="stack"
+            >
               <div className="module-grid">
-                <div className="metric-row">
-                  <span>{t?.('campaign.public.spent') || 'Spent'}</span>
-                  <strong>
-                    {transparency.amountSpent} {displayCurrency}
-                  </strong>
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.problem') || 'Problem statement'}</h3>
+                  <p className="muted">
+                    {campaign.problemDescription ||
+                      campaign.objective ||
+                      'Campaign problem statement not yet defined.'}
+                  </p>
+                  <div className="metric-row">
+                    <span>{t?.('campaign.public.location') || 'Location'}</span>
+                    <strong>
+                      {[campaign.locationCity, campaign.locationDistrict]
+                        .filter(Boolean)
+                        .join(', ') || '—'}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>{t?.('campaign.public.timeline') || 'Timeline'}</span>
+                    <strong>
+                      {timelineStart} → {timelineEnd}
+                    </strong>
+                  </div>
                 </div>
-                <div className="metric-row">
-                  <span>{t?.('campaign.public.remaining') || 'Remaining'}</span>
-                  <strong>
-                    {transparency.remainingBalance} {displayCurrency}
-                  </strong>
-                </div>
-                <div className="metric-row">
-                  <span>{t?.('campaign.public.proofCount') || 'Proof items'}</span>
-                  <strong>{transparency.proofCount}</strong>
-                </div>
-                <div className="metric-row">
-                  <span>{t?.('campaign.public.expenseCount') || 'Expenses'}</span>
-                  <strong>{transparency.expenseCount}</strong>
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.budget') || 'Budget breakdown'}</h3>
+                  <div className="metric-row">
+                    <span>{t?.('campaign.public.operationalFee') || 'Operational fee'}</span>
+                    <strong>
+                      {campaign.operationalFeeAmount || 0} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>{t?.('campaign.public.executionBudget') || 'Execution budget'}</span>
+                    <strong>
+                      {campaign.executionBudgetAmount || 0} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>
+                      {t?.('campaign.public.allocatedOperations') ||
+                        'Allocated to operations'}
+                    </span>
+                    <strong>
+                      {allocatedOperations} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>
+                      {t?.('campaign.public.allocatedExecution') ||
+                        'Allocated to execution'}
+                    </span>
+                    <strong>
+                      {allocatedExecution} {displayCurrency}
+                    </strong>
+                  </div>
+                  <p className="muted">
+                    {t?.('campaign.public.budgetHint') ||
+                      'Operations cover platform and verification costs.'}
+                  </p>
                 </div>
               </div>
-            </div>
-          ) : null}
 
-          <FormSection
-            title={t?.('campaign.public.contribute') || 'Contribute now'}
-            description={
-              t?.('campaign.public.contributeDesc') ||
-              'Support this problem-solving campaign directly.'
-            }
-          >
-            {contributionError ? (
-              <StatusMessage tone="error">{contributionError}</StatusMessage>
-            ) : null}
-            {contributionStatus ? (
-              <StatusMessage tone="success">{contributionStatus}</StatusMessage>
-            ) : null}
-            <form className="stack" onSubmit={handleContributionSubmit}>
-              <div className="form-grid">
-                <Field
-                  id="contribution-amount"
-                  label={t?.('campaign.public.amount') || 'Amount'}
-                  type="number"
-                  min="0"
-                  value={contributionForm.amount}
-                  onChange={(event) =>
-                    setContributionForm((prev) => ({
-                      ...prev,
-                      amount: event.target.value,
-                    }))
-                  }
-                />
-                <Field
-                  id="contribution-currency"
-                  label={t?.('campaign.public.currency') || 'Currency'}
-                  as="select"
-                  value={contributionForm.currency}
-                  onChange={(event) =>
-                    setContributionForm((prev) => ({
-                      ...prev,
-                      currency: event.target.value,
-                    }))
-                  }
-                  options={[
-                    { value: 'GEL', label: 'GEL' },
-                    { value: 'USD', label: 'USD' },
-                    { value: 'EUR', label: 'EUR' },
-                  ]}
-                />
+              {transparency ? (
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.transparency') || 'Transparency summary'}</h3>
+                  <div className="module-grid">
+                    <div className="metric-row">
+                      <span>{t?.('campaign.public.spent') || 'Spent'}</span>
+                      <strong>
+                        {transparency.amountSpent} {displayCurrency}
+                      </strong>
+                    </div>
+                    <div className="metric-row">
+                      <span>{t?.('campaign.public.remaining') || 'Remaining'}</span>
+                      <strong>
+                        {transparency.remainingBalance} {displayCurrency}
+                      </strong>
+                    </div>
+                    <div className="metric-row">
+                      <span>{t?.('campaign.public.proofCount') || 'Proof items'}</span>
+                      <strong>{transparency.proofCount}</strong>
+                    </div>
+                    <div className="metric-row">
+                      <span>{t?.('campaign.public.expenseCount') || 'Expenses'}</span>
+                      <strong>{transparency.expenseCount}</strong>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="module-card">
+                <h3>{t?.('campaign.public.readyTitle') || 'Ready to help?'}</h3>
+                <p className="muted">
+                  {t?.('campaign.public.readyDesc') ||
+                    'Choose how you want to contribute or volunteer.'}
+                </p>
+                <div className="form-actions">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => setActiveSection('support')}
+                  >
+                    {t?.('campaign.public.readyAction') || 'Go to support options'}
+                  </button>
+                </div>
               </div>
-              <Field
-                id="contribution-name"
-                label={t?.('campaign.public.name') || 'Name'}
-                value={contributionForm.contributorName}
-                onChange={(event) =>
-                  setContributionForm((prev) => ({
-                    ...prev,
-                    contributorName: event.target.value,
-                  }))
-                }
-              />
-              <Field
-                id="contribution-email"
-                label={t?.('campaign.public.email') || 'Email'}
-                type="email"
-                value={contributionForm.contributorEmail}
-                onChange={(event) =>
-                  setContributionForm((prev) => ({
-                    ...prev,
-                    contributorEmail: event.target.value,
-                  }))
-                }
-              />
-              <Field
-                id="contribution-visibility"
-                label={t?.('campaign.public.visibility') || 'Visibility'}
-                as="select"
-                value={contributionForm.donorVisibility}
-                onChange={(event) =>
-                  setContributionForm((prev) => ({
-                    ...prev,
-                    donorVisibility: event.target.value,
-                  }))
-                }
-                options={[
-                  { value: 'public', label: t?.('campaign.public.visibilityPublic') || 'Public' },
-                  { value: 'anonymous', label: t?.('campaign.public.visibilityAnonymous') || 'Anonymous' },
-                  { value: 'private', label: t?.('campaign.public.visibilityPrivate') || 'Private' },
-                ]}
-              />
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={contributionForm.isAnonymous}
-                  onChange={(event) =>
-                    setContributionForm((prev) => ({
-                      ...prev,
-                      isAnonymous: event.target.checked,
-                    }))
-                  }
-                />
-                {t?.('campaign.public.anonymous') || 'Contribute anonymously'}
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={contributionForm.termsAccepted}
-                  onChange={(event) =>
-                    setContributionForm((prev) => ({
-                      ...prev,
-                      termsAccepted: event.target.checked,
-                    }))
-                  }
-                />
-                {t?.('campaign.public.termsAccept') ||
-                  'I agree to the donation terms'}
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={contributionForm.privacyAccepted}
-                  onChange={(event) =>
-                    setContributionForm((prev) => ({
-                      ...prev,
-                      privacyAccepted: event.target.checked,
-                    }))
-                  }
-                />
-                {t?.('campaign.public.privacyAccept') ||
-                  'I agree to the privacy policy'}
-              </label>
-              <Field
-                id="contribution-note"
-                label={t?.('campaign.public.note') || 'Note'}
-                as="textarea"
-                value={contributionForm.note}
-                onChange={(event) =>
-                  setContributionForm((prev) => ({
-                    ...prev,
-                    note: event.target.value,
-                  }))
-                }
-              />
-              <button className="button" type="submit">
-                {t?.('campaign.public.submit') || 'Submit contribution'}
-              </button>
-            </form>
-          </FormSection>
+            </section>
+          )}
 
-          <FormSection
-            title={t?.('campaign.public.volunteerTitle') || 'Join the workday'}
-            description={
-              t?.('campaign.public.volunteerDesc') ||
-              'Volunteer for local action days and updates.'
-            }
-          >
-            {volunteerError ? (
-              <StatusMessage tone="error">{volunteerError}</StatusMessage>
-            ) : null}
-            {volunteerStatus ? (
-              <StatusMessage tone="success">{volunteerStatus}</StatusMessage>
-            ) : null}
-            <form className="stack" onSubmit={handleVolunteerSubmit}>
-              <Field
-                id="volunteer-name"
-                label={t?.('campaign.public.volunteerName') || 'Full name'}
-                value={volunteerForm.name}
-                onChange={(event) =>
-                  setVolunteerForm((prev) => ({
-                    ...prev,
-                    name: event.target.value,
-                  }))
+          {activeSection === 'support' && (
+            <section
+              id="campaign-section-support"
+              role="tabpanel"
+              aria-labelledby="campaign-tab-support"
+              className="stack"
+            >
+              <FormSection
+                title={t?.('campaign.public.contribute') || 'Contribute now'}
+                description={
+                  t?.('campaign.public.contributeDesc') ||
+                  'Support this problem-solving campaign directly.'
                 }
-              />
-              <div className="form-grid">
-                <Field
-                  id="volunteer-email"
-                  label={t?.('campaign.public.volunteerEmail') || 'Email'}
-                  value={volunteerForm.email}
-                  onChange={(event) =>
-                    setVolunteerForm((prev) => ({
-                      ...prev,
-                      email: event.target.value,
-                    }))
-                  }
-                />
-                <Field
-                  id="volunteer-phone"
-                  label={t?.('campaign.public.volunteerPhone') || 'Phone'}
-                  value={volunteerForm.phone}
-                  onChange={(event) =>
-                    setVolunteerForm((prev) => ({
-                      ...prev,
-                      phone: event.target.value,
-                    }))
-                  }
-                />
+              >
+                <p className="muted">
+                  {t?.('campaign.public.contributeHint') ||
+                    'Only amount is required. Add your details for receipts and updates.'}
+                </p>
+                <StatusMessage tone="error" message={contributionError} />
+                <StatusMessage tone="success" message={contributionStatus} />
+                <form className="stack" onSubmit={handleContributionSubmit}>
+                  <div className="form-grid">
+                    <Field
+                      id="contribution-amount"
+                      label={t?.('campaign.public.amount') || 'Amount'}
+                      required
+                    >
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        value={contributionForm.amount}
+                        onChange={(event) =>
+                          setContributionForm((prev) => ({
+                            ...prev,
+                            amount: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </Field>
+                    <Field
+                      id="contribution-currency"
+                      label={t?.('campaign.public.currency') || 'Currency'}
+                    >
+                      <select
+                        className="select"
+                        value={contributionForm.currency}
+                        onChange={(event) =>
+                          setContributionForm((prev) => ({
+                            ...prev,
+                            currency: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="GEL">GEL</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <Field id="contribution-name" label={t?.('campaign.public.name') || 'Name'}>
+                    <input
+                      className="input"
+                      value={contributionForm.contributorName}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          contributorName: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field id="contribution-email" label={t?.('campaign.public.email') || 'Email'}>
+                    <input
+                      className="input"
+                      type="email"
+                      value={contributionForm.contributorEmail}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          contributorEmail: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={contributionForm.termsAccepted}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          termsAccepted: event.target.checked,
+                        }))
+                      }
+                    />
+                    {t?.('campaign.public.termsAccept') ||
+                      'I agree to the donation terms'}
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={contributionForm.privacyAccepted}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          privacyAccepted: event.target.checked,
+                        }))
+                      }
+                    />
+                    {t?.('campaign.public.privacyAccept') ||
+                      'I agree to the privacy policy'}
+                  </label>
+                  <details className="dashboard-detail">
+                    <summary>
+                      {t?.('campaign.public.optionalPreferences') ||
+                        'Optional preferences'}
+                    </summary>
+                    <div className="dashboard-detail__body">
+                      <Field
+                        id="contribution-visibility"
+                        label={t?.('campaign.public.visibility') || 'Visibility'}
+                      >
+                        <select
+                          className="select"
+                          value={contributionForm.donorVisibility}
+                          onChange={(event) =>
+                            setContributionForm((prev) => ({
+                              ...prev,
+                              donorVisibility: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="public">
+                            {t?.('campaign.public.visibilityPublic') || 'Public'}
+                          </option>
+                          <option value="anonymous">
+                            {t?.('campaign.public.visibilityAnonymous') || 'Anonymous'}
+                          </option>
+                          <option value="private">
+                            {t?.('campaign.public.visibilityPrivate') || 'Private'}
+                          </option>
+                        </select>
+                      </Field>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={contributionForm.isAnonymous}
+                          onChange={(event) =>
+                            setContributionForm((prev) => ({
+                              ...prev,
+                              isAnonymous: event.target.checked,
+                            }))
+                          }
+                        />
+                        {t?.('campaign.public.anonymous') || 'Contribute anonymously'}
+                      </label>
+                      <Field id="contribution-note" label={t?.('campaign.public.note') || 'Note'}>
+                        <textarea
+                          className="textarea"
+                          value={contributionForm.note}
+                          onChange={(event) =>
+                            setContributionForm((prev) => ({
+                              ...prev,
+                              note: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </details>
+                  <button className="button" type="submit">
+                    {t?.('campaign.public.submit') || 'Submit contribution'}
+                  </button>
+                </form>
+              </FormSection>
+
+              <FormSection
+                title={t?.('campaign.public.volunteerTitle') || 'Join the workday'}
+                description={
+                  t?.('campaign.public.volunteerDesc') ||
+                  'Volunteer for local action days and updates.'
+                }
+              >
+                <p className="muted">
+                  {t?.('campaign.public.volunteerHint') ||
+                    'Share what you can, and we will follow up with next steps.'}
+                </p>
+                <StatusMessage tone="error" message={volunteerError} />
+                <StatusMessage tone="success" message={volunteerStatus} />
+                <form className="stack" onSubmit={handleVolunteerSubmit}>
+                  <Field
+                    id="volunteer-name"
+                    label={t?.('campaign.public.volunteerName') || 'Full name'}
+                    required
+                  >
+                    <input
+                      className="input"
+                      value={volunteerForm.name}
+                      onChange={(event) =>
+                        setVolunteerForm((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </Field>
+                  <div className="form-grid">
+                    <Field
+                      id="volunteer-email"
+                      label={t?.('campaign.public.volunteerEmail') || 'Email'}
+                    >
+                      <input
+                        className="input"
+                        value={volunteerForm.email}
+                        onChange={(event) =>
+                          setVolunteerForm((prev) => ({
+                            ...prev,
+                            email: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field
+                      id="volunteer-phone"
+                      label={t?.('campaign.public.volunteerPhone') || 'Phone'}
+                    >
+                      <input
+                        className="input"
+                        value={volunteerForm.phone}
+                        onChange={(event) =>
+                          setVolunteerForm((prev) => ({
+                            ...prev,
+                            phone: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <details className="dashboard-detail">
+                    <summary>
+                      {t?.('campaign.public.optionalDetails') || 'Optional details'}
+                    </summary>
+                    <div className="dashboard-detail__body">
+                      <Field
+                        id="volunteer-role"
+                        label={t?.('campaign.public.volunteerRole') || 'Preferred role'}
+                      >
+                        <input
+                          className="input"
+                          value={volunteerForm.role}
+                          onChange={(event) =>
+                            setVolunteerForm((prev) => ({
+                              ...prev,
+                              role: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                      <Field
+                        id="volunteer-notes"
+                        label={t?.('campaign.public.volunteerNotes') || 'Notes'}
+                      >
+                        <textarea
+                          className="textarea"
+                          value={volunteerForm.notes}
+                          onChange={(event) =>
+                            setVolunteerForm((prev) => ({
+                              ...prev,
+                              notes: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </details>
+                  <button className="button" type="submit">
+                    {t?.('campaign.public.volunteerSubmit') || 'Join'}
+                  </button>
+                </form>
+                {volunteers.length > 0 ? (
+                  <p className="muted">
+                    {t?.('campaign.public.volunteerCount') || 'Volunteers'}:{' '}
+                    {volunteers.length}
+                  </p>
+                ) : null}
+              </FormSection>
+            </section>
+          )}
+
+          {activeSection === 'updates' && (
+            <section
+              id="campaign-section-updates"
+              role="tabpanel"
+              aria-labelledby="campaign-tab-updates"
+              className="stack"
+            >
+              <div className="module-card">
+                <h3>{t?.('campaign.public.timelineLog') || 'Timeline activity'}</h3>
+                {auditEvents.length === 0 ? (
+                  <p className="muted">
+                    {t?.('campaign.public.noTimeline') || 'No activity yet.'}
+                  </p>
+                ) : (
+                  <ul className="compact-list">
+                    {auditEvents.slice(0, 8).map((event, idx) => (
+                      <li key={`${event.eventType}-${idx}`}>
+                        {event.summary}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <Field
-                id="volunteer-role"
-                label={t?.('campaign.public.volunteerRole') || 'Preferred role'}
-                value={volunteerForm.role}
-                onChange={(event) =>
-                  setVolunteerForm((prev) => ({
-                    ...prev,
-                    role: event.target.value,
-                  }))
-                }
-              />
-              <Field
-                id="volunteer-notes"
-                label={t?.('campaign.public.volunteerNotes') || 'Notes'}
-                as="textarea"
-                value={volunteerForm.notes}
-                onChange={(event) =>
-                  setVolunteerForm((prev) => ({
-                    ...prev,
-                    notes: event.target.value,
-                  }))
-                }
-              />
-              <button className="button" type="submit">
-                {t?.('campaign.public.volunteerSubmit') || 'Join'}
-              </button>
-            </form>
-            {volunteers.length > 0 ? (
-              <p className="muted">
-                {t?.('campaign.public.volunteerCount') || 'Volunteers'}:{' '}
-                {volunteers.length}
-              </p>
-            ) : null}
-          </FormSection>
 
-          <div className="module-card">
-            <h3>{t?.('campaign.public.timelineLog') || 'Timeline activity'}</h3>
-            {auditEvents.length === 0 ? (
-              <p className="muted">
-                {t?.('campaign.public.noTimeline') || 'No activity yet.'}
-              </p>
-            ) : (
-              <ul className="compact-list">
-                {auditEvents.slice(0, 8).map((event, idx) => (
-                  <li key={`${event.eventType}-${idx}`}>
-                    {event.summary}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+              <div className="module-grid">
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.milestones') || 'Milestones'}</h3>
+                  {milestones.length === 0 ? (
+                    <p className="muted">
+                      {t?.('campaign.public.noMilestones') || 'No milestones yet.'}
+                    </p>
+                  ) : (
+                    <ul className="compact-list">
+                      {milestones.map((milestone) => (
+                        <li key={milestone.milestoneId}>
+                          {milestone.title} — {milestone.status}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.expenses') || 'Budget spent so far'}</h3>
+                  {approvedExpenses.length === 0 ? (
+                    <p className="muted">
+                      {t?.('campaign.public.noExpenses') || 'No expenses yet.'}
+                    </p>
+                  ) : (
+                    <ul className="compact-list">
+                      {approvedExpenses.map((expense) => (
+                        <li key={expense.expenseId}>
+                          {expense.category} — {expense.amount} {expense.currency}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
 
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>{t?.('campaign.public.milestones') || 'Milestones'}</h3>
-              {milestones.length === 0 ? (
-                <p className="muted">
-                  {t?.('campaign.public.noMilestones') || 'No milestones yet.'}
-                </p>
-              ) : (
-                <ul className="compact-list">
-                  {milestones.map((milestone) => (
-                    <li key={milestone.milestoneId}>
-                      {milestone.title} — {milestone.status}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="module-card">
-              <h3>{t?.('campaign.public.expenses') || 'Budget spent so far'}</h3>
-              {approvedExpenses.length === 0 ? (
-                <p className="muted">
-                  {t?.('campaign.public.noExpenses') || 'No expenses yet.'}
-                </p>
-              ) : (
-                <ul className="compact-list">
-                  {approvedExpenses.map((expense) => (
-                    <li key={expense.expenseId}>
-                      {expense.category} — {expense.amount} {expense.currency}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
+              <div className="module-grid">
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.proof') || 'Proof of work'}</h3>
+                  {proofArtifacts.length === 0 ? (
+                    <p className="muted">
+                      {t?.('campaign.public.noProof') || 'No proof uploaded yet.'}
+                    </p>
+                  ) : (
+                    <ul className="compact-list">
+                      {proofArtifacts.map((artifact) => (
+                        <li key={artifact.proofId}>
+                          {artifact.artifactType} — {artifact.caption || artifact.url}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="module-card">
+                  <h3>{t?.('campaign.public.partners') || 'Partners'}</h3>
+                  {partners.length === 0 ? (
+                    <p className="muted">
+                      {t?.('campaign.public.noPartners') || 'No partners listed yet.'}
+                    </p>
+                  ) : (
+                    <ul className="compact-list">
+                      {partners.map((partner) => (
+                        <li key={partner.partnerId}>
+                          {partner.name} — {partner.role || 'Partner'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
 
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>{t?.('campaign.public.proof') || 'Proof of work'}</h3>
-              {proofArtifacts.length === 0 ? (
-                <p className="muted">
-                  {t?.('campaign.public.noProof') || 'No proof uploaded yet.'}
-                </p>
-              ) : (
-                <ul className="compact-list">
-                  {proofArtifacts.map((artifact) => (
-                    <li key={artifact.proofId}>
-                      {artifact.artifactType} — {artifact.caption || artifact.url}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="module-card">
-              <h3>{t?.('campaign.public.partners') || 'Partners'}</h3>
-              {partners.length === 0 ? (
-                <p className="muted">
-                  {t?.('campaign.public.noPartners') || 'No partners listed yet.'}
-                </p>
-              ) : (
-                <ul className="compact-list">
-                  {partners.map((partner) => (
-                    <li key={partner.partnerId}>
-                      {partner.name} — {partner.role || 'Partner'}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="module-card">
-            <h3>{t?.('campaign.public.recentSupport') || 'Recent support'}</h3>
-            {settledContributions.length === 0 ? (
-              <p className="muted">
-                {t?.('campaign.public.noContributions') ||
-                  'Be the first to contribute.'}
-              </p>
-            ) : (
-              <ul className="compact-list">
-                {settledContributions.slice(0, 5).map((contrib) => (
-                  <li key={contrib.contributionId}>
-                    {contrib.isAnonymous
-                      ? t?.('campaign.public.anonymousLabel') || 'Anonymous'
-                      : contrib.contributorName || 'Supporter'}{' '}
-                    — {contrib.amount} {contrib.currency}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+              <div className="module-card">
+                <h3>{t?.('campaign.public.recentSupport') || 'Recent support'}</h3>
+                {settledContributions.length === 0 ? (
+                  <p className="muted">
+                    {t?.('campaign.public.noContributions') ||
+                      'Be the first to contribute.'}
+                  </p>
+                ) : (
+                  <ul className="compact-list">
+                    {settledContributions.slice(0, 5).map((contrib) => (
+                      <li key={contrib.contributionId}>
+                        {contrib.isAnonymous
+                          ? t?.('campaign.public.anonymousLabel') || 'Anonymous'
+                          : contrib.contributorName || 'Supporter'}{' '}
+                        — {contrib.amount} {contrib.currency}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

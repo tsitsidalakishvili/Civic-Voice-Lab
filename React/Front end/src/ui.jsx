@@ -155,6 +155,40 @@ export function StatusMessage({ tone = 'info', message, role }) {
   )
 }
 
+export function LanguageSelect({
+  language,
+  onLanguageChange,
+  languages,
+  label = 'Language',
+  hideLabel = false,
+  className,
+}) {
+  const reactId = useId()
+  const selectId = `language-${reactId}`
+  return (
+    <div className={`language-select ${className || ''}`.trim()}>
+      {!hideLabel ? (
+        <label className="label" htmlFor={selectId}>
+          {label}
+        </label>
+      ) : null}
+      <select
+        id={selectId}
+        className="select"
+        value={language}
+        onChange={(event) => onLanguageChange?.(event.target.value)}
+        aria-label={hideLabel ? label : undefined}
+      >
+        {(languages || []).map((lang) => (
+          <option key={lang.id} value={lang.id}>
+            {lang.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export function MobileNavDrawer({
   open,
   onClose,

@@ -531,7 +531,7 @@ export function DeliberationPage({
   }, [activeId, conversations])
 
   useEffect(() => {
-    if (activeTab !== 'setup') return
+    if (activeTab !== 'setup' && activeTab !== 'distribute') return
     getJson('/crm/whatsapp-groups')
       .then((payload) => {
         setWhatsappGroups(Array.isArray(payload) ? payload : [])
@@ -571,31 +571,25 @@ export function DeliberationPage({
       )
   }, [activeId])
 
-  const questionnaireLink = useMemo(() => {
+  const buildQuestionnaireLink = (questionnaireType, view) => {
     if (!activeId) return ''
-    const base = `${window.location.origin}${window.location.pathname}`
-    const params = new URLSearchParams({
-      questionnaire: 'deliberation',
-      conversation_id: activeId,
-      mobile: '1',
-      view: 'mobile',
-      embed: 'true',
-    })
-    return `${base}?${params.toString()}`
-  }, [activeId])
+    const url = new URL(window.location.href)
+    url.search = ''
+    url.searchParams.set('questionnaire', questionnaireType)
+    url.searchParams.set('conversation_id', activeId)
+    if (view) url.searchParams.set('view', view)
+    return url.toString()
+  }
 
-  const adminQuestionnaireLink = useMemo(() => {
-    if (!activeId) return ''
-    const base = `${window.location.origin}${window.location.pathname}`
-    const params = new URLSearchParams({
-      questionnaire: 'deliberation_admin',
-      conversation_id: activeId,
-      mobile: '1',
-      view: 'mobile',
-      embed: 'true',
-    })
-    return `${base}?${params.toString()}`
-  }, [activeId])
+  const questionnaireLink = useMemo(
+    () => buildQuestionnaireLink('deliberation', 'participant'),
+    [activeId],
+  )
+
+  const adminQuestionnaireLink = useMemo(
+    () => buildQuestionnaireLink('deliberation_admin', 'admin'),
+    [activeId],
+  )
 
   useEffect(() => {
     if (!activeId || !questionnaireLink) {
@@ -1014,9 +1008,8 @@ export function DeliberationPage({
             { id: 'overview', label: translate('deliberation.tabs.overview') },
             { id: 'setup', label: translate('deliberation.tabs.setup') },
             { id: 'distribute', label: translate('deliberation.tabs.distribute') },
-            { id: 'moderation', label: 'Moderation' },
             { id: 'insights', label: translate('deliberation.tabs.insights') },
-            { id: 'data', label: translate('deliberation.tabs.dataEntry') },
+            { id: 'moderation', label: translate('deliberation.tabs.moderation') },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1032,6 +1025,97 @@ export function DeliberationPage({
 
       {activeTab === 'overview' && (
         <div className="stack">
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Quick start</h3>
+                <p className="muted">
+                  Set up a conversation, share the link, then review the results.
+                </p>
+              </div>
+            </div>
+            <ul className="compact-list">
+              <li>
+                <span>Step 1</span>
+                <strong>Create a conversation and add starter statements.</strong>
+              </li>
+              <li>
+                <span>Step 2</span>
+                <strong>Share the participant link with supporters.</strong>
+              </li>
+              <li>
+                <span>Step 3</span>
+                <strong>Run analysis and review consensus insights.</strong>
+              </li>
+            </ul>
+            <div className="filter-row">
+              <button className="button" type="button" onClick={() => applyActiveTab('setup')}>
+                Set up
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => applyActiveTab('distribute')}
+              >
+                Share link
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => applyActiveTab('insights')}
+              >
+                View insights
+              </button>
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Active conversation</h3>
+                <p className="muted">This is the survey link you are sharing.</p>
+              </div>
+              {activeConvo ? (
+                <span className="pill">{activeConvo.is_open ? 'Open' : 'Closed'}</span>
+              ) : null}
+            </div>
+            {activeConvo ? (
+              <div className="stack">
+                <div>
+                  <strong>{activeConvo.topic}</strong>
+                  {activeConvo.description ? (
+                    <p className="muted">{activeConvo.description}</p>
+                  ) : (
+                    <p className="muted">Add a short description to guide participants.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="label">Participant link</label>
+                  <input className="input" value={questionnaireLink} readOnly />
+                </div>
+                <div className="filter-row">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => applyActiveTab('distribute')}
+                  >
+                    Share link
+                  </button>
+                  <a
+                    className="button-secondary"
+                    href={questionnaireLink}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open participant view
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p className="muted">Select a conversation below to activate it.</p>
+            )}
+          </div>
+
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
@@ -1064,8 +1148,9 @@ export function DeliberationPage({
                       className="button"
                       type="button"
                       onClick={() => setActiveId(convo.id)}
+                      disabled={activeId === convo.id}
                     >
-                      Use
+                      {activeId === convo.id ? 'Active' : 'Use'}
                     </button>
                   </div>
                 </div>
@@ -1088,8 +1173,9 @@ export function DeliberationPage({
                       className="button"
                       type="button"
                       onClick={() => setActiveId(convo.id)}
+                      disabled={activeId === convo.id}
                     >
-                      Use
+                      {activeId === convo.id ? 'Active' : 'Use'}
                     </button>
                   </div>
                 </div>
@@ -1109,15 +1195,15 @@ export function DeliberationPage({
             <div className="dashboard-detail__body">
               <ul className="compact-list">
                 <li>
-                  <span>Create or update the conversation</span>
-                  <strong>Topic + description</strong>
+                  <span>Define the conversation</span>
+                  <strong>Topic, description, settings</strong>
                 </li>
                 <li>
-                  <span>Seed the initial statements</span>
-                  <strong>CSV or manual entry</strong>
+                  <span>Add starter statements</span>
+                  <strong>One per line or import CSV</strong>
                 </li>
                 <li>
-                  <span>Share participation link</span>
+                  <span>Share the participant link</span>
                   <strong>Invite supporters and members</strong>
                 </li>
               </ul>
@@ -1126,224 +1212,476 @@ export function DeliberationPage({
 
           <div className="module-grid">
             <div className="module-card">
-            <h3>Create conversation</h3>
-            <input
-              className="input"
-              placeholder="Topic"
-              value={createForm.topic}
-              onChange={(event) =>
-                setCreateForm((prev) => ({ ...prev, topic: event.target.value }))
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Description"
-              value={createForm.description}
-              onChange={(event) =>
-                setCreateForm((prev) => ({
-                  ...prev,
-                  description: event.target.value,
-                }))
-              }
-            />
-            <label className="checkbox">
+              <h3>Create a conversation</h3>
+              <p className="muted">Give the survey a clear topic and description.</p>
               <input
-                type="checkbox"
-                checked={createForm.allowCommentSubmission}
+                className="input"
+                placeholder="Topic"
+                value={createForm.topic}
+                onChange={(event) =>
+                  setCreateForm((prev) => ({ ...prev, topic: event.target.value }))
+                }
+              />
+              <textarea
+                className="textarea"
+                placeholder="Description"
+                value={createForm.description}
                 onChange={(event) =>
                   setCreateForm((prev) => ({
                     ...prev,
-                    allowCommentSubmission: event.target.checked,
+                    description: event.target.value,
                   }))
                 }
               />
-              Allow comments
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={createForm.allowViz}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({ ...prev, allowViz: event.target.checked }))
-                }
-              />
-              Allow visualization
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={createForm.moderationRequired}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    moderationRequired: event.target.checked,
-                  }))
-                }
-              />
-              Moderation required
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={createForm.isOpen}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({ ...prev, isOpen: event.target.checked }))
-                }
-              />
-              Open for participation
-            </label>
-            <button className="button" type="button" onClick={handleCreateConversation}>
-              Create conversation
-            </button>
-          </div>
-
-          <div className="module-card">
-            <h3>Update conversation</h3>
-            {updateForm ? (
-              <div className="stack">
+              <label className="checkbox">
                 <input
-                  className="input"
-                  value={updateForm.topic}
+                  type="checkbox"
+                  checked={createForm.allowCommentSubmission}
                   onChange={(event) =>
-                    setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
-                  }
-                />
-                <textarea
-                  className="textarea"
-                  value={updateForm.description}
-                  onChange={(event) =>
-                    setUpdateForm((prev) => ({
+                    setCreateForm((prev) => ({
                       ...prev,
-                      description: event.target.value,
+                      allowCommentSubmission: event.target.checked,
                     }))
                   }
                 />
-                <label className="checkbox">
+                Allow comments
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={createForm.allowViz}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, allowViz: event.target.checked }))
+                  }
+                />
+                Allow visualization
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={createForm.moderationRequired}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      moderationRequired: event.target.checked,
+                    }))
+                  }
+                />
+                Moderation required
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={createForm.isOpen}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, isOpen: event.target.checked }))
+                  }
+                />
+                Open for participation
+              </label>
+              <button className="button" type="button" onClick={handleCreateConversation}>
+                Create conversation
+              </button>
+            </div>
+
+            <div className="module-card">
+              <h3>Edit active conversation</h3>
+              <p className="muted">Adjust the topic, description, and settings.</p>
+              {updateForm ? (
+                <div className="stack">
                   <input
-                    type="checkbox"
-                    checked={updateForm.allowCommentSubmission}
+                    className="input"
+                    value={updateForm.topic}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    value={updateForm.description}
                     onChange={(event) =>
                       setUpdateForm((prev) => ({
                         ...prev,
-                        allowCommentSubmission: event.target.checked,
+                        description: event.target.value,
                       }))
                     }
                   />
-                  Allow comments
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={updateForm.allowViz}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        allowViz: event.target.checked,
-                      }))
-                    }
-                  />
-                  Allow visualization
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={updateForm.moderationRequired}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        moderationRequired: event.target.checked,
-                      }))
-                    }
-                  />
-                  Moderation required
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={updateForm.isOpen}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        isOpen: event.target.checked,
-                      }))
-                    }
-                  />
-                  Open for participation
-                </label>
-                <button className="button" type="button" onClick={handleUpdateConversation}>
-                  Save settings
-                </button>
-        </div>
-            ) : (
-              <p className="muted">Select a conversation in Overview.</p>
-            )}
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.allowCommentSubmission}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          allowCommentSubmission: event.target.checked,
+                        }))
+                      }
+                    />
+                    Allow comments
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.allowViz}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          allowViz: event.target.checked,
+                        }))
+                      }
+                    />
+                    Allow visualization
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.moderationRequired}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          moderationRequired: event.target.checked,
+                        }))
+                      }
+                    />
+                    Moderation required
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.isOpen}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          isOpen: event.target.checked,
+                        }))
+                      }
+                    />
+                    Open for participation
+                  </label>
+                  <button className="button" type="button" onClick={handleUpdateConversation}>
+                    Save settings
+                  </button>
+                </div>
+              ) : (
+                <p className="muted">Select a conversation in Overview.</p>
+              )}
+            </div>
+
+            <div className="module-card">
+              <h3>Add starter statements</h3>
+              <p className="muted">One statement per line. Participants vote on these.</p>
+              <textarea
+                className="textarea"
+                placeholder="One comment per line"
+                value={seedText}
+                onChange={(event) => setSeedText(event.target.value)}
+              />
+              <button className="button" type="button" onClick={handleSeedComments}>
+                Add seed comments
+              </button>
+            </div>
           </div>
 
-        <div className="module-card">
-            <h3>Seed comments</h3>
-            <textarea
-              className="textarea"
-              placeholder="One comment per line"
-              value={seedText}
-              onChange={(event) => setSeedText(event.target.value)}
-            />
-            <button className="button" type="button" onClick={handleSeedComments}>
-              Add seed comments
-            </button>
-          </div>
+          <details className="dashboard-detail">
+            <summary>Advanced setup</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">
+                Optional tools for importing datasets or generating demo votes.
+              </p>
+              <ul className="compact-list">
+                <li>
+                  <span>Import votes and comments</span>
+                  <strong>CSV upload</strong>
+                </li>
+                <li>
+                  <span>Seed statements quickly</span>
+                  <strong>Download templates</strong>
+                </li>
+                <li>
+                  <span>Run analysis after import</span>
+                  <strong>Optional</strong>
+                </li>
+              </ul>
 
-          <div className="module-card">
-            <h3>Generate demo votes</h3>
-            <input
-              className="input"
-              type="number"
-              value={simulateForm.participants}
-              onChange={(event) =>
-                setSimulateForm((prev) => ({
-                  ...prev,
-                  participants: event.target.value,
-                }))
-              }
-            />
-            <input
-              className="input"
-              type="number"
-              value={simulateForm.votesPerParticipant}
-              onChange={(event) =>
-                setSimulateForm((prev) => ({
-                  ...prev,
-                  votesPerParticipant: event.target.value,
-                }))
-              }
-            />
-            <input
-              className="input"
-              type="number"
-              value={simulateForm.seed}
-              onChange={(event) =>
-                setSimulateForm((prev) => ({ ...prev, seed: event.target.value }))
-              }
-            />
-            <button className="button" type="button" onClick={handleSimulateVotes}>
-              Generate votes
-            </button>
-          </div>
+              <div className="module-grid">
+                <div className="module-card">
+                  <h3>Generate demo votes</h3>
+                  <p className="muted">Use mock participants to preview analytics.</p>
+                  <input
+                    className="input"
+                    type="number"
+                    value={simulateForm.participants}
+                    onChange={(event) =>
+                      setSimulateForm((prev) => ({
+                        ...prev,
+                        participants: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    value={simulateForm.votesPerParticipant}
+                    onChange={(event) =>
+                      setSimulateForm((prev) => ({
+                        ...prev,
+                        votesPerParticipant: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    value={simulateForm.seed}
+                    onChange={(event) =>
+                      setSimulateForm((prev) => ({ ...prev, seed: event.target.value }))
+                    }
+                  />
+                  <button className="button" type="button" onClick={handleSimulateVotes}>
+                    Generate votes
+                  </button>
+                </div>
+              </div>
+
+              <div className="module-card module-card__wide">
+                <h3>Import data (CSV)</h3>
+                <input
+                  className="input"
+                  type="file"
+                  accept=".csv"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) parseCsvFile(file)
+                  }}
+                />
+                <div className="stack">
+                  <p className="muted">
+                    Required columns: <strong>conversation_id</strong>,{' '}
+                    <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
+                    <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
+                    <strong>vote</strong>.
+                  </p>
+                  <p className="muted">
+                    Optional columns: comment_created_at, reaction_created_at, participant_cluster.
+                  </p>
+                  <p className="muted">
+                    Seed comments CSV: <strong>comment_text</strong> column required.
+                  </p>
+                </div>
+                {csvColumns.length ? (
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={csvMap.conversation_id || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
+                      }
+                    >
+                      <option value="">Conversation ID column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.comment_id || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, comment_id: event.target.value }))
+                      }
+                    >
+                      <option value="">Comment ID column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.participant_id || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, participant_id: event.target.value }))
+                      }
+                    >
+                      <option value="">Participant ID column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.participant_cluster || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, participant_cluster: event.target.value }))
+                      }
+                    >
+                      <option value="">Participant cluster column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.comment_text || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, comment_text: event.target.value }))
+                      }
+                    >
+                      <option value="">Comment text column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.is_seed || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, is_seed: event.target.value }))
+                      }
+                    >
+                      <option value="">Is seed column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.comment_created_at || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, comment_created_at: event.target.value }))
+                      }
+                    >
+                      <option value="">Comment created_at column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.vote || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, vote: event.target.value }))
+                      }
+                    >
+                      <option value="">Vote column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select"
+                      value={csvMap.reaction_created_at || ''}
+                      onChange={(event) =>
+                        setCsvMap((prev) => ({ ...prev, reaction_created_at: event.target.value }))
+                      }
+                    >
+                      <option value="">Vote created_at column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                <div className="filter-row">
+                  <select
+                    className="select"
+                    value={seedCsvColumn}
+                    onChange={(event) => setSeedCsvColumn(event.target.value)}
+                  >
+                    <option value="">Seed comments from column</option>
+                    {csvColumns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    placeholder="Max rows"
+                    value={seedCsvLimit}
+                    onChange={(event) => setSeedCsvLimit(event.target.value)}
+                  />
+                  <button className="button-secondary" type="button" onClick={handleSeedFromCsv}>
+                    Seed comments
+                  </button>
+                  <button className="button" type="button" onClick={handleImportDataset}>
+                    Import dataset
+                  </button>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={runAnalysisAfterImport}
+                      onChange={(event) => setRunAnalysisAfterImport(event.target.checked)}
+                    />
+                    Run analysis after import
+                  </label>
+                </div>
+                {csvStatus ? <p className="muted">{csvStatus}</p> : null}
+              </div>
+            </div>
+          </details>
         </div>
-      </div>
-    )}
+      )}
 
       {activeTab === 'distribute' && (
         <div className="stack">
           <details className="dashboard-detail">
-            <summary>Distribute the survey</summary>
+            <summary>Share the survey</summary>
             <div className="dashboard-detail__body">
-              <p className="muted">Share the participation link or embed the survey into your site.</p>
+              <p className="muted">Send the participant link or embed the survey into your site.</p>
             </div>
           </details>
 
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>Shareable links</h3>
+          <div className="module-card module-card__wide">
+            <h3>Participant link</h3>
+            <p className="muted">This link opens the swipe experience.</p>
+            {questionnaireLink ? (
+              <div className="stack">
+                <input className="input" value={questionnaireLink} readOnly />
+                <div className="filter-row">
+                  <a
+                    className="button"
+                    href={questionnaireLink}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open participant view
+                  </a>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => applyActiveTab('setup')}
+                  >
+                    Edit setup
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="muted">Select a conversation in Overview to generate a link.</p>
+            )}
+          </div>
+
+          <details className="dashboard-detail">
+            <summary>Team channels and admin link</summary>
+            <div className="dashboard-detail__body">
               {slackError ? <div className="module-alert">{slackError}</div> : null}
               {slackStatus ? (
                 <div className="module-alert module-alert--success">{slackStatus}</div>
@@ -1353,10 +1691,6 @@ export function DeliberationPage({
                 <div className="module-alert module-alert--success">{whatsappStatus}</div>
               ) : null}
               <div className="stack">
-                <div>
-                  <label className="label">Participant link</label>
-                  <input className="input" value={questionnaireLink} readOnly />
-                </div>
                 <div>
                   <label className="label">Admin link</label>
                   <input className="input" value={adminQuestionnaireLink} readOnly />
@@ -1371,7 +1705,7 @@ export function DeliberationPage({
                   className="button"
                   type="button"
                   onClick={handleSendSlack}
-                  disabled={sendingSlack}
+                  disabled={sendingSlack || !questionnaireLink}
                 >
                   {sendingSlack ? 'Sending…' : 'Send to Slack'}
                 </button>
@@ -1400,15 +1734,17 @@ export function DeliberationPage({
                   className="button"
                   type="button"
                   onClick={handleSendWhatsapp}
-                  disabled={sendingWhatsapp}
+                  disabled={sendingWhatsapp || !questionnaireLink}
                 >
                   {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
                 </button>
               </div>
             </div>
+          </details>
 
-            <div className="module-card">
-              <h3>Embed on your site</h3>
+          <details className="dashboard-detail">
+            <summary>Embed on your site</summary>
+            <div className="dashboard-detail__body">
               <p className="muted">
                 Use a stable page id for persistent conversations, or embed a single
                 conversation id.
@@ -1441,18 +1777,20 @@ export function DeliberationPage({
 <script async src="https://pol.is/embed.js"></script>`}</pre>
               </div>
             </div>
-          </div>
+          </details>
 
-          <div className="module-card module-card__wide">
-            <h3>Participant identity (XID)</h3>
-            <p className="muted">
-              If you have known users, attach an xid to match participants with your data.
-            </p>
-            <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
-            <p className="muted">
-              Use a stable id like a GUID. Avoid personal emails unless required.
-            </p>
-          </div>
+          <details className="dashboard-detail">
+            <summary>Participant identity (XID)</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">
+                If you have known users, attach an xid to match participants with your data.
+              </p>
+              <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
+              <p className="muted">
+                Use a stable id like a GUID. Avoid personal emails unless required.
+              </p>
+            </div>
+          </details>
         </div>
       )}
 
@@ -1669,62 +2007,16 @@ export function DeliberationPage({
               </div>
 
               {topicMap ? (
-                <>
-                  <div className="report-visual-grid">
-                    <div className="module-card report-card polis-card">
-                      <div className="polis-card__header">
-                        <h4>Advanced statistical analysis</h4>
-                        <span className="pill">Topic map</span>
-                      </div>
-                      <p className="muted">Layer 0 interactive visualization</p>
-                      <div className="polis-map">
-                        <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
-                          <rect
-                            x="8"
-                            y="8"
-                            width="344"
-                            height="244"
-                            rx="14"
-                            fill="#ffffff"
-                            stroke="#E2E8F0"
-                          />
-                          {topicMap.points.map((point, idx) => (
-                            <circle
-                              key={`${point.clusterId}-${idx}`}
-                              cx={point.x * 360}
-                              cy={point.y * 260}
-                              r="2.4"
-                              fill={clusterColor(
-                                point.clusterId,
-                                topicMap.colorById?.[point.clusterId] || idx + 1,
-                              )}
-                              opacity="0.75"
-                            />
-                          ))}
-                          {topicMap.clusters.map((cluster) => (
-                            <text
-                              key={`label-${cluster.id}`}
-                              x={cluster.centerX * 360}
-                              y={cluster.centerY * 260}
-                              textAnchor="middle"
-                              fontSize="10"
-                              fill="#334155"
-                            >
-                              {cluster.label}
-                            </text>
-                          ))}
-                        </svg>
-                      </div>
-                      <p className="muted">
-                        Go beyond opinion groups with topic maps and cluster overlays.
-                      </p>
-                    </div>
-                    {statementLandscape ? (
+                <details className="dashboard-detail">
+                  <summary>Advanced visualizations</summary>
+                  <div className="dashboard-detail__body">
+                    <div className="report-visual-grid">
                       <div className="module-card report-card polis-card">
                         <div className="polis-card__header">
-                          <h4>Statement landscape</h4>
-                          <span className="pill">Consensus vs divisive</span>
+                          <h4>Advanced statistical analysis</h4>
+                          <span className="pill">Topic map</span>
                         </div>
+                        <p className="muted">Layer 0 interactive visualization</p>
                         <div className="polis-map">
                           <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
                             <rect
@@ -1736,225 +2028,285 @@ export function DeliberationPage({
                               fill="#ffffff"
                               stroke="#E2E8F0"
                             />
-                            <line x1="36" y1="220" x2="320" y2="220" stroke="#E2E8F0" />
-                            <line x1="36" y1="220" x2="36" y2="28" stroke="#E2E8F0" />
-                            {statementLandscape.points.map((point) => {
-                              const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
-                              const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
-                              const size = 3 + Math.min(5, point.participation / 12)
-                              const color =
-                                point.polarity > point.consensus
-                                  ? '#f97316'
-                                  : point.consensus > 0.35
-                                    ? '#22c55e'
-                                    : '#94a3b8'
-                              return (
-                                <circle
-                                  key={point.id}
-                                  cx={x}
-                                  cy={y}
-                                  r={size}
-                                  fill={color}
-                                  opacity="0.75"
-                                />
-                              )
-                            })}
-                            {statementLandscape.labels.map((point) => {
-                              const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
-                              const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
-                              return (
-                                <text
-                                  key={`label-${point.id}`}
-                                  x={x}
-                                  y={y - 6}
-                                  textAnchor="middle"
-                                  fontSize="9"
-                                  fill="#0f172a"
-                                >
-                                  {truncateText(point.text, 28)}
-                                </text>
-                              )
-                            })}
-                            <text x="36" y="236" fontSize="9" fill="#64748b">
-                              Divisive →
-                            </text>
-                            <text x="10" y="32" fontSize="9" fill="#64748b">
-                              ↑ Consensus
-                            </text>
+                            {topicMap.points.map((point, idx) => (
+                              <circle
+                                key={`${point.clusterId}-${idx}`}
+                                cx={point.x * 360}
+                                cy={point.y * 260}
+                                r="2.4"
+                                fill={clusterColor(
+                                  point.clusterId,
+                                  topicMap.colorById?.[point.clusterId] || idx + 1,
+                                )}
+                                opacity="0.75"
+                              />
+                            ))}
+                            {topicMap.clusters.map((cluster) => (
+                              <text
+                                key={`label-${cluster.id}`}
+                                x={cluster.centerX * 360}
+                                y={cluster.centerY * 260}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fill="#334155"
+                              >
+                                {cluster.label}
+                              </text>
+                            ))}
                           </svg>
                         </div>
                         <p className="muted">
-                          See which statements build consensus versus spark polarization.
+                          Go beyond opinion groups with topic maps and cluster overlays.
                         </p>
+                      </div>
+                      {statementLandscape ? (
+                        <div className="module-card report-card polis-card">
+                          <div className="polis-card__header">
+                            <h4>Statement landscape</h4>
+                            <span className="pill">Consensus vs divisive</span>
+                          </div>
+                          <div className="polis-map">
+                            <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
+                              <rect
+                                x="8"
+                                y="8"
+                                width="344"
+                                height="244"
+                                rx="14"
+                                fill="#ffffff"
+                                stroke="#E2E8F0"
+                              />
+                              <line x1="36" y1="220" x2="320" y2="220" stroke="#E2E8F0" />
+                              <line x1="36" y1="220" x2="36" y2="28" stroke="#E2E8F0" />
+                              {statementLandscape.points.map((point) => {
+                                const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                                const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                                const size = 3 + Math.min(5, point.participation / 12)
+                                const color =
+                                  point.polarity > point.consensus
+                                    ? '#f97316'
+                                    : point.consensus > 0.35
+                                      ? '#22c55e'
+                                      : '#94a3b8'
+                                return (
+                                  <circle
+                                    key={point.id}
+                                    cx={x}
+                                    cy={y}
+                                    r={size}
+                                    fill={color}
+                                    opacity="0.75"
+                                  />
+                                )
+                              })}
+                              {statementLandscape.labels.map((point) => {
+                                const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                                const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                                return (
+                                  <text
+                                    key={`label-${point.id}`}
+                                    x={x}
+                                    y={y - 6}
+                                    textAnchor="middle"
+                                    fontSize="9"
+                                    fill="#0f172a"
+                                  >
+                                    {truncateText(point.text, 28)}
+                                  </text>
+                                )
+                              })}
+                              <text x="36" y="236" fontSize="9" fill="#64748b">
+                                Divisive →
+                              </text>
+                              <text x="10" y="32" fontSize="9" fill="#64748b">
+                                ↑ Consensus
+                              </text>
+                            </svg>
+                          </div>
+                          <p className="muted">
+                            See which statements build consensus versus spark polarization.
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="report-visual-grid">
+                      <div className="module-card report-card polis-card">
+                        <div className="polis-card__header">
+                          <h4>AI-generated reports</h4>
+                          <span className="pill">Summary</span>
+                        </div>
+                        <div className="polis-report-preview">
+                          <div className="polis-report-preview__header">
+                            <span className="polis-dot" />
+                            <span className="polis-dot" />
+                            <span className="polis-dot" />
+                            <span className="polis-report-preview__title">Report</span>
+                          </div>
+                          <div className="polis-report-preview__body">
+                            <div className="polis-report-preview__block" />
+                            <div className="polis-report-preview__block polis-report-preview__block--tall" />
+                            <div className="polis-report-preview__block" />
+                          </div>
+                        </div>
+                        <p className="muted">
+                          Let Survey and Consensus do the heavy lifting: generate summaries,
+                          consensus statements, and topic insights.
+                        </p>
+                        <ul className="polis-feature-list">
+                          <li>Conversation summaries</li>
+                          <li>Automated topic reporting</li>
+                          <li>Consensus statement identification</li>
+                          <li>Divisive comment analysis</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+
+              {clusterCards.length || report.potential_agreements?.length || vennData ? (
+                <details className="dashboard-detail">
+                  <summary>Deep dive insights</summary>
+                  <div className="dashboard-detail__body">
+                    {clusterCards.length ? (
+                      <>
+                        <h4>Cluster profiles</h4>
+                        <div className="cluster-grid">
+                          {clusterCards.map((card) => (
+                            <div className="cluster-card" key={card.id}>
+                              <div className="cluster-card__header">
+                                <strong>{card.id}</strong>
+                                <span className="pill">{formatPercent(card.share)}</span>
+                              </div>
+                              <p className="muted">{card.summary}</p>
+                              <div className="cluster-tags">
+                                {card.agreeTopics.map((topic) => (
+                                  <span
+                                    className="cluster-tag cluster-tag--agree"
+                                    key={`${card.id}-a-${topic}`}
+                                  >
+                                    {truncateText(topic, 36)}
+                                  </span>
+                                ))}
+                                {card.disagreeTopics.map((topic) => (
+                                  <span
+                                    className="cluster-tag cluster-tag--disagree"
+                                    key={`${card.id}-d-${topic}`}
+                                  >
+                                    {truncateText(topic, 36)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+
+                    {report.potential_agreements?.length ? (
+                      <div className="module-card report-card">
+                        <h4>Potential agreement topics</h4>
+                        <div className="cluster-tags">
+                          {report.potential_agreements.map((topic) => (
+                            <span className="cluster-tag" key={topic}>
+                              {truncateText(sanitizeStatement(topic), 50)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {vennData ? (
+                      <div className="report-visual-grid">
+                        <div className="module-card report-card">
+                          <h4>Shared agreement topics</h4>
+                          {vennSelected.length < 2 ? (
+                            <p className="muted">
+                              Need at least two clusters with agreement topics.
+                            </p>
+                          ) : !vennData.hasOverlap ? (
+                            <p className="muted">No overlapping agreement topics yet.</p>
+                          ) : (
+                            <div className="venn-wrap">
+                              <svg viewBox="0 0 360 260" className="venn-diagram">
+                                <rect x="0" y="0" width="360" height="260" rx="16" fill="#f8fafc" />
+                                {vennSelected.length >= 2 ? (
+                                  <>
+                                    <circle
+                                      cx={vennSelected.length >= 3 ? 140 : 150}
+                                      cy={vennSelected.length >= 3 ? 120 : 130}
+                                      r="90"
+                                      fill={clusterColor(vennSelected[0]?.cluster_id, 1)}
+                                      opacity="0.28"
+                                    />
+                                    <circle
+                                      cx={vennSelected.length >= 3 ? 220 : 210}
+                                      cy={vennSelected.length >= 3 ? 120 : 130}
+                                      r="90"
+                                      fill={clusterColor(vennSelected[1]?.cluster_id, 2)}
+                                      opacity="0.28"
+                                    />
+                                  </>
+                                ) : null}
+                                {vennSelected.length >= 3 ? (
+                                  <circle
+                                    cx="180"
+                                    cy="200"
+                                    r="90"
+                                    fill={clusterColor(vennSelected[2]?.cluster_id, 3)}
+                                    opacity="0.28"
+                                  />
+                                ) : null}
+
+                                {vennSelected.length >= 2 ? (
+                                  <>
+                                    <text x="110" y="130" textAnchor="middle" className="venn-count">
+                                      {vennAOnly.size}
+                                    </text>
+                                    <text x="250" y="130" textAnchor="middle" className="venn-count">
+                                      {vennBOnly.size}
+                                    </text>
+                                    <text x="180" y="130" textAnchor="middle" className="venn-count">
+                                      {vennSelected.length >= 3 ? vennABOnly.size : vennAB.size}
+                                    </text>
+                                  </>
+                                ) : null}
+                                {vennSelected.length >= 3 ? (
+                                  <>
+                                    <text x="180" y="220" textAnchor="middle" className="venn-count">
+                                      {vennCOnly.size}
+                                    </text>
+                                    <text x="145" y="175" textAnchor="middle" className="venn-count">
+                                      {vennACOnly.size}
+                                    </text>
+                                    <text x="215" y="175" textAnchor="middle" className="venn-count">
+                                      {vennBCOnly.size}
+                                    </text>
+                                    <text x="180" y="155" textAnchor="middle" className="venn-count">
+                                      {vennABC.size}
+                                    </text>
+                                  </>
+                                ) : null}
+                              </svg>
+                              <div className="venn-legend">
+                                {vennSelected.map((item, idx) => (
+                                  <span className="venn-legend__item" key={item.cluster_id || idx}>
+                                    <span
+                                      className="venn-legend__dot"
+                                      style={{ background: clusterColor(item.cluster_id, idx + 1) }}
+                                    />
+                                    {item.cluster_id} ({item.size || 0})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : null}
                   </div>
-                  <div className="report-visual-grid">
-                    <div className="module-card report-card polis-card">
-                      <div className="polis-card__header">
-                        <h4>AI-generated reports</h4>
-                        <span className="pill">Summary</span>
-                      </div>
-                      <div className="polis-report-preview">
-                        <div className="polis-report-preview__header">
-                          <span className="polis-dot" />
-                          <span className="polis-dot" />
-                          <span className="polis-dot" />
-                          <span className="polis-report-preview__title">Report</span>
-                        </div>
-                        <div className="polis-report-preview__body">
-                          <div className="polis-report-preview__block" />
-                          <div className="polis-report-preview__block polis-report-preview__block--tall" />
-                          <div className="polis-report-preview__block" />
-                        </div>
-                      </div>
-                      <p className="muted">
-                        Let Survey and Consensus do the heavy lifting: generate summaries,
-                        consensus statements, and topic insights.
-                      </p>
-                      <ul className="polis-feature-list">
-                        <li>Conversation summaries</li>
-                        <li>Automated topic reporting</li>
-                        <li>Consensus statement identification</li>
-                        <li>Divisive comment analysis</li>
-                      </ul>
-                    </div>
-                  </div>
-                </>
+                </details>
               ) : null}
-
-              {clusterCards.length ? (
-                <>
-                  <h4>Cluster profiles</h4>
-                  <div className="cluster-grid">
-                    {clusterCards.map((card) => (
-                      <div className="cluster-card" key={card.id}>
-                        <div className="cluster-card__header">
-                          <strong>{card.id}</strong>
-                          <span className="pill">{formatPercent(card.share)}</span>
-                        </div>
-                        <p className="muted">{card.summary}</p>
-                        <div className="cluster-tags">
-                          {card.agreeTopics.map((topic) => (
-                            <span className="cluster-tag cluster-tag--agree" key={`${card.id}-a-${topic}`}>
-                              {truncateText(topic, 36)}
-                            </span>
-                          ))}
-                          {card.disagreeTopics.map((topic) => (
-                            <span
-                              className="cluster-tag cluster-tag--disagree"
-                              key={`${card.id}-d-${topic}`}
-                            >
-                              {truncateText(topic, 36)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-
-              {report.potential_agreements?.length ? (
-                <div className="module-card report-card">
-                  <h4>Potential agreement topics</h4>
-                  <div className="cluster-tags">
-                    {report.potential_agreements.map((topic) => (
-                      <span className="cluster-tag" key={topic}>
-                        {truncateText(sanitizeStatement(topic), 50)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="report-visual-grid">
-                {vennData ? (
-                  <div className="module-card report-card">
-                    <h4>Shared agreement topics</h4>
-                    {vennSelected.length < 2 ? (
-                      <p className="muted">Need at least two clusters with agreement topics.</p>
-                    ) : !vennData.hasOverlap ? (
-                      <p className="muted">No overlapping agreement topics yet.</p>
-                    ) : (
-                      <div className="venn-wrap">
-                        <svg viewBox="0 0 360 260" className="venn-diagram">
-                          <rect x="0" y="0" width="360" height="260" rx="16" fill="#f8fafc" />
-                          {vennSelected.length >= 2 ? (
-                            <>
-                              <circle
-                                cx={vennSelected.length >= 3 ? 140 : 150}
-                                cy={vennSelected.length >= 3 ? 120 : 130}
-                                r="90"
-                                fill={clusterColor(vennSelected[0]?.cluster_id, 1)}
-                                opacity="0.28"
-                              />
-                              <circle
-                                cx={vennSelected.length >= 3 ? 220 : 210}
-                                cy={vennSelected.length >= 3 ? 120 : 130}
-                                r="90"
-                                fill={clusterColor(vennSelected[1]?.cluster_id, 2)}
-                                opacity="0.28"
-                              />
-                            </>
-                          ) : null}
-                          {vennSelected.length >= 3 ? (
-                            <circle
-                              cx="180"
-                              cy="200"
-                              r="90"
-                              fill={clusterColor(vennSelected[2]?.cluster_id, 3)}
-                              opacity="0.28"
-                            />
-                          ) : null}
-
-                          {vennSelected.length >= 2 ? (
-                            <>
-                              <text x="110" y="130" textAnchor="middle" className="venn-count">
-                                {vennAOnly.size}
-                              </text>
-                              <text x="250" y="130" textAnchor="middle" className="venn-count">
-                                {vennBOnly.size}
-                              </text>
-                              <text x="180" y="130" textAnchor="middle" className="venn-count">
-                                {vennSelected.length >= 3 ? vennABOnly.size : vennAB.size}
-                              </text>
-                            </>
-                          ) : null}
-                          {vennSelected.length >= 3 ? (
-                            <>
-                              <text x="180" y="220" textAnchor="middle" className="venn-count">
-                                {vennCOnly.size}
-                              </text>
-                              <text x="145" y="175" textAnchor="middle" className="venn-count">
-                                {vennACOnly.size}
-                              </text>
-                              <text x="215" y="175" textAnchor="middle" className="venn-count">
-                                {vennBCOnly.size}
-                              </text>
-                              <text x="180" y="155" textAnchor="middle" className="venn-count">
-                                {vennABC.size}
-                              </text>
-                            </>
-                          ) : null}
-                        </svg>
-                        <div className="venn-legend">
-                          {vennSelected.map((item, idx) => (
-                            <span className="venn-legend__item" key={item.cluster_id || idx}>
-                              <span
-                                className="venn-legend__dot"
-                                style={{ background: clusterColor(item.cluster_id, idx + 1) }}
-                              />
-                              {item.cluster_id} ({item.size || 0})
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-
-              </div>
 
               <details className="dashboard-detail">
                 <summary>Consensus statements ({report.metrics.consensus.length})</summary>
@@ -2010,229 +2362,8 @@ export function DeliberationPage({
 
             </div>
           ) : (
-            <p className="muted">Run analysis to view insights.</p>
+            <p className="muted">Run analysis or load a report to view insights.</p>
           )}
-        </div>
-      )}
-
-      {activeTab === 'data' && (
-        <div className="stack">
-          <details className="dashboard-detail">
-            <summary>Data entry and import</summary>
-            <div className="dashboard-detail__body">
-              <p className="muted">
-                Bring your own dataset or use templates to seed new surveys.
-              </p>
-              <ul className="compact-list">
-                <li>
-                  <span>Import votes and comments</span>
-                  <strong>CSV upload</strong>
-                </li>
-                <li>
-                  <span>Seed statements quickly</span>
-                  <strong>Download templates</strong>
-                </li>
-                <li>
-                  <span>Run analysis after import</span>
-                  <strong>Optional</strong>
-                </li>
-              </ul>
-            </div>
-          </details>
-
-          <div className="module-card module-card__wide">
-            <h3>CSV import</h3>
-            <input
-              className="input"
-              type="file"
-              accept=".csv"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) parseCsvFile(file)
-              }}
-            />
-            <div className="stack">
-              <p className="muted">
-                Required columns: <strong>conversation_id</strong>,{' '}
-                <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
-                <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
-                <strong>vote</strong>.
-              </p>
-              <p className="muted">
-                Optional columns: comment_created_at, reaction_created_at, participant_cluster.
-              </p>
-              <p className="muted">
-                Seed comments CSV: <strong>comment_text</strong> column required.
-              </p>
-            </div>
-            {csvColumns.length ? (
-              <div className="form-grid">
-                <select
-                  className="select"
-                  value={csvMap.conversation_id || ''}
-                  onChange={(event) =>
-                    setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
-                  }
-                >
-                  <option value="">Conversation ID column</option>
-                  {csvColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              <select
-                className="select"
-                value={csvMap.comment_id || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, comment_id: event.target.value }))
-                }
-              >
-                <option value="">Comment ID column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.participant_id || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, participant_id: event.target.value }))
-                }
-              >
-                <option value="">Participant ID column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.participant_cluster || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, participant_cluster: event.target.value }))
-                }
-              >
-                <option value="">Participant cluster column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.comment_text || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, comment_text: event.target.value }))
-                }
-              >
-                <option value="">Comment text column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.is_seed || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, is_seed: event.target.value }))
-                }
-              >
-                <option value="">Is seed column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.comment_created_at || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, comment_created_at: event.target.value }))
-                }
-              >
-                <option value="">Comment created_at column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.vote || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, vote: event.target.value }))
-                }
-              >
-                <option value="">Vote column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={csvMap.reaction_created_at || ''}
-                onChange={(event) =>
-                  setCsvMap((prev) => ({ ...prev, reaction_created_at: event.target.value }))
-                }
-              >
-                <option value="">Vote created_at column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-          <div className="filter-row">
-            <select
-              className="select"
-              value={seedCsvColumn}
-              onChange={(event) => setSeedCsvColumn(event.target.value)}
-            >
-              <option value="">Seed comments from column</option>
-              {csvColumns.map((col) => (
-                <option key={col} value={col}>
-                  {col}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input"
-              type="number"
-              min="1"
-              placeholder="Max rows"
-              value={seedCsvLimit}
-              onChange={(event) => setSeedCsvLimit(event.target.value)}
-            />
-            <button className="button-secondary" type="button" onClick={handleSeedFromCsv}>
-              Seed comments
-            </button>
-            <button className="button" type="button" onClick={handleImportDataset}>
-              Import dataset
-            </button>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={runAnalysisAfterImport}
-                onChange={(event) => setRunAnalysisAfterImport(event.target.checked)}
-              />
-              Run analysis after import
-            </label>
-          </div>
-          {csvStatus ? <p className="muted">{csvStatus}</p> : null}
-        </div>
         </div>
       )}
 

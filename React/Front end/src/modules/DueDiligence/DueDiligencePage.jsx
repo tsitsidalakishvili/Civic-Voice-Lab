@@ -31,6 +31,7 @@ export function DueDiligencePage({
   const [startMode, setStartMode] = useState('Analysis')
   const [crmMatches, setCrmMatches] = useState([])
   const [competitorMatches, setCompetitorMatches] = useState([])
+  const [internalChecksRan, setInternalChecksRan] = useState(false)
   const [analysisNotice, setAnalysisNotice] = useState('')
   const [analysisError, setAnalysisError] = useState('')
   const [analysisLoading, setAnalysisLoading] = useState(false)
@@ -189,7 +190,9 @@ export function DueDiligencePage({
       setError('Enter a subject first.')
       return
     }
+    setStartMode('Analysis')
     setError('')
+    setInternalChecksRan(true)
     try {
       const people = await getJson(
         `/crm/people/summary?q=${encodeURIComponent(query)}&limit=200`,
@@ -206,9 +209,10 @@ export function DueDiligencePage({
 
   const handleRunAnalysis = async () => {
     if (!subjectName.trim()) {
-      setAnalysisNotice('Set a subject first.')
+      setAnalysisNotice('Enter a subject first.')
       return
     }
+    setStartMode('Analysis')
     setAnalysisError('')
     setAnalysisResult(null)
     setAnalysisProgress(5)
@@ -338,6 +342,12 @@ export function DueDiligencePage({
   }, [subjectName])
 
   useEffect(() => {
+    setInternalChecksRan(false)
+    setCrmMatches([])
+    setCompetitorMatches([])
+  }, [subjectName, subjectType])
+
+  useEffect(() => {
     if (!debateOpponent && subjectName) {
       setDebateOpponent(subjectName)
     }
@@ -373,8 +383,13 @@ export function DueDiligencePage({
     return `${base}${params.toString()}`
   }, [ddAppUrl, subjectName, subjectType, startMode, useWikidata, useOpenSanctions, useNews])
 
-  const subjectStatus =
-    crmMatches.length + competitorMatches.length > 0 ? 'Known' : 'New'
+  const subjectStatus = subjectName.trim()
+    ? internalChecksRan
+      ? crmMatches.length + competitorMatches.length > 0
+        ? 'Known'
+        : 'New'
+      : 'Not checked'
+    : '—'
 
   const gmailUrl = useMemo(() => {
     const subjectLine = encodeURIComponent(
@@ -652,9 +667,9 @@ export function DueDiligencePage({
           <summary>How the workflow runs</summary>
           <div className="dashboard-detail__body">
             <InfoBox
-              title="Workflow summary"
-              summary="Intake → Enrich → Evidence → Risk → Report → Watchlist."
-              hint="1) Choose a subject and confirm Network context. 2) Configure sources (Wikidata, OpenSanctions, News/Web). 3) Run analysis for risk summary and PDF report. 4) Use Debate prep for evidence cards. 5) Save to watchlist or launch external DD app."
+              title="Workflow overview"
+              summary="Choose a subject → Check internal sources → Run external analysis → Review report."
+              hint="Use the Watchlist tab for repeat subjects, and Launch to open the external DD app."
             />
           </div>
         </details>
@@ -664,43 +679,55 @@ export function DueDiligencePage({
         <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
-              <h3>Subject analysis</h3>
-              <p className="muted">Choose an entity and run internal checks.</p>
+              <h3>Start a due diligence check</h3>
+              <p className="muted">
+                Choose a subject, run internal checks, then run external analysis.
+              </p>
             </div>
           </div>
+          <InfoBox
+            title="Quick steps"
+            summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
+            hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
+          />
           {(companyCandidate || personCandidate) && (
-            <div className="module-footer">
-              <span>
-                <strong>Company</strong>{' '}
-                {companyCandidate?.name ? companyCandidate.name : '—'}
-              </span>
-              <span>
-                <strong>Person</strong> {personCandidate?.name ? personCandidate.name : '—'}
-              </span>
-              {companyCandidate ? (
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => handleUseWatchlist(companyCandidate)}
-                >
-                  Use company
-                </button>
-              ) : null}
-              {personCandidate ? (
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => handleUseWatchlist(personCandidate)}
-                >
-                  Use person
-                </button>
-              ) : null}
-            </div>
+            <>
+              <div className="card-divider">
+                <h4>Suggested from watchlist</h4>
+              </div>
+              <div className="module-footer">
+                <span>
+                  <strong>Company</strong>{' '}
+                  {companyCandidate?.name ? companyCandidate.name : '—'}
+                </span>
+                <span>
+                  <strong>Person</strong> {personCandidate?.name ? personCandidate.name : '—'}
+                </span>
+                {companyCandidate ? (
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleUseWatchlist(companyCandidate)}
+                  >
+                    Use company
+                  </button>
+                ) : null}
+                {personCandidate ? (
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleUseWatchlist(personCandidate)}
+                  >
+                    Use person
+                  </button>
+                ) : null}
+              </div>
+            </>
           )}
           <div className="filter-row">
             <input
               className="input"
-              placeholder="Person / organization"
+              placeholder="Enter person or organization"
               value={subjectName}
               onChange={(event) => setSubjectName(event.target.value)}
             />
@@ -715,22 +742,18 @@ export function DueDiligencePage({
             <button
               className="button"
               type="button"
-              onClick={() => setActiveSubject(subjectName, subjectType, 'Analysis')}
+              onClick={runInternalChecks}
             >
-              Set active subject
-            </button>
-            <button className="button-secondary" type="button" onClick={runInternalChecks}>
-              Run internal checks
+              Check internal records
             </button>
           </div>
+          <p className="muted">Internal checks look at Network + watchlist for matches.</p>
 
           <div className="metric-row">
-            <span>Network matches</span>
-            <strong>{crmMatches.length}</strong>
-          </div>
-          <div className="metric-row">
-            <span>Competitor matches</span>
-            <strong>{competitorMatches.length}</strong>
+            <span>Active subject</span>
+            <strong>
+              {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
+            </strong>
           </div>
           <div className="metric-row">
             <span>Subject status</span>
@@ -738,54 +761,70 @@ export function DueDiligencePage({
           </div>
 
           <div className="card-divider">
-            <h4>Network check results</h4>
+            <h4>Internal checks</h4>
           </div>
-          <div className="table">
-            <div className="table-row table-head">
-              <span>Name</span>
-              <span>Email</span>
-              <span>Group</span>
-              <span>Time</span>
-            </div>
-            {crmMatches.length === 0 ? (
-              <div className="table-row empty">No Network matches.</div>
-            ) : (
-              crmMatches.slice(0, 12).map((row) => (
-                <div className="table-row" key={row.email}>
-                  <span>{row.fullName || row.email}</span>
-                  <span>{row.email}</span>
-                  <span>{row.group || '—'}</span>
-                  <span>{row.timeAvailability || 'Unspecified'}</span>
+          <details className="dashboard-detail" open>
+            <summary>Network matches ({crmMatches.length})</summary>
+            <div className="dashboard-detail__body">
+              <div className="table">
+                <div className="table-row table-head">
+                  <span>Name</span>
+                  <span>Email</span>
+                  <span>Group</span>
+                  <span>Time</span>
                 </div>
-              ))
-            )}
-          </div>
+                {!subjectName.trim() ? (
+                  <div className="table-row empty">Enter a subject to see matches.</div>
+                ) : !internalChecksRan ? (
+                  <div className="table-row empty">Run internal checks to see matches.</div>
+                ) : crmMatches.length === 0 ? (
+                  <div className="table-row empty">No Network matches.</div>
+                ) : (
+                  crmMatches.slice(0, 12).map((row) => (
+                    <div className="table-row" key={row.email}>
+                      <span>{row.fullName || row.email}</span>
+                      <span>{row.email}</span>
+                      <span>{row.group || '—'}</span>
+                      <span>{row.timeAvailability || 'Unspecified'}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </details>
+
+          <details className="dashboard-detail" open>
+            <summary>Watchlist matches ({competitorMatches.length})</summary>
+            <div className="dashboard-detail__body">
+              <div className="table">
+                <div className="table-row table-head">
+                  <span>Name</span>
+                  <span>Type</span>
+                  <span>Notes</span>
+                </div>
+                {!subjectName.trim() ? (
+                  <div className="table-row empty">Enter a subject to see matches.</div>
+                ) : !internalChecksRan ? (
+                  <div className="table-row empty">Run internal checks to see matches.</div>
+                ) : competitorMatches.length === 0 ? (
+                  <div className="table-row empty">No watchlist matches.</div>
+                ) : (
+                  competitorMatches.slice(0, 10).map((row) => (
+                    <div className="table-row" key={row.competitorId || row.name}>
+                      <span>{row.name}</span>
+                      <span>{row.competitorType}</span>
+                      <span>{row.notes || '—'}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </details>
 
           <div className="card-divider">
-            <h4>Competitor check results</h4>
+            <h4>External analysis</h4>
           </div>
-          <div className="table">
-            <div className="table-row table-head">
-              <span>Name</span>
-              <span>Type</span>
-              <span>Notes</span>
-            </div>
-            {competitorMatches.length === 0 ? (
-              <div className="table-row empty">No competitors matched.</div>
-            ) : (
-              competitorMatches.slice(0, 10).map((row) => (
-                <div className="table-row" key={row.competitorId || row.name}>
-                  <span>{row.name}</span>
-                  <span>{row.competitorType}</span>
-                  <span>{row.notes || '—'}</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="card-divider">
-            <h4>External sources</h4>
-          </div>
+          <p className="muted">Select sources and run the external check.</p>
           <div className="filter-row">
             <label className="checkbox">
               <input
@@ -811,18 +850,23 @@ export function DueDiligencePage({
               />
               News / Web
             </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={useDemo}
-                onChange={(event) => setUseDemo(event.target.checked)}
-              />
-              Use demo data if sources are unavailable
-            </label>
             <button className="button" type="button" onClick={handleRunAnalysis}>
-              {analysisLoading ? 'Running…' : 'Run analysis'}
+              {analysisLoading ? 'Running…' : 'Run external analysis'}
             </button>
           </div>
+          <details className="dashboard-detail">
+            <summary>Advanced options</summary>
+            <div className="dashboard-detail__body">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={useDemo}
+                  onChange={(event) => setUseDemo(event.target.checked)}
+                />
+                Use demo data if sources are unavailable
+              </label>
+            </div>
+          </details>
           {analysisError ? <div className="module-alert">{analysisError}</div> : null}
           {analysisNotice ? <p className="muted">{analysisNotice}</p> : null}
           {analysisProgress > 0 ? (
@@ -891,137 +935,149 @@ export function DueDiligencePage({
                 </div>
               ) : null}
 
-              <div className="card-divider">
-                <h4>Wikidata</h4>
-              </div>
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Label</span>
-                  <span>Description</span>
-                  <span>Link</span>
-                </div>
-                {(analysisResult.wikidata || []).length === 0 ? (
-                  <div className="table-row empty">No Wikidata matches.</div>
-                ) : (
-                  analysisResult.wikidata.map((row) => (
-                    <div className="table-row" key={row.id || row.label}>
-                      <span>{row.label || '—'}</span>
-                      <span>{row.description || '—'}</span>
-                      <span>
-                        {row.url ? (
-                          <a href={row.url} target="_blank" rel="noreferrer">
-                            View
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </span>
+              <details className="dashboard-detail" open>
+                <summary>
+                  Wikidata results ({(analysisResult.wikidata || []).length})
+                </summary>
+                <div className="dashboard-detail__body">
+                  <div className="table">
+                    <div className="table-row table-head">
+                      <span>Label</span>
+                      <span>Description</span>
+                      <span>Link</span>
                     </div>
-                  ))
-                )}
-              </div>
-
-              <div className="card-divider">
-                <h4>OpenSanctions</h4>
-              </div>
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Name</span>
-                  <span>Schema</span>
-                  <span>Datasets</span>
-                  <span>Score</span>
-                </div>
-                {(analysisResult.opensanctions || []).length === 0 ? (
-                  <div className="table-row empty">No OpenSanctions matches.</div>
-                ) : (
-                  analysisResult.opensanctions.map((row) => (
-                    <div className="table-row" key={row.id || row.name}>
-                      <span>
-                        {row.url ? (
-                          <a href={row.url} target="_blank" rel="noreferrer">
-                            {row.name || '—'}
-                          </a>
-                        ) : (
-                          row.name || '—'
-                        )}
-                      </span>
-                      <span>{row.schema || '—'}</span>
-                      <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
-                      <span>{row.score?.toFixed?.(2) ?? row.score ?? '—'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="card-divider">
-                <h4>News / Web (GDELT)</h4>
-              </div>
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Headline</span>
-                  <span>Source</span>
-                  <span>Tone</span>
-                </div>
-                {(analysisResult.news || []).length === 0 ? (
-                  <div className="table-row empty">No recent news found.</div>
-                ) : (
-                  analysisResult.news.map((row) => (
-                    <div className="table-row" key={row.url || row.title}>
-                      <span>
-                        {row.url ? (
-                          <a href={row.url} target="_blank" rel="noreferrer">
-                            {row.title || '—'}
-                          </a>
-                        ) : (
-                          row.title || '—'
-                        )}
-                      </span>
-                      <span>{row.source || '—'}</span>
-                      <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '—'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ) : null}
-          {subjectName.trim() ? (
-            <div className="card-divider">
-              <h4>Report history</h4>
-            </div>
-          ) : null}
-          {subjectName.trim() ? (
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Created</span>
-                <span>Risk</span>
-                <span>Total hits</span>
-                <span>Sources</span>
-                <span>Download</span>
-              </div>
-              {historyLoading ? (
-                <div className="table-row empty">Loading report history…</div>
-              ) : reportHistory.length === 0 ? (
-                <div className="table-row empty">No prior reports for this subject.</div>
-              ) : (
-                reportHistory.map((row) => (
-                  <div className="table-row" key={row.reportId}>
-                    <span>{row.createdAt || '—'}</span>
-                    <span>{row.riskLevel || '—'}</span>
-                    <span>{row.totalHits ?? 0}</span>
-                    <span>{(row.sources || []).join(', ') || '—'}</span>
-                    <span>
-                      <a
-                        href={`${API_BASE}/due-diligence/reports/${row.reportId}/pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        PDF
-                      </a>
-                    </span>
+                    {(analysisResult.wikidata || []).length === 0 ? (
+                      <div className="table-row empty">No Wikidata matches.</div>
+                    ) : (
+                      analysisResult.wikidata.map((row) => (
+                        <div className="table-row" key={row.id || row.label}>
+                          <span>{row.label || '—'}</span>
+                          <span>{row.description || '—'}</span>
+                          <span>
+                            {row.url ? (
+                              <a href={row.url} target="_blank" rel="noreferrer">
+                                View
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))
-              )}
+                </div>
+              </details>
+
+              <details className="dashboard-detail" open>
+                <summary>
+                  OpenSanctions results ({(analysisResult.opensanctions || []).length})
+                </summary>
+                <div className="dashboard-detail__body">
+                  <div className="table">
+                    <div className="table-row table-head">
+                      <span>Name</span>
+                      <span>Schema</span>
+                      <span>Datasets</span>
+                      <span>Score</span>
+                    </div>
+                    {(analysisResult.opensanctions || []).length === 0 ? (
+                      <div className="table-row empty">No OpenSanctions matches.</div>
+                    ) : (
+                      analysisResult.opensanctions.map((row) => (
+                        <div className="table-row" key={row.id || row.name}>
+                          <span>
+                            {row.url ? (
+                              <a href={row.url} target="_blank" rel="noreferrer">
+                                {row.name || '—'}
+                              </a>
+                            ) : (
+                              row.name || '—'
+                            )}
+                          </span>
+                          <span>{row.schema || '—'}</span>
+                          <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
+                          <span>{row.score?.toFixed?.(2) ?? row.score ?? '—'}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </details>
+
+              <details className="dashboard-detail" open>
+                <summary>
+                  News / Web results ({(analysisResult.news || []).length})
+                </summary>
+                <div className="dashboard-detail__body">
+                  <div className="table">
+                    <div className="table-row table-head">
+                      <span>Headline</span>
+                      <span>Source</span>
+                      <span>Tone</span>
+                    </div>
+                    {(analysisResult.news || []).length === 0 ? (
+                      <div className="table-row empty">No recent news found.</div>
+                    ) : (
+                      analysisResult.news.map((row) => (
+                        <div className="table-row" key={row.url || row.title}>
+                          <span>
+                            {row.url ? (
+                              <a href={row.url} target="_blank" rel="noreferrer">
+                                {row.title || '—'}
+                              </a>
+                            ) : (
+                              row.title || '—'
+                            )}
+                          </span>
+                          <span>{row.source || '—'}</span>
+                          <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '—'}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </details>
             </div>
+          ) : null}
+          {subjectName.trim() ? (
+            <details className="dashboard-detail">
+              <summary>Report history ({reportHistory.length})</summary>
+              <div className="dashboard-detail__body">
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Created</span>
+                    <span>Risk</span>
+                    <span>Total hits</span>
+                    <span>Sources</span>
+                    <span>Download</span>
+                  </div>
+                  {historyLoading ? (
+                    <div className="table-row empty">Loading report history…</div>
+                  ) : reportHistory.length === 0 ? (
+                    <div className="table-row empty">No prior reports for this subject.</div>
+                  ) : (
+                    reportHistory.map((row) => (
+                      <div className="table-row" key={row.reportId}>
+                        <span>{row.createdAt || '—'}</span>
+                        <span>{row.riskLevel || '—'}</span>
+                        <span>{row.totalHits ?? 0}</span>
+                        <span>{(row.sources || []).join(', ') || '—'}</span>
+                        <span>
+                          <a
+                            href={`${API_BASE}/due-diligence/reports/${row.reportId}/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            PDF
+                          </a>
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </details>
           ) : null}
         </div>
       )}
@@ -1315,8 +1371,8 @@ export function DueDiligencePage({
           <div className="module-card module-card__wide section-intro">
             <div className="card-header">
               <div>
-                <h3>Configure sources</h3>
-                <p className="muted">Set the active subject and context for analysis.</p>
+                <h3>Set subject context</h3>
+                <p className="muted">Pick a watchlist subject to prefill analysis.</p>
               </div>
               <div className="pill">Configure</div>
             </div>
@@ -1339,7 +1395,7 @@ export function DueDiligencePage({
           </div>
           <div className="module-card">
             <h3>Competitors</h3>
-            <p className="muted">Pick a watchlist item as the active subject.</p>
+            <p className="muted">Pick a watchlist subject to use for analysis.</p>
             <select
               className="select"
               value={subjectName}
@@ -1363,7 +1419,7 @@ export function DueDiligencePage({
               type="button"
               onClick={() => setActiveSubject(subjectName, subjectType, 'Configure')}
             >
-              Set active subject
+              Use for analysis
             </button>
           </div>
           </div>
@@ -1374,8 +1430,8 @@ export function DueDiligencePage({
         <div className="module-card module-card__wide section-intro">
           <div className="card-header">
             <div>
-              <h3>Competitor watchlist</h3>
-              <p className="muted">Add and manage watchlist entities.</p>
+              <h3>Watchlist</h3>
+              <p className="muted">Add people or companies you monitor regularly.</p>
             </div>
             <div className="pill">Due Diligence</div>
           </div>

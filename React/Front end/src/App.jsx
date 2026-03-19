@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AdminPage,
   AudienceDiscoveryPage,
@@ -14,11 +14,90 @@ import {
   Field,
   FormSection,
   InfoHint,
+  LanguageSelect,
   MobileNavDrawer,
   PageHeader,
   StatusMessage,
 } from './ui'
 import './App.css'
+
+const parseLocalArray = (value) => {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (err) {
+    return []
+  }
+}
+
+const shuffleArray = (items) => {
+  const copy = [...items]
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
+const buildCommentDeck = (rawComments, votedIds = []) => {
+  const votedSet = new Set(votedIds.map((id) => String(id)))
+  const seenIds = new Set()
+  const normalized = rawComments
+    .map((comment, index) => {
+      const id =
+        comment?.id ||
+        comment?.comment_id ||
+        comment?.commentId ||
+        `comment-${index}`
+      const text = String(
+        comment?.text || comment?.comment_text || comment?.commentText || '',
+      )
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (!text) return null
+      const agree = Number(comment?.agree_count || comment?.agreeCount || 0)
+      const disagree = Number(comment?.disagree_count || comment?.disagreeCount || 0)
+      const pass = Number(comment?.pass_count || comment?.passCount || 0)
+      const voteCount = agree + disagree + pass
+      const createdAt =
+        Date.parse(comment?.created_at || comment?.createdAt || '') || 0
+      return {
+        id: String(id),
+        text,
+        voteCount,
+        createdAt,
+      }
+    })
+    .filter(Boolean)
+    .filter((comment) => {
+      if (votedSet.has(comment.id)) return false
+      if (seenIds.has(comment.id)) return false
+      seenIds.add(comment.id)
+      return true
+    })
+
+  if (!normalized.length) return []
+
+  const byVoteCount = normalized.reduce((acc, comment) => {
+    const key = comment.voteCount
+    if (!acc[key]) acc[key] = []
+    acc[key].push(comment)
+    return acc
+  }, {})
+
+  const orderedCounts = Object.keys(byVoteCount)
+    .map((value) => Number(value))
+    .sort((a, b) => a - b)
+
+  const deck = []
+  orderedCounts.forEach((count) => {
+    const bucket = byVoteCount[count] || []
+    deck.push(...shuffleArray(bucket))
+  })
+
+  return deck
+}
 
 function App() {
   const params = new URLSearchParams(window.location.search)
@@ -153,27 +232,26 @@ function App() {
     },
     deliberation: {
       title: 'Survey & Consensus',
-      description: 'Collect comments, votes, and consensus insights.',
+      description: 'Launch surveys, collect votes, and surface consensus.',
       flowTitle: 'Listen to your supporters',
-      flowSummary: 'Run public surveys, collect comments, and review insights.',
+      flowSummary: 'Set up a conversation, share the link, and review insights.',
       defaultTab: 'overview',
       primaryActions: [
-        { label: 'Setup', type: 'tab', value: 'setup', hint: 'Create a conversation.' },
-        { label: 'Distribute', type: 'tab', value: 'distribute', hint: 'Share links.' },
+        { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create a conversation.' },
+        { label: 'Share', type: 'tab', value: 'distribute', hint: 'Share the link.' },
         { label: 'Insights', type: 'tab', value: 'insights', hint: 'Review results.' },
       ],
       sections: [
         {
-          label: 'Listen to your supporters',
+          label: 'Overview',
           type: 'tab',
           value: 'overview',
-          hint: 'High-level view.',
+          hint: 'Quick start and active conversation.',
         },
-        { label: 'Setup', type: 'tab', value: 'setup', hint: 'Create a conversation.' },
-        { label: 'Collect', type: 'tab', value: 'distribute', hint: 'Distribute links.' },
-        { label: 'Moderate', type: 'tab', value: 'moderation', hint: 'Review comments.' },
+        { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create and configure.' },
+        { label: 'Share', type: 'tab', value: 'distribute', hint: 'Send the link out.' },
         { label: 'Insights', type: 'tab', value: 'insights', hint: 'Consensus analytics.' },
-        { label: 'Data', type: 'tab', value: 'data', hint: 'Import/export.' },
+        { label: 'Moderate', type: 'tab', value: 'moderation', hint: 'Review comments.' },
       ],
     },
     'due-diligence': {
@@ -370,15 +448,39 @@ function App() {
   const pageEyebrow = activeSection ? activeModule?.label : null
 
   if (isPublicEvent) {
-    return <PublicEventRegistration eventId={eventId} t={t} />
+    return (
+      <PublicEventRegistration
+        eventId={eventId}
+        t={t}
+        language={language}
+        languages={LANGUAGES}
+        onLanguageChange={setLanguage}
+      />
+    )
   }
 
   if (isPublicCampaign) {
-    return <PublicCampaignPage campaignId={publicCampaignId} t={t} />
+    return (
+      <PublicCampaignPage
+        campaignId={publicCampaignId}
+        t={t}
+        language={language}
+        languages={LANGUAGES}
+        onLanguageChange={setLanguage}
+      />
+    )
   }
 
   if (isQuestionnaire) {
-    return <DeliberationQuestionnaire conversationId={conversationId} t={t} />
+    return (
+      <DeliberationQuestionnaire
+        conversationId={conversationId}
+        t={t}
+        language={language}
+        languages={LANGUAGES}
+        onLanguageChange={setLanguage}
+      />
+    )
   }
 
   return (
@@ -403,6 +505,14 @@ function App() {
           </div>
         )}
         <div className="topbar__actions">
+          <LanguageSelect
+            className="language-select--topbar"
+            language={language}
+            onLanguageChange={(value) => setLanguage(value)}
+            languages={LANGUAGES}
+            label={t('language.label')}
+            hideLabel
+          />
           {activeModule ? (
             <button className="pill pill--button" type="button" onClick={() => setActiveModuleId(null)}>
               Back to Modules
@@ -591,7 +701,7 @@ function App() {
   )
 }
 
-function PublicEventRegistration({ eventId, t }) {
+function PublicEventRegistration({ eventId, t, language, languages, onLanguageChange }) {
   const translate = t || ((key) => key)
   const [event, setEvent] = useState(null)
   const [error, setError] = useState('')
@@ -657,6 +767,14 @@ function PublicEventRegistration({ eventId, t }) {
 
   return (
     <section className="module">
+      <div className="page-language">
+        <LanguageSelect
+          language={language}
+          languages={languages}
+          onLanguageChange={onLanguageChange}
+          label={translate('language.label')}
+        />
+      </div>
       <header className="module-header">
         <h2>{event?.name || translate('event.registrationTitle')}</h2>
         {event?.startDate ? <p>{event.startDate}</p> : null}
@@ -753,7 +871,13 @@ function PublicEventRegistration({ eventId, t }) {
   )
 }
 
-function DeliberationQuestionnaire({ conversationId, t }) {
+function DeliberationQuestionnaire({
+  conversationId,
+  t,
+  language,
+  languages,
+  onLanguageChange,
+}) {
   const translate = t || ((key, vars) => key)
   const [error, setError] = useState('')
   const [comments, setComments] = useState([])
@@ -764,6 +888,7 @@ function DeliberationQuestionnaire({ conversationId, t }) {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [conversation, setConversation] = useState(null)
+  const [votedIds, setVotedIds] = useState([])
   const dragStartRef = useRef(null)
 
   const params = new URLSearchParams(window.location.search)
@@ -773,12 +898,18 @@ function DeliberationQuestionnaire({ conversationId, t }) {
     localStorage.getItem(participantStorageKey) || `${Date.now()}_${Math.random()}`,
   )
   const participantId = participantRef.current
+  const voteStorageKey = useMemo(
+    () => `delib_votes_${conversationId || 'default'}_${participantId}`,
+    [conversationId, participantId],
+  )
 
   useEffect(() => {
     if (!conversationId) return
     setLoading(true)
     setError('')
     localStorage.setItem(participantStorageKey, participantId)
+    const storedVotes = parseLocalArray(localStorage.getItem(voteStorageKey))
+    setVotedIds(storedVotes)
     Promise.all([
       getJson(`/conversations/${conversationId}`),
       getJson(`/conversations/${conversationId}/comments?status=approved`),
@@ -786,34 +917,40 @@ function DeliberationQuestionnaire({ conversationId, t }) {
       .then(([convoPayload, commentsPayload]) => {
         setConversation(convoPayload)
         const approved = Array.isArray(commentsPayload) ? commentsPayload : []
-        setComments(approved.slice(0, 5))
+        setComments(buildCommentDeck(approved, storedVotes))
         setCurrentIndex(0)
+        setDragOffset({ x: 0, y: 0 })
+        setIsDragging(false)
       })
       .catch((err) =>
         setError(err.message || 'Unable to load conversation comments.'),
       )
       .finally(() => setLoading(false))
-  }, [conversationId])
+  }, [conversationId, participantId, participantStorageKey, voteStorageKey])
+
+  useEffect(() => {
+    if (!conversationId) return
+    localStorage.setItem(voteStorageKey, JSON.stringify(votedIds))
+  }, [conversationId, voteStorageKey, votedIds])
 
   const currentComment = comments[currentIndex]
-  const currentCommentId =
-    currentComment?.id || currentComment?.comment_id || currentComment?.commentId
-  const currentText =
-    currentComment?.text || currentComment?.comment_text || currentComment?.commentText || ''
+  const currentCommentId = currentComment?.id
+  const currentText = currentComment?.text || ''
   const totalComments = comments.length
   const progress = totalComments
     ? Math.min(100, Math.round((Math.min(currentIndex, totalComments) / totalComments) * 100))
     : 0
+  const swipeHintThreshold = 40
   const swipeIntent =
-    dragOffset.x > 50
+    dragOffset.x > swipeHintThreshold
       ? 'agree'
-      : dragOffset.x < -50
+      : dragOffset.x < -swipeHintThreshold
         ? 'disagree'
-        : dragOffset.y > 50
+        : dragOffset.y > swipeHintThreshold
           ? 'pass'
           : ''
 
-  const handleVote = async (commentId, choice) => {
+  const handleVote = useCallback(async (commentId, choice) => {
     if (!commentId || pendingVote) return
     setPendingVote(true)
     setError('')
@@ -823,13 +960,17 @@ function DeliberationQuestionnaire({ conversationId, t }) {
         payload: { conversation_id: conversationId, comment_id: commentId, choice },
         headers: { 'X-Participant-Id': participantId },
       })
+      setVotedIds((prev) => {
+        if (prev.includes(commentId)) return prev
+        return [...prev, commentId]
+      })
       setCurrentIndex((prev) => Math.min(prev + 1, comments.length))
     } catch (err) {
       setError(err.message || translate('questionnaire.voteFailed'))
     } finally {
       setPendingVote(false)
     }
-  }
+  }, [comments.length, conversationId, participantId, pendingVote, translate])
 
   const handleSubmit = async () => {
     if (!commentText.trim()) {
@@ -857,6 +998,30 @@ function DeliberationQuestionnaire({ conversationId, t }) {
     setIsDragging(false)
     dragStartRef.current = null
   }
+
+  useEffect(() => {
+    resetDrag()
+  }, [currentCommentId])
+
+  useEffect(() => {
+    if (!currentCommentId) return
+    const handleKeyDown = (event) => {
+      if (pendingVote) return
+      const key = event.key
+      if (key === 'ArrowRight' || key === 'd' || key === 'D') {
+        event.preventDefault()
+        handleVote(currentCommentId, 1)
+      } else if (key === 'ArrowLeft' || key === 'a' || key === 'A') {
+        event.preventDefault()
+        handleVote(currentCommentId, -1)
+      } else if (key === 'ArrowDown' || key === 's' || key === 'S') {
+        event.preventDefault()
+        handleVote(currentCommentId, 0)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentCommentId, handleVote, pendingVote])
 
   const handlePointerDown = (event) => {
     if (pendingVote || !currentCommentId) return
@@ -888,7 +1053,7 @@ function DeliberationQuestionnaire({ conversationId, t }) {
       event && typeof event.clientY === 'number' ? event.clientY : start.y + dragOffset.y
     const x = endX - start.x
     const y = endY - start.y
-    const threshold = 90
+    const threshold = 70
     const choice =
       x > threshold ? 1 : x < -threshold ? -1 : y > threshold ? 0 : null
     resetDrag()
@@ -899,10 +1064,18 @@ function DeliberationQuestionnaire({ conversationId, t }) {
 
   return (
     <section className="delib-questionnaire">
-            <header className="delib-questionnaire__header">
-              <span className="pill">{translate('module.deliberation')}</span>
-              <h2>{translate('questionnaire.title')}</h2>
-              <p>{translate('questionnaire.subtitle')}</p>
+      <div className="page-language page-language--questionnaire">
+        <LanguageSelect
+          language={language}
+          languages={languages}
+          onLanguageChange={onLanguageChange}
+          label={translate('language.label')}
+        />
+      </div>
+      <header className="delib-questionnaire__header">
+        <span className="pill">{translate('module.deliberation')}</span>
+        <h2>{translate('questionnaire.title')}</h2>
+        <p>{translate('questionnaire.subtitle')}</p>
       </header>
       {error ? <div className="module-alert">{error}</div> : null}
       <div className="questionnaire-progress">
