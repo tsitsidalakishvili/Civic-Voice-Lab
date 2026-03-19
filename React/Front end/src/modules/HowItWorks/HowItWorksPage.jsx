@@ -301,7 +301,7 @@ export function HowItWorksPage({ t }) {
     {
       id: 'survey',
       title: translate('module.deliberation'),
-      pill: 'Listen',
+      pill: 'Listen to your supporters',
       desc: translate('module.deliberation.desc'),
       detailIntro:
         'Survey and Consensus is a deliberation process: run surveys in supporters and members, engage them, collect comments, gather votes, and review analytics.',

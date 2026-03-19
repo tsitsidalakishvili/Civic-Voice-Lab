@@ -4,7 +4,7 @@ import {
   requestForm,
   requestJson,
 } from '../../services/api'
-import { Bar, Pie } from 'react-chartjs-2'
+import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
   ArcElement,
@@ -12,6 +12,7 @@ import {
   CategoryScale,
   Legend,
   LinearScale,
+  RadialLinearScale,
   Tooltip,
 } from 'chart.js'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
@@ -21,7 +22,15 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
+ChartJS.register(
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  RadialLinearScale,
+  Tooltip,
+  Legend,
+)
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -80,34 +89,57 @@ const renderTemplate = (template, context) => {
   return template.replace(/\{(\w+)\}/g, (_, key) => context?.[key] ?? '')
 }
 
-export function CRMPage({ t, initialTab, hideTabs = false }) {
+export function CRMPage({
+  t,
+  initialTab,
+  hideTabs = false,
+  activeTabOverride,
+  onTabChange,
+  showTabs = true,
+}) {
   const translate = t || ((key, vars) => key)
   const [summary, setSummary] = useState(null)
-  const [recentPeople, setRecentPeople] = useState([])
   const [people, setPeople] = useState([])
   const [error, setError] = useState('')
   const [peopleError, setPeopleError] = useState('')
   const [peopleLoading, setPeopleLoading] = useState(false)
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleGroup, setPeopleGroup] = useState('All')
-  const [peopleSort, setPeopleSort] = useState('Name')
-  const [activeTab, setActiveTab] = useState(initialTab || 'map')
+  const [peopleTableSort, setPeopleTableSort] = useState({
+    key: 'name',
+    direction: 'asc',
+  })
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview')
   const [selectedEmail, setSelectedEmail] = useState('')
+
+  const normalizeTab = (tabId) => {
+    if (!tabId) return ''
+    if (tabId === 'events') return 'outreach'
+    return tabId
+  }
+
+  const applyActiveTab = (nextTab) => {
+    const normalized = normalizeTab(nextTab)
+    if (!normalized) return
+    setActiveTab(normalized)
+    if (onTabChange) onTabChange(normalized)
+  }
 
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab)
+      applyActiveTab(initialTab)
     }
   }, [initialTab])
 
-  const headerTitle =
-    hideTabs && initialTab === 'campaigns'
-      ? translate('module.campaigns')
-      : translate('network.header.title')
-  const headerSubtitle =
-    hideTabs && initialTab === 'campaigns'
-      ? translate('module.campaigns.desc')
-      : translate('network.header.subtitle')
+  useEffect(() => {
+    if (activeTabOverride) {
+      const normalized = normalizeTab(activeTabOverride)
+      if (normalized && normalized !== activeTab) {
+        setActiveTab(normalized)
+      }
+    }
+  }, [activeTabOverride, activeTab])
+
   const [profile, setProfile] = useState(null)
   const [profileDraft, setProfileDraft] = useState(null)
   const [profileError, setProfileError] = useState('')
@@ -194,11 +226,10 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
 
   useEffect(() => {
     let mounted = true
-    Promise.all([getJson('/crm/summary'), getJson('/crm/people?limit=5')])
-      .then(([summaryPayload, peoplePayload]) => {
+    getJson('/crm/summary')
+      .then((summaryPayload) => {
         if (!mounted) return
         setSummary(summaryPayload)
-        setRecentPeople(Array.isArray(peoplePayload) ? peoplePayload : [])
       })
       .catch((err) => {
         if (!mounted) return
@@ -217,18 +248,9 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
     if (peopleQuery.trim()) {
       params.set('q', peopleQuery.trim())
     }
-    const sortMap = {
-      Name: 'fullName',
-      'Effort score': 'effortScore',
-      'Events attended': 'eventAttendCount',
-      Referrals: 'referralCount',
-    }
-    if (sortMap[peopleSort]) {
-      params.set('sort', sortMap[peopleSort])
-    }
     params.set('limit', '200')
     return params.toString()
-  }, [peopleGroup, peopleQuery, peopleSort])
+  }, [peopleGroup, peopleQuery])
 
   const furrySearchParams = useMemo(() => {
     const params = new URLSearchParams()
@@ -300,7 +322,87 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
     if (activeTab !== 'people') return
     loadPeople()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, peopleGroup, peopleSort])
+  }, [activeTab, peopleGroup])
+  const parseNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric
+    const match = String(value).match(/[\d.]+/)
+    return match ? Number(match[0]) : null
+  }
+
+  const getPeopleSortValue = (person, key) => {
+    switch (key) {
+      case 'name':
+        return person.fullName || person.email || ''
+      case 'email':
+        return person.email || ''
+      case 'group':
+        return person.group || ''
+      case 'effort':
+        return parseNumber(person.effortScore ?? person.effortHours) ?? null
+      case 'events':
+        return parseNumber(person.eventAttendCount) ?? null
+      case 'referrals':
+        return parseNumber(person.referralCount) ?? null
+      case 'rating': {
+        const ratingValue = parseNumber(person.rating ?? person.ratingStars)
+        return ratingValue ?? null
+      }
+      default:
+        return ''
+    }
+  }
+
+  const sortedPeople = useMemo(() => {
+    if (!peopleTableSort?.key) return people
+    const { key, direction } = peopleTableSort
+    const dir = direction === 'desc' ? -1 : 1
+    const copy = [...people]
+    copy.sort((a, b) => {
+      const aValue = getPeopleSortValue(a, key)
+      const bValue = getPeopleSortValue(b, key)
+      const aMissing = aValue === null || aValue === undefined || aValue === ''
+      const bMissing = bValue === null || bValue === undefined || bValue === ''
+      if (aMissing && bMissing) return 0
+      if (aMissing) return 1
+      if (bMissing) return -1
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * dir
+      }
+      return (
+        String(aValue).localeCompare(String(bValue), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }) * dir
+      )
+    })
+    return copy
+  }, [people, peopleTableSort])
+
+  const handlePeopleSortChange = (key) => {
+    setPeopleTableSort((prev) => {
+      if (!prev || prev.key !== key) {
+        return { key, direction: 'asc' }
+      }
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  const renderPeopleSortButton = (label, key) => {
+    const isActive = peopleTableSort?.key === key
+    const dirLabel = isActive ? (peopleTableSort.direction === 'asc' ? 'asc' : 'desc') : ''
+    return (
+      <button
+        type="button"
+        className={`table-sort ${isActive ? 'is-active' : ''}`}
+        onClick={() => handlePeopleSortChange(key)}
+      >
+        <span>{label}</span>
+        {dirLabel ? <span className="table-sort__dir">{dirLabel}</span> : null}
+      </button>
+    )
+  }
 
   const handlePeopleSearch = (event) => {
     event.preventDefault()
@@ -950,33 +1052,23 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
 
   return (
     <section className="module">
-      <header className="module-header">
-        <div className="module-header__text">
-          <h2>{headerTitle}</h2>
-          <p>{headerSubtitle}</p>
-        </div>
-      </header>
-
       {error ? <div className="module-alert">{error}</div> : null}
 
-      {!hideTabs ? (
+      {!hideTabs && showTabs ? (
         <div className="subtabs">
           {[
-            { id: 'dashboard', label: translate('network.tabs.dashboard') },
+            { id: 'overview', label: translate('network.tabs.overview') },
             { id: 'people', label: translate('network.tabs.people') },
             { id: 'furry-friends', label: translate('network.tabs.furryFriends') },
-            { id: 'volunteers', label: translate('network.tabs.volunteers') },
             { id: 'tasks', label: translate('network.tabs.tasks') },
             { id: 'outreach', label: translate('network.tabs.outreach') },
-            { id: 'events', label: translate('network.tabs.events') },
-            { id: 'map', label: translate('network.tabs.map') },
             { id: 'data-entry', label: translate('network.tabs.dataEntry') },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-              onClick={() => setActiveTab(tab.id)}
+            onClick={() => applyActiveTab(tab.id)}
             >
               {tab.label}
             </button>
@@ -985,15 +1077,14 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
       ) : null}
 
       {activeTab === 'data-entry' && <CRMDataEntryTab />}
-      {activeTab === 'dashboard' && (
-        <CRMDashboardTab summary={summary} recentPeople={recentPeople} />
-      )}
-      {activeTab === 'volunteers' && <CRMVolunteersTab />}
+      {activeTab === 'overview' && <CRMOverviewTab />}
       {activeTab === 'campaigns' && <CRMCampaignsTab />}
 
       {activeTab === 'people' && (
-        <div className="module-layout">
-          <aside className="module-sidebar">
+        <div className="stack">
+          <div className="section-block">
+            <div className="module-layout">
+              <aside className="module-sidebar">
             <div className="sidebar-card sidebar-card--accent">
               <h3>Search filters</h3>
               <form className="stack" onSubmit={handlePeopleSearch}>
@@ -1015,17 +1106,6 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
                   <option value="Supporter">Supporters</option>
                   <option value="Member">Members</option>
                 </select>
-                <label className="label">Sort</label>
-                <select
-                  className="select"
-                  value={peopleSort}
-                  onChange={(event) => setPeopleSort(event.target.value)}
-                >
-                  <option value="Name">Sort: Name</option>
-                  <option value="Effort score">Sort: Effort score</option>
-                  <option value="Events attended">Sort: Events attended</option>
-                  <option value="Referrals">Sort: Referrals</option>
-                </select>
                 <button className="button" type="submit">
                   {peopleLoading ? 'Loading…' : 'Search'}
                 </button>
@@ -1042,117 +1122,117 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
                 <strong>{summary?.total_people ?? '—'}</strong>
               </div>
             </div>
-          </aside>
-          <div className="module-main">
-            {peopleError ? <div className="module-alert">{peopleError}</div> : null}
-            <div className="module-card module-card__wide panel panel--highlight">
-              <div className="card-header">
-                <div>
-                  <h3>People directory</h3>
-                  <p className="muted">
-                    Search supporters and members from the Network.
-                  </p>
+              </aside>
+              <div className="module-main">
+                {peopleError ? <div className="module-alert">{peopleError}</div> : null}
+              <div className="module-card module-card__wide panel panel--highlight">
+                <div className="card-header">
+                  <div>
+                    <h3>People directory</h3>
+                    <p className="muted">
+                      Search supporters and members from the Network.
+                    </p>
+                  </div>
+                  <div className="pill">Network</div>
                 </div>
-                <div className="pill">Network</div>
-              </div>
-              <div className="table">
+                <div className="table">
                 <div className="table-row table-row--people table-head">
-                  <span>Name</span>
-                  <span>Email</span>
-                  <span>Group</span>
-                  <span>Effort</span>
-                  <span>Events</span>
-                  <span>Referrals</span>
-                  <span>Rating</span>
+                  {renderPeopleSortButton('Name', 'name')}
+                  {renderPeopleSortButton('Email', 'email')}
+                  {renderPeopleSortButton('Group', 'group')}
+                  {renderPeopleSortButton('Effort', 'effort')}
+                  {renderPeopleSortButton('Events', 'events')}
+                  {renderPeopleSortButton('Referrals', 'referrals')}
+                  {renderPeopleSortButton('Rating', 'rating')}
                 </div>
-                {people.length === 0 && !peopleLoading && (
-                  <div className="table-row empty">No people found.</div>
-                )}
-                {people.map((person) => (
-                  <button
-                    className="table-row table-row--people table-row__button"
-                    key={person.email}
-                    type="button"
-                    onClick={() => setSelectedEmail(person.email)}
-                  >
-                    <span>{person.fullName || person.email}</span>
-                    <span>{person.email}</span>
-                    <span>{person.group}</span>
-                    <span>{person.effortScore ?? '—'}</span>
-                    <span>{person.eventAttendCount ?? '—'}</span>
-                    <span>{person.referralCount ?? '—'}</span>
-                    <span>{person.ratingStars || '—'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="module-card module-card__wide panel">
-              <div className="card-header">
-                <div>
-                  <h3>Profile details</h3>
-                  <p className="muted">
-                    Select a person above to view and edit their profile.
-                  </p>
-                </div>
-                {selectedEmail ? <div className="pill">{selectedEmail}</div> : null}
-              </div>
-
-              {profileError ? <div className="module-alert">{profileError}</div> : null}
-
-              {!selectedEmail && <p className="muted">No person selected.</p>}
-
-              {selectedEmail && profileDraft && (
-                <div className="profile-grid">
-                  <div>
-                    <label className="label">First name</label>
-                    <input
-                      className="input"
-                      value={profileDraft.firstName || ''}
-                      onChange={(event) => updateProfileField('firstName', event.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Last name</label>
-                    <input
-                      className="input"
-                      value={profileDraft.lastName || ''}
-                      onChange={(event) => updateProfileField('lastName', event.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Phone</label>
-                    <input
-                      className="input"
-                      value={profileDraft.phone || ''}
-                      onChange={(event) => updateProfileField('phone', event.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Gender</label>
-                    <select
-                      className="select"
-                      value={profileDraft.gender || ''}
-                      onChange={(event) => updateProfileField('gender', event.target.value)}
+                {sortedPeople.length === 0 && !peopleLoading && (
+                    <div className="table-row empty">No people found.</div>
+                  )}
+                {sortedPeople.map((person) => (
+                    <button
+                      className="table-row table-row--people table-row__button"
+                      key={person.email}
+                      type="button"
+                      onClick={() => setSelectedEmail(person.email)}
                     >
-                      <option value="">Unspecified</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+                      <span>{person.fullName || person.email}</span>
+                      <span>{person.email}</span>
+                      <span>{person.group}</span>
+                      <span>{person.effortScore ?? '—'}</span>
+                      <span>{person.eventAttendCount ?? '—'}</span>
+                      <span>{person.referralCount ?? '—'}</span>
+                      <span>{person.ratingStars || '—'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="module-card module-card__wide panel">
+                <div className="card-header">
                   <div>
-                    <label className="label">Age</label>
-                    <input
-                      className="input"
-                      type="number"
-                      value={profileDraft.age || ''}
-                      onChange={(event) => updateProfileField('age', event.target.value)}
-                    />
+                    <h3>Profile details</h3>
+                    <p className="muted">
+                      Select a person above to view and edit their profile.
+                    </p>
                   </div>
-                  <div>
-                    <label className="label">Time availability</label>
-                    <select
+                  {selectedEmail ? <div className="pill">{selectedEmail}</div> : null}
+                </div>
+
+                {profileError ? <div className="module-alert">{profileError}</div> : null}
+
+                {!selectedEmail && <p className="muted">No person selected.</p>}
+
+                {selectedEmail && profileDraft && (
+                  <div className="profile-grid">
+                    <div>
+                      <label className="label">First name</label>
+                      <input
+                        className="input"
+                        value={profileDraft.firstName || ''}
+                        onChange={(event) => updateProfileField('firstName', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Last name</label>
+                      <input
+                        className="input"
+                        value={profileDraft.lastName || ''}
+                        onChange={(event) => updateProfileField('lastName', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Phone</label>
+                      <input
+                        className="input"
+                        value={profileDraft.phone || ''}
+                        onChange={(event) => updateProfileField('phone', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Gender</label>
+                      <select
+                        className="select"
+                        value={profileDraft.gender || ''}
+                        onChange={(event) => updateProfileField('gender', event.target.value)}
+                      >
+                        <option value="">Unspecified</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Age</label>
+                      <input
+                        className="input"
+                        type="number"
+                        value={profileDraft.age || ''}
+                        onChange={(event) => updateProfileField('age', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Time availability</label>
+                      <select
                       className="select"
                       value={profileDraft.timeAvailability || 'Unspecified'}
                       onChange={(event) =>
@@ -1218,9 +1298,14 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
+        <div className="section-block">
+          <CRMVolunteersTab />
+        </div>
+      </div>
       )}
       {activeTab === 'furry-friends' && (
         <div className="module-layout">
@@ -1782,536 +1867,578 @@ export function CRMPage({ t, initialTab, hideTabs = false }) {
         </div>
       )}
       {activeTab === 'outreach' && (
-        <div className="outreach-grid">
-          <div className="module-card">
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
             <div className="card-header">
               <div>
-                <h3>Segments</h3>
-                <p className="muted">Save filters and build outreach lists.</p>
+                <h3>Outreach & Events</h3>
+                <p className="muted">
+                  Build segments, preview lists, and coordinate outreach or events in one flow.
+                </p>
               </div>
               <div className="pill">Network</div>
             </div>
+          </div>
 
-            {segmentsError ? <div className="module-alert">{segmentsError}</div> : null}
-
-            <form className="stack" onSubmit={handleCreateSegment}>
-              <label className="label">Segment name</label>
-              <input
-                className="input"
-                value={segmentName}
-                onChange={(event) => setSegmentName(event.target.value)}
-                placeholder="Active members in Ward 13"
-              />
-              <label className="label">Description</label>
-              <input
-                className="input"
-                value={segmentDescription}
-                onChange={(event) => setSegmentDescription(event.target.value)}
-                placeholder="High commitment supporters for ward outreach"
-              />
-              <div className="filter-row">
-                <select
-                  className="select"
-                  value={segmentGroup}
-                  onChange={(event) => setSegmentGroup(event.target.value)}
-                >
-                  <option value="All">All groups</option>
-                  <option value="Supporter">Supporters</option>
-                  <option value="Member">Members</option>
-                </select>
-                <select
-                  className="select"
-                  value={segmentTimeAvailability}
-                  onChange={(event) => setSegmentTimeAvailability(event.target.value)}
-                >
-                  <option value="All">Any availability</option>
-                  <option value="Weekends">Weekends</option>
-                  <option value="Evenings">Evenings</option>
-                  <option value="Full-time">Full-time</option>
-                  <option value="Ad-hoc">Ad-hoc</option>
-                </select>
-                <input
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={segmentMinEffort}
-                  onChange={(event) => setSegmentMinEffort(event.target.value)}
-                  placeholder="Min effort hours"
-                />
-              </div>
-              <div className="filter-row">
-                <input
-                  className="input"
-                  value={segmentNameContains}
-                  onChange={(event) => setSegmentNameContains(event.target.value)}
-                  placeholder="Name contains"
-                />
-                <input
-                  className="input"
-                  value={segmentAddressContains}
-                  onChange={(event) => setSegmentAddressContains(event.target.value)}
-                  placeholder="Address contains"
-                />
-              </div>
-            <div className="filter-row">
-              <select
-                className="select"
-                multiple
-                value={segmentTags}
-                onChange={(event) =>
-                  setSegmentTags(
-                    Array.from(event.target.selectedOptions, (opt) => opt.value),
-                  )
-                }
-              >
-                {segmentTagOptions.map((tag) => (
-                  <option key={tag} value={tag}>
-                    {tag}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select"
-                multiple
-                value={segmentSkills}
-                onChange={(event) =>
-                  setSegmentSkills(
-                    Array.from(event.target.selectedOptions, (opt) => opt.value),
-                  )
-                }
-              >
-                {segmentSkillOptions.map((skill) => (
-                  <option key={skill} value={skill}>
-                    {skill}
-                  </option>
-                ))}
-              </select>
-            </div>
-              <button className="button" type="submit">
-                Save segment
-              </button>
-            </form>
-
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Name</span>
-                <span>Description</span>
-                <span>Updated</span>
-                <span />
-              </div>
-              {segments.length === 0 && !segmentsLoading && (
-                <div className="table-row empty">No segments saved.</div>
-              )}
-              {segments.map((segment) => (
-                <div className="table-row" key={segment.segmentId}>
-                  <span>{segment.name}</span>
-                  <span>{segment.description || '—'}</span>
-                  <span>{segment.updatedAt || '—'}</span>
-                  <div className="table-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => {
-                        setSegmentSelectedId(segment.segmentId)
-                        handleRunSegment(segment.segmentId)
-                      }}
-                    >
-                      Run
-                    </button>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleDeleteSegment(segment.segmentId)}
-                    >
-                      Delete
-                    </button>
+          <details className="dashboard-detail" open>
+            <summary>1. Build a segment</summary>
+            <div className="dashboard-detail__body">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Segment basics</h3>
+                    <p className="muted">Save a list you can reuse for outreach.</p>
                   </div>
+                  <div className="pill">Network</div>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="module-card">
-            <div className="card-header">
-              <div>
-                <h3>Segment preview</h3>
-                <p className="muted">Review results before outreach.</p>
-              </div>
-              <div className="pill">Network</div>
-            </div>
+                {segmentsError ? <div className="module-alert">{segmentsError}</div> : null}
 
-            <div className="filter-row">
-              <input
-                className="input"
-                type="number"
-                min="10"
-                max="2000"
-                value={segmentLimit}
-                onChange={(event) => setSegmentLimit(event.target.value)}
-                placeholder="Limit"
-              />
-              <button
-                className="button"
-                type="button"
-                onClick={() => handleRunSegment(segmentSelectedId || null)}
-              >
-                {segmentRunLoading ? 'Running…' : 'Run filter'}
-              </button>
-            </div>
+                <form className="stack" onSubmit={handleCreateSegment}>
+                  <label className="label">Segment name</label>
+                  <input
+                    className="input"
+                    value={segmentName}
+                    onChange={(event) => setSegmentName(event.target.value)}
+                    placeholder="Active members in Ward 13"
+                  />
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    value={segmentDescription}
+                    onChange={(event) => setSegmentDescription(event.target.value)}
+                    placeholder="High commitment supporters for ward outreach"
+                  />
+                  <div className="filter-row">
+                    <select
+                      className="select"
+                      value={segmentGroup}
+                      onChange={(event) => setSegmentGroup(event.target.value)}
+                    >
+                      <option value="All">All groups</option>
+                      <option value="Supporter">Supporters</option>
+                      <option value="Member">Members</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={segmentTimeAvailability}
+                      onChange={(event) => setSegmentTimeAvailability(event.target.value)}
+                    >
+                      <option value="All">Any availability</option>
+                      <option value="Weekends">Weekends</option>
+                      <option value="Evenings">Evenings</option>
+                      <option value="Full-time">Full-time</option>
+                      <option value="Ad-hoc">Ad-hoc</option>
+                    </select>
+                  </div>
 
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Name</span>
-                <span>Email</span>
-                <span>Group</span>
-                <span>Effort</span>
-              </div>
-              {segmentResults.length === 0 && !segmentRunLoading && (
-                <div className="table-row empty">No results yet.</div>
-              )}
-              {segmentResults.map((row) => (
-                <div className="table-row" key={row.email}>
-                  <span>{row.fullName}</span>
-                  <span>{row.email}</span>
-                  <span>{row.group}</span>
-                  <span>{row.effortHours ?? 0}</span>
+                  <details className="dashboard-detail">
+                    <summary>Advanced filters</summary>
+                    <div className="dashboard-detail__body">
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={segmentMinEffort}
+                          onChange={(event) => setSegmentMinEffort(event.target.value)}
+                          placeholder="Min effort hours"
+                        />
+                        <input
+                          className="input"
+                          value={segmentNameContains}
+                          onChange={(event) => setSegmentNameContains(event.target.value)}
+                          placeholder="Name contains"
+                        />
+                        <input
+                          className="input"
+                          value={segmentAddressContains}
+                          onChange={(event) => setSegmentAddressContains(event.target.value)}
+                          placeholder="Address contains"
+                        />
+                      </div>
+                      <div className="filter-row">
+                        <select
+                          className="select"
+                          multiple
+                          value={segmentTags}
+                          onChange={(event) =>
+                            setSegmentTags(
+                              Array.from(event.target.selectedOptions, (opt) => opt.value),
+                            )
+                          }
+                        >
+                          {segmentTagOptions.map((tag) => (
+                            <option key={tag} value={tag}>
+                              {tag}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="select"
+                          multiple
+                          value={segmentSkills}
+                          onChange={(event) =>
+                            setSegmentSkills(
+                              Array.from(event.target.selectedOptions, (opt) => opt.value),
+                            )
+                          }
+                        >
+                          {segmentSkillOptions.map((skill) => (
+                            <option key={skill} value={skill}>
+                              {skill}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </details>
+
+                  <button className="button" type="submit">
+                    Save segment
+                  </button>
+                </form>
+
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Name</span>
+                    <span>Description</span>
+                    <span>Updated</span>
+                    <span />
+                  </div>
+                  {segments.length === 0 && !segmentsLoading && (
+                    <div className="table-row empty">No segments saved.</div>
+                  )}
+                  {segments.map((segment) => (
+                    <div className="table-row" key={segment.segmentId}>
+                      <span>{segment.name}</span>
+                      <span>{segment.description || '—'}</span>
+                      <span>{segment.updatedAt || '—'}</span>
+                      <div className="table-actions">
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => {
+                            setSegmentSelectedId(segment.segmentId)
+                            handleRunSegment(segment.segmentId)
+                          }}
+                        >
+                          Run
+                        </button>
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => handleDeleteSegment(segment.segmentId)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-
-            <div className="card-divider">
-              <h4>Create tasks for segment</h4>
-              <p className="muted">
-                Bulk-create follow-ups for everyone in the preview list.
-              </p>
-            </div>
-
-            {segmentTaskError ? (
-              <div className="module-alert">{segmentTaskError}</div>
-            ) : null}
-
-            <div className="stack">
-              <input
-                className="input"
-                value={segmentTaskTitle}
-                onChange={(event) => setSegmentTaskTitle(event.target.value)}
-                placeholder="Task title"
-              />
-              <input
-                className="input"
-                value={segmentTaskDescription}
-                onChange={(event) => setSegmentTaskDescription(event.target.value)}
-                placeholder="Notes"
-              />
-              <div className="filter-row">
-                <input
-                  className="input"
-                  type="date"
-                  value={segmentTaskDueDate}
-                  onChange={(event) => setSegmentTaskDueDate(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={segmentTaskStatus}
-                  onChange={(event) => setSegmentTaskStatus(event.target.value)}
-                >
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Done">Done</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
               </div>
-              <button
-                className="button"
-                type="button"
-                onClick={handleBulkTasks}
-                disabled={segmentTaskSaving}
-              >
-                {segmentTaskSaving ? 'Creating…' : 'Create tasks'}
-              </button>
             </div>
+          </details>
 
-            <div className="card-divider">
-              <h4>Create event for segment</h4>
-              <p className="muted">Register everyone in this segment for a new event.</p>
+          <details className="dashboard-detail" open>
+            <summary>2. Preview & follow-up</summary>
+            <div className="dashboard-detail__body">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Segment preview</h3>
+                    <p className="muted">Review results before outreach.</p>
+                  </div>
+                  <div className="pill">Network</div>
+                </div>
+
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    type="number"
+                    min="10"
+                    max="2000"
+                    value={segmentLimit}
+                    onChange={(event) => setSegmentLimit(event.target.value)}
+                    placeholder="Limit"
+                  />
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleRunSegment(segmentSelectedId || null)}
+                  >
+                    {segmentRunLoading ? 'Running…' : 'Run filter'}
+                  </button>
+                </div>
+
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Name</span>
+                    <span>Email</span>
+                    <span>Group</span>
+                    <span>Effort</span>
+                  </div>
+                  {segmentResults.length === 0 && !segmentRunLoading && (
+                    <div className="table-row empty">No results yet.</div>
+                  )}
+                  {segmentResults.map((row) => (
+                    <div className="table-row" key={row.email}>
+                      <span>{row.fullName}</span>
+                      <span>{row.email}</span>
+                      <span>{row.group}</span>
+                      <span>{row.effortHours ?? 0}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <details className="dashboard-detail">
+                  <summary>Create tasks for segment</summary>
+                  <div className="dashboard-detail__body">
+                    {segmentTaskError ? (
+                      <div className="module-alert">{segmentTaskError}</div>
+                    ) : null}
+                    <div className="stack">
+                      <input
+                        className="input"
+                        value={segmentTaskTitle}
+                        onChange={(event) => setSegmentTaskTitle(event.target.value)}
+                        placeholder="Task title"
+                      />
+                      <input
+                        className="input"
+                        value={segmentTaskDescription}
+                        onChange={(event) => setSegmentTaskDescription(event.target.value)}
+                        placeholder="Notes"
+                      />
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="date"
+                          value={segmentTaskDueDate}
+                          onChange={(event) => setSegmentTaskDueDate(event.target.value)}
+                        />
+                        <select
+                          className="select"
+                          value={segmentTaskStatus}
+                          onChange={(event) => setSegmentTaskStatus(event.target.value)}
+                        >
+                          <option value="Open">Open</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Done">Done</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={handleBulkTasks}
+                        disabled={segmentTaskSaving}
+                      >
+                        {segmentTaskSaving ? 'Creating…' : 'Create tasks'}
+                      </button>
+                    </div>
+                  </div>
+                </details>
+
+                <details className="dashboard-detail">
+                  <summary>Create event for segment</summary>
+                  <div className="dashboard-detail__body">
+                    {segmentEventStatusMessage ? (
+                      <div className="module-alert">{segmentEventStatusMessage}</div>
+                    ) : null}
+                    <div className="stack">
+                      <input
+                        className="input"
+                        placeholder="Event name"
+                        value={segmentEventName}
+                        onChange={(event) => setSegmentEventName(event.target.value)}
+                      />
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="date"
+                          value={segmentEventStartDate}
+                          onChange={(event) => setSegmentEventStartDate(event.target.value)}
+                        />
+                        <input
+                          className="input"
+                          type="date"
+                          value={segmentEventEndDate}
+                          onChange={(event) => setSegmentEventEndDate(event.target.value)}
+                        />
+                      </div>
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          placeholder="Location"
+                          value={segmentEventLocation}
+                          onChange={(event) => setSegmentEventLocation(event.target.value)}
+                        />
+                        <select
+                          className="select"
+                          value={segmentEventStatus}
+                          onChange={(event) => setSegmentEventStatus(event.target.value)}
+                        >
+                          <option value="Planned">Planned</option>
+                          <option value="Scheduled">Scheduled</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <input
+                          className="input"
+                          type="number"
+                          placeholder="Capacity"
+                          value={segmentEventCapacity}
+                          onChange={(event) => setSegmentEventCapacity(event.target.value)}
+                        />
+                      </div>
+                      <input
+                        className="input"
+                        placeholder="Notes"
+                        value={segmentEventNotes}
+                        onChange={(event) => setSegmentEventNotes(event.target.value)}
+                      />
+                      <button className="button" type="button" onClick={handleCreateSegmentEvent}>
+                        Create event
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </div>
             </div>
+          </details>
 
-            {segmentEventStatusMessage ? (
-              <div className="module-alert">{segmentEventStatusMessage}</div>
-            ) : null}
+          <details className="dashboard-detail">
+            <summary>3. Individual outreach</summary>
+            <div className="dashboard-detail__body">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Individual outreach</h3>
+                    <p className="muted">Pick specific people and create tasks.</p>
+                  </div>
+                  <div className="pill">Network</div>
+                </div>
 
-            <div className="stack">
-              <input
-                className="input"
-                placeholder="Event name"
-                value={segmentEventName}
-                onChange={(event) => setSegmentEventName(event.target.value)}
-              />
-              <div className="filter-row">
-                <input
-                  className="input"
-                  type="date"
-                  value={segmentEventStartDate}
-                  onChange={(event) => setSegmentEventStartDate(event.target.value)}
-                />
-                <input
-                  className="input"
-                  type="date"
-                  value={segmentEventEndDate}
-                  onChange={(event) => setSegmentEventEndDate(event.target.value)}
-                />
+                {individualError ? (
+                  <div className="module-alert">{individualError}</div>
+                ) : null}
+
+                <form className="filter-row" onSubmit={handleIndividualSearch}>
+                  <input
+                    className="input"
+                    placeholder="Search by name or email"
+                    value={individualQuery}
+                    onChange={(event) => setIndividualQuery(event.target.value)}
+                  />
+                  <button className="button" type="submit">
+                    {individualLoading ? 'Searching…' : 'Search'}
+                  </button>
+                </form>
+
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Name</span>
+                    <span>Email</span>
+                    <span>Group</span>
+                    <span>Select</span>
+                  </div>
+                  {individualResults.length === 0 && !individualLoading && (
+                    <div className="table-row empty">No results yet.</div>
+                  )}
+                  {individualResults.map((row) => (
+                    <div className="table-row" key={row.email}>
+                      <span>{row.fullName}</span>
+                      <span>{row.email}</span>
+                      <span>{row.group}</span>
+                      <span>
+                        <input
+                          type="checkbox"
+                          checked={individualSelected.includes(row.email)}
+                          onChange={() => handleToggleIndividual(row.email)}
+                        />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <details className="dashboard-detail">
+                  <summary>Create tasks</summary>
+                  <div className="dashboard-detail__body">
+                    <p className="muted">
+                      Use placeholders like {'{fullName}'} and {'{email}'}.
+                    </p>
+                    <div className="stack">
+                      <input
+                        className="input"
+                        placeholder="Task title template"
+                        value={individualTaskTitle}
+                        onChange={(event) => setIndividualTaskTitle(event.target.value)}
+                      />
+                      <input
+                        className="input"
+                        placeholder="Task notes template"
+                        value={individualTaskDescription}
+                        onChange={(event) => setIndividualTaskDescription(event.target.value)}
+                      />
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="date"
+                          value={individualTaskDueDate}
+                          onChange={(event) => setIndividualTaskDueDate(event.target.value)}
+                        />
+                        <select
+                          className="select"
+                          value={individualTaskStatus}
+                          onChange={(event) => setIndividualTaskStatus(event.target.value)}
+                        >
+                          <option value="Open">Open</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Done">Done</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={handleIndividualTasks}
+                        disabled={individualTaskSaving}
+                      >
+                        {individualTaskSaving ? 'Creating…' : 'Create tasks'}
+                      </button>
+                    </div>
+                  </div>
+                </details>
               </div>
-              <div className="filter-row">
-                <input
-                  className="input"
-                  placeholder="Location"
-                  value={segmentEventLocation}
-                  onChange={(event) => setSegmentEventLocation(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={segmentEventStatus}
-                  onChange={(event) => setSegmentEventStatus(event.target.value)}
-                >
-                  <option value="Planned">Planned</option>
-                  <option value="Scheduled">Scheduled</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-                <input
-                  className="input"
-                  type="number"
-                  placeholder="Capacity"
-                  value={segmentEventCapacity}
-                  onChange={(event) => setSegmentEventCapacity(event.target.value)}
-                />
-              </div>
-              <input
-                className="input"
-                placeholder="Notes"
-                value={segmentEventNotes}
-                onChange={(event) => setSegmentEventNotes(event.target.value)}
-              />
-              <button className="button" type="button" onClick={handleCreateSegmentEvent}>
-                Create event
-              </button>
             </div>
-          </div>
+          </details>
 
-          <div className="module-card">
-            <div className="card-header">
-              <div>
-                <h3>Individual outreach</h3>
-                <p className="muted">Pick specific people and create tasks.</p>
+          <details className="dashboard-detail">
+            <summary>4. WhatsApp groups & messaging</summary>
+            <div className="dashboard-detail__body">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>WhatsApp groups</h3>
+                    <p className="muted">Manage group links and notes.</p>
+                  </div>
+                  <div className="pill">Outreach</div>
+                </div>
+
+                {groupsError ? <div className="module-alert">{groupsError}</div> : null}
+
+                <form className="stack" onSubmit={handleCreateGroup}>
+                  <input
+                    className="input"
+                    value={groupName}
+                    onChange={(event) => setGroupName(event.target.value)}
+                    placeholder="Group name"
+                  />
+                  <input
+                    className="input"
+                    value={groupInvite}
+                    onChange={(event) => setGroupInvite(event.target.value)}
+                    placeholder="Invite link"
+                  />
+                  <input
+                    className="input"
+                    value={groupNotes}
+                    onChange={(event) => setGroupNotes(event.target.value)}
+                    placeholder="Notes"
+                  />
+                  <button className="button" type="submit">
+                    Save group
+                  </button>
+                </form>
+
+                <div className="table">
+                  <div className="table-row table-row--three table-head">
+                    <span>Name</span>
+                    <span>Invite link</span>
+                    <span />
+                  </div>
+                  {groups.length === 0 && !groupsLoading && (
+                    <div className="table-row table-row--three empty">No groups saved.</div>
+                  )}
+                  {groups.map((group) => (
+                    <div className="table-row table-row--three" key={group.groupId}>
+                      <span>{group.name}</span>
+                      <span className="muted">{group.inviteLink}</span>
+                      <div className="table-actions">
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => handleDeleteGroup(group.groupId)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="pill">Network</div>
-            </div>
 
-            {individualError ? (
-              <div className="module-alert">{individualError}</div>
-            ) : null}
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Send WhatsApp message</h3>
+                    <p className="muted">Send a message to a saved group.</p>
+                  </div>
+                  <div className="pill">Outreach</div>
+                </div>
 
-            <form className="filter-row" onSubmit={handleIndividualSearch}>
-              <input
-                className="input"
-                placeholder="Search by name or email"
-                value={individualQuery}
-                onChange={(event) => setIndividualQuery(event.target.value)}
-              />
-              <button className="button" type="submit">
-                {individualLoading ? 'Searching…' : 'Search'}
-              </button>
-            </form>
+                {sendError ? <div className="module-alert">{sendError}</div> : null}
 
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Name</span>
-                <span>Email</span>
-                <span>Group</span>
-                <span>Select</span>
-              </div>
-              {individualResults.length === 0 && !individualLoading && (
-                <div className="table-row empty">No results yet.</div>
-              )}
-              {individualResults.map((row) => (
-                <div className="table-row" key={row.email}>
-                  <span>{row.fullName}</span>
-                  <span>{row.email}</span>
-                  <span>{row.group}</span>
-                  <span>
+                <div className="stack">
+                  <select
+                    className="select"
+                    value={sendGroupId}
+                    onChange={(event) => setSendGroupId(event.target.value)}
+                  >
+                    <option value="">Select group</option>
+                    {groups.map((group) => (
+                      <option key={group.groupId} value={group.groupId}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                  <textarea
+                    className="textarea"
+                    value={sendMessage}
+                    onChange={(event) => setSendMessage(event.target.value)}
+                    placeholder="Message text"
+                  />
+                  <label className="checkbox">
                     <input
                       type="checkbox"
-                      checked={individualSelected.includes(row.email)}
-                      onChange={() => handleToggleIndividual(row.email)}
+                      checked={sendAppendInvite}
+                      onChange={(event) => setSendAppendInvite(event.target.checked)}
                     />
-                  </span>
+                    Append invite link
+                  </label>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={handleSendMessage}
+                    disabled={sendingMessage}
+                  >
+                    {sendingMessage ? 'Sending…' : 'Send message'}
+                  </button>
                 </div>
-              ))}
-            </div>
-
-            <div className="card-divider">
-              <h4>Create tasks</h4>
-              <p className="muted">
-                Use placeholders like {'{fullName}'} and {'{email}'}.
-              </p>
-            </div>
-            <div className="stack">
-              <input
-                className="input"
-                placeholder="Task title template"
-                value={individualTaskTitle}
-                onChange={(event) => setIndividualTaskTitle(event.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Task notes template"
-                value={individualTaskDescription}
-                onChange={(event) => setIndividualTaskDescription(event.target.value)}
-              />
-              <div className="filter-row">
-                <input
-                  className="input"
-                  type="date"
-                  value={individualTaskDueDate}
-                  onChange={(event) => setIndividualTaskDueDate(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={individualTaskStatus}
-                  onChange={(event) => setIndividualTaskStatus(event.target.value)}
-                >
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Done">Done</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
               </div>
-              <button
-                className="button"
-                type="button"
-                onClick={handleIndividualTasks}
-                disabled={individualTaskSaving}
-              >
-                {individualTaskSaving ? 'Creating…' : 'Create tasks'}
-              </button>
             </div>
-          </div>
+          </details>
 
-          <div className="module-card">
-            <div className="card-header">
-              <div>
-                <h3>WhatsApp groups</h3>
-                <p className="muted">Manage group links and notes.</p>
-              </div>
-              <div className="pill">Outreach</div>
+          <details className="dashboard-detail">
+            <summary>5. Events</summary>
+            <div className="dashboard-detail__body">
+              <CRMEventsTab />
             </div>
-
-            {groupsError ? <div className="module-alert">{groupsError}</div> : null}
-
-            <form className="stack" onSubmit={handleCreateGroup}>
-              <input
-                className="input"
-                value={groupName}
-                onChange={(event) => setGroupName(event.target.value)}
-                placeholder="Group name"
-              />
-              <input
-                className="input"
-                value={groupInvite}
-                onChange={(event) => setGroupInvite(event.target.value)}
-                placeholder="Invite link"
-              />
-              <input
-                className="input"
-                value={groupNotes}
-                onChange={(event) => setGroupNotes(event.target.value)}
-                placeholder="Notes"
-              />
-              <button className="button" type="submit">
-                Save group
-              </button>
-            </form>
-
-            <div className="table">
-              <div className="table-row table-row--three table-head">
-                <span>Name</span>
-                <span>Invite link</span>
-                <span />
-              </div>
-              {groups.length === 0 && !groupsLoading && (
-                <div className="table-row table-row--three empty">No groups saved.</div>
-              )}
-              {groups.map((group) => (
-                <div className="table-row table-row--three" key={group.groupId}>
-                  <span>{group.name}</span>
-                  <span className="muted">{group.inviteLink}</span>
-                  <div className="table-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleDeleteGroup(group.groupId)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="module-card">
-            <div className="card-header">
-              <div>
-                <h3>Send WhatsApp message</h3>
-                <p className="muted">Send a message to a saved group.</p>
-              </div>
-              <div className="pill">Outreach</div>
-            </div>
-
-            {sendError ? <div className="module-alert">{sendError}</div> : null}
-
-            <div className="stack">
-              <select
-                className="select"
-                value={sendGroupId}
-                onChange={(event) => setSendGroupId(event.target.value)}
-              >
-                <option value="">Select group</option>
-                {groups.map((group) => (
-                  <option key={group.groupId} value={group.groupId}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-              <textarea
-                className="textarea"
-                value={sendMessage}
-                onChange={(event) => setSendMessage(event.target.value)}
-                placeholder="Message text"
-              />
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={sendAppendInvite}
-                  onChange={(event) => setSendAppendInvite(event.target.checked)}
-                />
-                Append invite link
-              </label>
-              <button
-                className="button"
-                type="button"
-                onClick={handleSendMessage}
-                disabled={sendingMessage}
-              >
-                {sendingMessage ? 'Sending…' : 'Send message'}
-              </button>
-            </div>
-          </div>
+          </details>
         </div>
       )}
-      {activeTab === 'events' && <CRMEventsTab />}
-      {activeTab === 'map' && <CRMMapTab />}
       <div className="module-footer">
         <span>Backend scope:</span>
         <strong>Survey API + /crm routes</strong>
@@ -2417,17 +2544,12 @@ function CRMDataEntryTab() {
 
   return (
     <div className="stack">
-      <div className="module-card module-card__wide section-intro">
-        <div className="card-header">
-          <div>
-            <h3>Data entry</h3>
-            <p className="muted">
-              Add supporters and members manually or import them from CSV.
-            </p>
-          </div>
-          <div className="pill">Network</div>
+      <details className="dashboard-detail">
+        <summary>Data entry</summary>
+        <div className="dashboard-detail__body">
+          <p className="muted">Add supporters and members manually or import them from CSV.</p>
         </div>
-      </div>
+      </details>
       <div className="module-grid">
       <div className="module-card module-card__wide">
         <div className="card-header">
@@ -2607,14 +2729,12 @@ function CRMDataEntryTab() {
   )
 }
 
-function CRMDashboardTab({ summary, recentPeople }) {
+function CRMDashboardTab() {
   const [dashboard, setDashboard] = useState(null)
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let mounted = true
-    setLoading(true)
     getJson('/crm/dashboard')
       .then((payload) => {
         if (!mounted) return
@@ -2624,21 +2744,31 @@ function CRMDashboardTab({ summary, recentPeople }) {
         if (!mounted) return
         setError(err.message || 'Unable to load dashboard.')
       })
-      .finally(() => {
-        if (!mounted) return
-        setLoading(false)
-      })
     return () => {
       mounted = false
     }
   }, [])
 
   const groupCounts = dashboard?.charts?.groupCounts || []
-  const genderCounts = dashboard?.charts?.genderCounts || []
   const ratingCounts = dashboard?.charts?.ratingCounts || []
   const timeAvailability = dashboard?.charts?.timeAvailability || []
   const topSkills = dashboard?.charts?.skills || []
-  const taskFeed = dashboard?.charts?.taskFeed || []
+
+  const chartPalette = [
+    '#2563eb',
+    '#0ea5e9',
+    '#14b8a6',
+    '#22c55e',
+    '#f59e0b',
+    '#f97316',
+    '#ef4444',
+    '#8b5cf6',
+    '#64748b',
+    '#ec4899',
+  ]
+
+  const pickColors = (count) =>
+    Array.from({ length: count }, (_, idx) => chartPalette[idx % chartPalette.length])
 
   const barData = (rows, labelKey, valueKey, label) => ({
     labels: rows.map((row) => row[labelKey]),
@@ -2646,17 +2776,19 @@ function CRMDashboardTab({ summary, recentPeople }) {
       {
         label,
         data: rows.map((row) => row[valueKey]),
-        backgroundColor: '#2563eb',
+        backgroundColor: pickColors(rows.length),
+        borderRadius: 8,
       },
     ],
   })
 
-  const pieData = (rows, labelKey, valueKey) => ({
+  const radialData = (rows, labelKey, valueKey) => ({
     labels: rows.map((row) => row[labelKey]),
     datasets: [
       {
         data: rows.map((row) => row[valueKey]),
-        backgroundColor: ['#2563eb', '#f59e0b', '#10b981', '#94a3b8'],
+        backgroundColor: pickColors(rows.length),
+        borderWidth: 1,
       },
     ],
   })
@@ -2676,7 +2808,28 @@ function CRMDashboardTab({ summary, recentPeople }) {
   const dashboardPieOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { position: 'bottom' } },
+    plugins: {
+      legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 10 } },
+    },
+  }
+
+  const dashboardPolarOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 10 } },
+    },
+    scales: {
+      r: {
+        ticks: { display: false },
+        grid: { color: 'rgba(148, 163, 184, 0.3)' },
+      },
+    },
+  }
+
+  const dashboardHorizontalBarOptions = {
+    ...dashboardBarOptions,
+    indexAxis: 'y',
   }
 
   return (
@@ -2684,36 +2837,20 @@ function CRMDashboardTab({ summary, recentPeople }) {
       <div className="module-card module-card__wide section-intro">
         <div className="card-header">
           <div>
-            <h3>Network dashboard</h3>
-            <p className="muted">Track engagement, skills, and activity at a glance.</p>
+            <h3>Stats</h3>
+            <p className="muted">Engagement, skills, and activity at a glance.</p>
           </div>
-          <div className="pill">Overview</div>
         </div>
       </div>
-      <div className="dashboard-layout">
-        {error ? <div className="module-alert">{error}</div> : null}
-        <div className="dashboard-main">
-          <div className="module-grid dashboard-grid">
+      {error ? <div className="module-alert">{error}</div> : null}
+      <div className="module-grid dashboard-grid">
           <div className="module-card dashboard-chart">
             <h3>People distribution</h3>
             {groupCounts.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
-                <Bar
-                  data={barData(groupCounts, 'group', 'count', 'People')}
-                  options={dashboardBarOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Gender</h3>
-            {genderCounts.length > 0 ? (
-              <div className="chart-frame chart-frame--tall">
-                <Bar
-                  data={barData(genderCounts, 'gender', 'count', 'People')}
-                  options={dashboardBarOptions}
+                <Doughnut
+                  data={radialData(groupCounts, 'group', 'count')}
+                  options={dashboardPieOptions}
                 />
               </div>
             ) : (
@@ -2724,48 +2861,9 @@ function CRMDashboardTab({ summary, recentPeople }) {
             <h3>Rating</h3>
             {ratingCounts.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
-                <Bar
-                  data={barData(ratingCounts, 'rating', 'count', 'People')}
-                  options={dashboardBarOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Manifesto</h3>
-            {dashboard?.charts?.manifesto?.length ? (
-              <div className="chart-frame">
-                <Pie
-                  data={pieData(dashboard.charts.manifesto, 'agrees', 'count')}
-                  options={dashboardPieOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Membership interest</h3>
-            {dashboard?.charts?.membership?.length ? (
-              <div className="chart-frame">
-                <Pie
-                  data={pieData(dashboard.charts.membership, 'interested', 'count')}
-                  options={dashboardPieOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Facebook group</h3>
-            {dashboard?.charts?.facebook?.length ? (
-              <div className="chart-frame">
-                <Pie
-                  data={pieData(dashboard.charts.facebook, 'facebook', 'count')}
-                  options={dashboardPieOptions}
+                <PolarArea
+                  data={radialData(ratingCounts, 'rating', 'count')}
+                  options={dashboardPolarOptions}
                 />
               </div>
             ) : (
@@ -2776,9 +2874,9 @@ function CRMDashboardTab({ summary, recentPeople }) {
             <h3>Time availability</h3>
             {timeAvailability.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
-                <Bar
-                  data={barData(timeAvailability, 'availability', 'count', 'People')}
-                  options={dashboardBarOptions}
+                <PolarArea
+                  data={radialData(timeAvailability, 'availability', 'count')}
+                  options={dashboardPolarOptions}
                 />
               </div>
             ) : (
@@ -2790,79 +2888,50 @@ function CRMDashboardTab({ summary, recentPeople }) {
             {topSkills.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
                 <Bar
-                  data={barData(topSkills, 'skill', 'count', 'People')}
-                  options={dashboardBarOptions}
+                  data={barData(topSkills.slice(0, 8), 'skill', 'count', 'People')}
+                  options={dashboardHorizontalBarOptions}
                 />
               </div>
             ) : (
               <p className="muted">No data.</p>
             )}
           </div>
-        </div>
+          <div className="module-card dashboard-chart">
+            <h3>Manifesto</h3>
+            {dashboard?.charts?.manifesto?.length ? (
+              <div className="chart-frame">
+                <Pie
+                  data={radialData(dashboard.charts.manifesto, 'agrees', 'count')}
+                  options={dashboardPieOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
+          <div className="module-card dashboard-chart">
+            <h3>Membership interest</h3>
+            {dashboard?.charts?.membership?.length ? (
+              <div className="chart-frame">
+                <Doughnut
+                  data={radialData(dashboard.charts.membership, 'interested', 'count')}
+                  options={dashboardPieOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
       </div>
-      <aside className="dashboard-sidebar">
-        <details className="dashboard-detail" open>
-          <summary>People</summary>
-          <div className="dashboard-detail__body">
-            <p className="muted">
-              Directory, profiles, segmentation, and supporter/member stats.
-            </p>
-          <div className="metric-row">
-            <span>Total</span>
-            <strong>{summary?.total_people ?? '—'}</strong>
-          </div>
-          <div className="metric-row">
-            <span>Supporters</span>
-            <strong>{summary?.supporters ?? '—'}</strong>
-          </div>
-          <div className="metric-row">
-            <span>Members</span>
-            <strong>{summary?.members ?? '—'}</strong>
-          </div>
-        </div>
-        </details>
-        <details className="dashboard-detail">
-          <summary>Task feed</summary>
-          <div className="dashboard-detail__body">
-            <p className="muted">Latest open tasks.</p>
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Task</span>
-                <span>Due</span>
-                <span>Email</span>
-                <span>Updated</span>
-        </div>
-              {taskFeed.length === 0 && !loading && (
-                <div className="table-row empty">No open tasks.</div>
-              )}
-              {taskFeed.map((task) => (
-                <div className="table-row" key={task.taskId}>
-                  <span>{task.title}</span>
-                  <span>{task.dueDate || '—'}</span>
-                  <span>{task.email}</span>
-                  <span>{task.updatedAt || '—'}</span>
-        </div>
-              ))}
-            </div>
-          </div>
-        </details>
-        <details className="dashboard-detail">
-          <summary>Recent people</summary>
-          <div className="dashboard-detail__body">
-          <p className="muted">Last 5 people loaded from Neo4j.</p>
-          <ul className="compact-list">
-              {recentPeople.length === 0 && <li>No entries yet.</li>}
-              {recentPeople.map((person) => (
-              <li key={person.email}>
-                <strong>{person.fullName || person.email}</strong>
-                <span>{person.group}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        </details>
-      </aside>
-      </div>
+    </div>
+  )
+}
+
+function CRMOverviewTab() {
+  return (
+    <div className="stack">
+      <CRMMapTab />
+      <CRMDashboardTab />
     </div>
   )
 }
@@ -2953,9 +3022,19 @@ function CRMVolunteersTab() {
   }
 
   return (
-    <div className="module-grid">
-      {error ? <div className="module-alert">{error}</div> : null}
-      <div className="module-card">
+    <div className="stack">
+      <div className="module-card module-card__wide section-intro">
+        <div className="card-header">
+          <div>
+            <h3>Volunteer engagement</h3>
+            <p className="muted">Volunteer metrics, top supporters, and skills.</p>
+          </div>
+          <div className="pill">Network</div>
+        </div>
+      </div>
+      <div className="module-grid">
+        {error ? <div className="module-alert">{error}</div> : null}
+        <div className="module-card">
         <h3>Volunteer metrics</h3>
         {loading ? (
           <p className="muted">Loading volunteers…</p>
@@ -2976,45 +3055,46 @@ function CRMVolunteersTab() {
           </>
         )}
       </div>
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Top supporters</h3>
-            <p className="muted">Highest-rated supporters based on activity.</p>
-          </div>
-        </div>
-        <div className="table">
-          <div className="table-row table-head">
-            <span>Name</span>
-            <span>Email</span>
-            <span>Rating</span>
-            <span>Effort</span>
-          </div>
-          {topVolunteers.length === 0 && !loading && (
-            <div className="table-row empty">No volunteer activity yet.</div>
-          )}
-          {topVolunteers.map((row) => (
-            <div className="table-row" key={row.email}>
-              <span>{row.fullName || row.email}</span>
-              <span>{row.email}</span>
-              <span>{row.ratingStars || row.rating || '—'}</span>
-              <span>{row.effortScore ?? row.effortHours ?? 0}</span>
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Top supporters</h3>
+              <p className="muted">Highest-rated supporters based on activity.</p>
             </div>
-          ))}
-        </div>
-      </div>
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Skill distribution</h3>
-            <p className="muted">Top skills among active volunteers.</p>
+          </div>
+          <div className="table">
+            <div className="table-row table-head">
+              <span>Name</span>
+              <span>Email</span>
+              <span>Rating</span>
+              <span>Effort</span>
+            </div>
+            {topVolunteers.length === 0 && !loading && (
+              <div className="table-row empty">No volunteer activity yet.</div>
+            )}
+            {topVolunteers.map((row) => (
+              <div className="table-row" key={row.email}>
+                <span>{row.fullName || row.email}</span>
+                <span>{row.email}</span>
+                <span>{row.ratingStars || row.rating || '—'}</span>
+                <span>{row.effortScore ?? row.effortHours ?? 0}</span>
+              </div>
+            ))}
           </div>
         </div>
-        {topSkills.length ? (
-          <Bar data={skillData} />
-        ) : (
-          <p className="muted">No skills recorded yet.</p>
-        )}
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Skill distribution</h3>
+              <p className="muted">Top skills among active volunteers.</p>
+            </div>
+          </div>
+          {topSkills.length ? (
+            <Bar data={skillData} />
+          ) : (
+            <p className="muted">No skills recorded yet.</p>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -3034,10 +3114,103 @@ function CRMCampaignsTab() {
   const [reportError, setReportError] = useState('')
   const [assigneeEmail, setAssigneeEmail] = useState('')
   const [taskStatus, setTaskStatus] = useState('')
+  const [campaignSaveStatus, setCampaignSaveStatus] = useState('')
+  const [campaignSaveError, setCampaignSaveError] = useState('')
+  const [fundingSummary, setFundingSummary] = useState(null)
+  const [contributions, setContributions] = useState([])
+  const [contributionStatus, setContributionStatus] = useState('')
+  const [contributionError, setContributionError] = useState('')
+  const [contributionForm, setContributionForm] = useState({
+    amount: '',
+    currency: 'GEL',
+    contributorName: '',
+    contributorEmail: '',
+    isAnonymous: false,
+    note: '',
+  })
+  const [milestones, setMilestones] = useState([])
+  const [milestoneStatus, setMilestoneStatus] = useState('')
+  const [milestoneError, setMilestoneError] = useState('')
+  const [milestoneForm, setMilestoneForm] = useState({
+    title: '',
+    amountTarget: '',
+    dueDate: '',
+    status: 'Planned',
+    completionPercent: '',
+  })
+  const [expenses, setExpenses] = useState([])
+  const [expenseStatus, setExpenseStatus] = useState('')
+  const [expenseError, setExpenseError] = useState('')
+  const [expenseForm, setExpenseForm] = useState({
+    category: '',
+    vendor: '',
+    amount: '',
+    currency: 'GEL',
+    receiptLink: '',
+    approvedBy: '',
+    milestoneId: '',
+  })
+  const [proofArtifacts, setProofArtifacts] = useState([])
+  const [proofStatus, setProofStatus] = useState('')
+  const [proofError, setProofError] = useState('')
+  const [proofForm, setProofForm] = useState({
+    artifactType: 'image',
+    caption: '',
+    url: '',
+    uploadedBy: '',
+    verificationStatus: 'Pending',
+    milestoneId: '',
+  })
+  const [partners, setPartners] = useState([])
+  const [partnerStatus, setPartnerStatus] = useState('')
+  const [partnerError, setPartnerError] = useState('')
+  const [partnerForm, setPartnerForm] = useState({
+    name: '',
+    role: '',
+    contact: '',
+    verificationNotes: '',
+  })
+  const [campaignUpdates, setCampaignUpdates] = useState([])
+  const [campaignUpdateStatus, setCampaignUpdateStatus] = useState('')
+  const [campaignUpdateError, setCampaignUpdateError] = useState('')
+  const [campaignUpdateForm, setCampaignUpdateForm] = useState({
+    message: '',
+    createdBy: '',
+    status: '',
+  })
+  const [campaignTasks, setCampaignTasks] = useState([])
+  const [campaignTaskStatus, setCampaignTaskStatus] = useState('')
+  const [campaignTaskError, setCampaignTaskError] = useState('')
+  const [campaignTaskForm, setCampaignTaskForm] = useState({
+    title: '',
+    description: '',
+    status: 'Open',
+    dueDate: '',
+    assigneeEmail: '',
+    milestoneId: '',
+  })
+  const [campaignVolunteers, setCampaignVolunteers] = useState([])
+  const [campaignVolunteerStatus, setCampaignVolunteerStatus] = useState('')
+  const [campaignVolunteerError, setCampaignVolunteerError] = useState('')
+  const [campaignVolunteerForm, setCampaignVolunteerForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: '',
+    notes: '',
+  })
   const [campaignForm, setCampaignForm] = useState({
     name: '',
     topic: '',
     objective: '',
+    problemTitle: '',
+    problemDescription: '',
+    locationCity: '',
+    locationDistrict: '',
+    beneficiaryType: '',
+    fundingTargetAmount: '',
+    currency: 'GEL',
+    operationalFeePercent: '10',
     legislationText: '',
     manifestoText: '',
     expertPrompt: '',
@@ -3072,6 +3245,77 @@ function CRMCampaignsTab() {
       )
   }
 
+  const loadFundingSummary = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/funding-summary`)
+      .then((payload) => setFundingSummary(payload))
+      .catch(() => setFundingSummary(null))
+  }
+
+  const loadContributions = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/contributions`)
+      .then((payload) => setContributions(Array.isArray(payload) ? payload : []))
+      .catch(() => setContributions([]))
+  }
+
+  const loadMilestones = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/milestones`)
+      .then((payload) => setMilestones(Array.isArray(payload) ? payload : []))
+      .catch(() => setMilestones([]))
+  }
+
+  const loadExpenses = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/expenses`)
+      .then((payload) => setExpenses(Array.isArray(payload) ? payload : []))
+      .catch(() => setExpenses([]))
+  }
+
+  const loadProof = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/proof`)
+      .then((payload) =>
+        setProofArtifacts(Array.isArray(payload) ? payload : []),
+      )
+      .catch(() => setProofArtifacts([]))
+  }
+
+  const loadPartners = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/partners`)
+      .then((payload) => setPartners(Array.isArray(payload) ? payload : []))
+      .catch(() => setPartners([]))
+  }
+
+  const loadCampaignUpdates = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/updates`)
+      .then((payload) =>
+        setCampaignUpdates(Array.isArray(payload) ? payload : []),
+      )
+      .catch(() => setCampaignUpdates([]))
+  }
+
+  const loadCampaignTasks = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/tasks`)
+      .then((payload) =>
+        setCampaignTasks(Array.isArray(payload) ? payload : []),
+      )
+      .catch(() => setCampaignTasks([]))
+  }
+
+  const loadCampaignVolunteers = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/volunteers`)
+      .then((payload) =>
+        setCampaignVolunteers(Array.isArray(payload) ? payload : []),
+      )
+      .catch(() => setCampaignVolunteers([]))
+  }
+
   useEffect(() => {
     loadCampaigns()
   }, [])
@@ -3080,9 +3324,27 @@ function CRMCampaignsTab() {
     if (!selectedCampaignId) {
       setCampaignDetail(null)
       setCampaignDraft(null)
+      setFundingSummary(null)
+      setContributions([])
+      setMilestones([])
+      setExpenses([])
+      setProofArtifacts([])
+      setPartners([])
+      setCampaignUpdates([])
+      setCampaignTasks([])
+      setCampaignVolunteers([])
       return
     }
     loadCampaignDetail(selectedCampaignId)
+    loadFundingSummary(selectedCampaignId)
+    loadContributions(selectedCampaignId)
+    loadMilestones(selectedCampaignId)
+    loadExpenses(selectedCampaignId)
+    loadProof(selectedCampaignId)
+    loadPartners(selectedCampaignId)
+    loadCampaignUpdates(selectedCampaignId)
+    loadCampaignTasks(selectedCampaignId)
+    loadCampaignVolunteers(selectedCampaignId)
   }, [selectedCampaignId])
 
   const handleCreateCampaign = async (event) => {
@@ -3100,6 +3362,32 @@ function CRMCampaignsTab() {
           name: campaignForm.name.trim(),
           topic: campaignForm.topic.trim(),
           objective: campaignForm.objective.trim(),
+          problemTitle: campaignForm.problemTitle.trim(),
+          problemDescription: campaignForm.problemDescription.trim(),
+          locationCity: campaignForm.locationCity.trim(),
+          locationDistrict: campaignForm.locationDistrict.trim(),
+          beneficiaryType: campaignForm.beneficiaryType.trim(),
+          fundingTargetAmount: campaignForm.fundingTargetAmount
+            ? Number(campaignForm.fundingTargetAmount)
+            : 0,
+          currency: campaignForm.currency || 'GEL',
+          operationalFeePercent: campaignForm.operationalFeePercent
+            ? Number(campaignForm.operationalFeePercent)
+            : 0,
+          operationalFeeAmount:
+            campaignForm.fundingTargetAmount && campaignForm.operationalFeePercent
+              ? (Number(campaignForm.fundingTargetAmount) *
+                  Number(campaignForm.operationalFeePercent)) /
+                100
+              : 0,
+          executionBudgetAmount: campaignForm.fundingTargetAmount
+            ? Number(campaignForm.fundingTargetAmount) -
+              (campaignForm.operationalFeePercent
+                ? (Number(campaignForm.fundingTargetAmount) *
+                    Number(campaignForm.operationalFeePercent)) /
+                  100
+                : 0)
+            : 0,
           legislationText: campaignForm.legislationText.trim(),
           manifestoText: campaignForm.manifestoText.trim(),
           expertPrompt: campaignForm.expertPrompt.trim(),
@@ -3116,6 +3404,14 @@ function CRMCampaignsTab() {
         name: '',
         topic: '',
         objective: '',
+        problemTitle: '',
+        problemDescription: '',
+        locationCity: '',
+        locationDistrict: '',
+        beneficiaryType: '',
+        fundingTargetAmount: '',
+        currency: 'GEL',
+        operationalFeePercent: '10',
         legislationText: '',
         manifestoText: '',
         expertPrompt: '',
@@ -3134,6 +3430,313 @@ function CRMCampaignsTab() {
       }
     } catch (err) {
       setError(err.message || 'Unable to create campaign.')
+    }
+  }
+
+  const handleContributionSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    const amountValue = Number(contributionForm.amount)
+    if (!amountValue || amountValue <= 0) {
+      setContributionError('Enter a positive contribution amount.')
+      return
+    }
+    setContributionError('')
+    setContributionStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/contributions`, {
+        method: 'POST',
+        payload: {
+          amount: amountValue,
+          currency: contributionForm.currency,
+          contributorName: contributionForm.contributorName.trim(),
+          contributorEmail: contributionForm.contributorEmail.trim(),
+          isAnonymous: contributionForm.isAnonymous,
+          note: contributionForm.note.trim(),
+        },
+      })
+      setContributionForm({
+        amount: '',
+        currency: contributionForm.currency,
+        contributorName: '',
+        contributorEmail: '',
+        isAnonymous: false,
+        note: '',
+      })
+      setContributionStatus('Contribution recorded.')
+      loadFundingSummary(selectedCampaignId)
+      loadContributions(selectedCampaignId)
+    } catch (err) {
+      setContributionError(err.message || 'Unable to record contribution.')
+    }
+  }
+
+  const handleSaveExecutionPlan = async () => {
+    if (!selectedCampaignId || !campaignDraft) return
+    setCampaignSaveError('')
+    setCampaignSaveStatus('')
+    try {
+      const updated = await requestJson(`/crm/campaigns/${selectedCampaignId}`, {
+        method: 'PATCH',
+        payload: {
+          status: campaignDraft.status,
+          implementationSteps: campaignDraft.implementationSteps || '',
+          responsibleOwner: campaignDraft.responsibleOwner || '',
+          communityPartner: campaignDraft.communityPartner || '',
+          executionStartDate: campaignDraft.executionStartDate || '',
+          expectedCompletionDate: campaignDraft.expectedCompletionDate || '',
+        },
+      })
+      setCampaignDetail(updated)
+      setCampaignDraft(updated)
+      setCampaignSaveStatus('Execution plan saved.')
+    } catch (err) {
+      setCampaignSaveError(err.message || 'Unable to update campaign.')
+    }
+  }
+
+  const handleMilestoneSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!milestoneForm.title.trim()) {
+      setMilestoneError('Milestone title is required.')
+      return
+    }
+    setMilestoneError('')
+    setMilestoneStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/milestones`, {
+        method: 'POST',
+        payload: {
+          title: milestoneForm.title.trim(),
+          amountTarget: milestoneForm.amountTarget
+            ? Number(milestoneForm.amountTarget)
+            : 0,
+          dueDate: milestoneForm.dueDate,
+          status: milestoneForm.status,
+          completionPercent: milestoneForm.completionPercent
+            ? Number(milestoneForm.completionPercent)
+            : 0,
+        },
+      })
+      setMilestoneForm({
+        title: '',
+        amountTarget: '',
+        dueDate: '',
+        status: 'Planned',
+        completionPercent: '',
+      })
+      setMilestoneStatus('Milestone added.')
+      loadMilestones(selectedCampaignId)
+    } catch (err) {
+      setMilestoneError(err.message || 'Unable to add milestone.')
+    }
+  }
+
+  const handleExpenseSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!expenseForm.category.trim()) {
+      setExpenseError('Expense category is required.')
+      return
+    }
+    const amountValue = Number(expenseForm.amount)
+    if (!amountValue || amountValue <= 0) {
+      setExpenseError('Enter a positive expense amount.')
+      return
+    }
+    setExpenseError('')
+    setExpenseStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/expenses`, {
+        method: 'POST',
+        payload: {
+          category: expenseForm.category.trim(),
+          vendor: expenseForm.vendor.trim(),
+          amount: amountValue,
+          currency: expenseForm.currency,
+          receiptLink: expenseForm.receiptLink.trim(),
+          approvedBy: expenseForm.approvedBy.trim(),
+          milestoneId: expenseForm.milestoneId,
+        },
+      })
+      setExpenseForm({
+        category: '',
+        vendor: '',
+        amount: '',
+        currency: expenseForm.currency,
+        receiptLink: '',
+        approvedBy: '',
+        milestoneId: '',
+      })
+      setExpenseStatus('Expense recorded.')
+      loadExpenses(selectedCampaignId)
+    } catch (err) {
+      setExpenseError(err.message || 'Unable to record expense.')
+    }
+  }
+
+  const handleProofSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!proofForm.url.trim()) {
+      setProofError('Proof URL is required.')
+      return
+    }
+    setProofError('')
+    setProofStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/proof`, {
+        method: 'POST',
+        payload: {
+          artifactType: proofForm.artifactType,
+          caption: proofForm.caption.trim(),
+          url: proofForm.url.trim(),
+          uploadedBy: proofForm.uploadedBy.trim(),
+          verificationStatus: proofForm.verificationStatus,
+          milestoneId: proofForm.milestoneId,
+        },
+      })
+      setProofForm({
+        artifactType: proofForm.artifactType,
+        caption: '',
+        url: '',
+        uploadedBy: '',
+        verificationStatus: proofForm.verificationStatus,
+        milestoneId: '',
+      })
+      setProofStatus('Proof artifact added.')
+      loadProof(selectedCampaignId)
+    } catch (err) {
+      setProofError(err.message || 'Unable to add proof.')
+    }
+  }
+
+  const handlePartnerSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!partnerForm.name.trim()) {
+      setPartnerError('Partner name is required.')
+      return
+    }
+    setPartnerError('')
+    setPartnerStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/partners`, {
+        method: 'POST',
+        payload: {
+          name: partnerForm.name.trim(),
+          role: partnerForm.role.trim(),
+          contact: partnerForm.contact.trim(),
+          verificationNotes: partnerForm.verificationNotes.trim(),
+        },
+      })
+      setPartnerForm({
+        name: '',
+        role: '',
+        contact: '',
+        verificationNotes: '',
+      })
+      setPartnerStatus('Partner added.')
+      loadPartners(selectedCampaignId)
+    } catch (err) {
+      setPartnerError(err.message || 'Unable to add partner.')
+    }
+  }
+
+  const handleCampaignUpdateSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!campaignUpdateForm.message.trim()) {
+      setCampaignUpdateError('Update message is required.')
+      return
+    }
+    setCampaignUpdateError('')
+    setCampaignUpdateStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/updates`, {
+        method: 'POST',
+        payload: {
+          message: campaignUpdateForm.message.trim(),
+          createdBy: campaignUpdateForm.createdBy.trim(),
+          status: campaignUpdateForm.status,
+        },
+      })
+      setCampaignUpdateForm({ message: '', createdBy: '', status: '' })
+      setCampaignUpdateStatus('Update posted.')
+      loadCampaignUpdates(selectedCampaignId)
+    } catch (err) {
+      setCampaignUpdateError(err.message || 'Unable to post update.')
+    }
+  }
+
+  const handleCampaignTaskSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!campaignTaskForm.title.trim()) {
+      setCampaignTaskError('Task title is required.')
+      return
+    }
+    setCampaignTaskError('')
+    setCampaignTaskStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/tasks`, {
+        method: 'POST',
+        payload: {
+          title: campaignTaskForm.title.trim(),
+          description: campaignTaskForm.description.trim(),
+          status: campaignTaskForm.status,
+          dueDate: campaignTaskForm.dueDate,
+          assigneeEmail: campaignTaskForm.assigneeEmail.trim(),
+          milestoneId: campaignTaskForm.milestoneId,
+        },
+      })
+      setCampaignTaskForm({
+        title: '',
+        description: '',
+        status: 'Open',
+        dueDate: '',
+        assigneeEmail: '',
+        milestoneId: '',
+      })
+      setCampaignTaskStatus('Task created.')
+      loadCampaignTasks(selectedCampaignId)
+    } catch (err) {
+      setCampaignTaskError(err.message || 'Unable to create task.')
+    }
+  }
+
+  const handleCampaignVolunteerSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!campaignVolunteerForm.name.trim()) {
+      setCampaignVolunteerError('Volunteer name is required.')
+      return
+    }
+    setCampaignVolunteerError('')
+    setCampaignVolunteerStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/volunteers`, {
+        method: 'POST',
+        payload: {
+          name: campaignVolunteerForm.name.trim(),
+          email: campaignVolunteerForm.email.trim(),
+          phone: campaignVolunteerForm.phone.trim(),
+          role: campaignVolunteerForm.role.trim(),
+          notes: campaignVolunteerForm.notes.trim(),
+        },
+      })
+      setCampaignVolunteerForm({
+        name: '',
+        email: '',
+        phone: '',
+        role: '',
+        notes: '',
+      })
+      setCampaignVolunteerStatus('Volunteer added.')
+      loadCampaignVolunteers(selectedCampaignId)
+    } catch (err) {
+      setCampaignVolunteerError(err.message || 'Unable to add volunteer.')
     }
   }
 
@@ -3258,15 +3861,43 @@ function CRMCampaignsTab() {
   const totalCampaigns = campaigns.length
   const activeCampaigns = campaigns.filter((row) => row.status === 'Active').length
   const plannedCampaigns = campaigns.filter((row) => row.status === 'Planned').length
+  const draftCampaigns = campaigns.filter((row) => row.status === 'Draft').length
+  const fundingCampaigns = campaigns.filter((row) => row.status === 'Funding').length
+  const inProgressCampaigns = campaigns.filter(
+    (row) => row.status === 'In Progress',
+  ).length
   const completedCampaigns = campaigns.filter((row) => row.status === 'Completed').length
   const conversationLink = campaignDetail?.deliberationConversationId
     ? `/?conversation_id=${campaignDetail.deliberationConversationId}&view=mobile`
     : ''
+  const fundingTargetAmount = Number(campaignForm.fundingTargetAmount) || 0
+  const operationalFeePercent = Number(campaignForm.operationalFeePercent) || 0
+  const operationalFeeAmount = fundingTargetAmount
+    ? (fundingTargetAmount * operationalFeePercent) / 100
+    : 0
+  const executionBudgetAmount = Math.max(
+    fundingTargetAmount - operationalFeeAmount,
+    0,
+  )
+  const displayCurrency = fundingSummary?.currency || campaignDetail?.currency || 'GEL'
+  const raisedAmount = Number(
+    fundingSummary?.fundsRaisedAmount ?? campaignDetail?.fundsRaisedAmount ?? 0,
+  )
+  const targetAmount = Number(
+    fundingSummary?.fundingTargetAmount ?? campaignDetail?.fundingTargetAmount ?? 0,
+  )
+  const allocatedOperations = Number(fundingSummary?.allocatedOperations ?? 0)
+  const allocatedExecution = Number(fundingSummary?.allocatedExecution ?? 0)
+  const fundingProgress = targetAmount
+    ? Math.min((raisedAmount / targetAmount) * 100, 100)
+    : 0
+  const contributorCount =
+    fundingSummary?.contributorCount ?? contributions.length ?? 0
 
   return (
     <div className="module-grid">
       <div className="campaigns-top-grid">
-        <div className="module-card campaigns-overview">
+        <div className="module-card campaigns-overview" id="campaigns-overview">
           <h3>Campaign overview</h3>
           <p className="muted">Create campaigns and guide surveys.</p>
           <div className="metric-row">
@@ -3278,8 +3909,20 @@ function CRMCampaignsTab() {
             <strong>{activeCampaigns}</strong>
           </div>
           <div className="metric-row">
+            <span>Draft</span>
+            <strong>{draftCampaigns}</strong>
+          </div>
+          <div className="metric-row">
             <span>Planned</span>
             <strong>{plannedCampaigns}</strong>
+          </div>
+          <div className="metric-row">
+            <span>Funding</span>
+            <strong>{fundingCampaigns}</strong>
+          </div>
+          <div className="metric-row">
+            <span>In progress</span>
+            <strong>{inProgressCampaigns}</strong>
           </div>
           <div className="metric-row">
             <span>Completed</span>
@@ -3287,7 +3930,7 @@ function CRMCampaignsTab() {
           </div>
         </div>
 
-        <div className="module-card campaigns-create">
+        <div className="module-card campaigns-create" id="campaigns-create">
           <h3>Create campaign</h3>
           {error ? <div className="module-alert">{error}</div> : null}
           {statusMessage ? <div className="module-alert">{statusMessage}</div> : null}
@@ -3317,6 +3960,118 @@ function CRMCampaignsTab() {
                 setCampaignForm((prev) => ({ ...prev, objective: event.target.value }))
               }
             />
+            <details className="dashboard-detail">
+              <summary>Problem & funding</summary>
+              <div className="stack">
+                <input
+                  className="input"
+                  placeholder="Problem title"
+                  value={campaignForm.problemTitle}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      problemTitle: event.target.value,
+                    }))
+                  }
+                />
+                <textarea
+                  className="textarea"
+                  placeholder="Problem description"
+                  value={campaignForm.problemDescription}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      problemDescription: event.target.value,
+                    }))
+                  }
+                />
+                <div className="form-grid">
+                  <input
+                    className="input"
+                    placeholder="City"
+                    value={campaignForm.locationCity}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        locationCity: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="District"
+                    value={campaignForm.locationDistrict}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        locationDistrict: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <input
+                  className="input"
+                  placeholder="Beneficiary type"
+                  value={campaignForm.beneficiaryType}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      beneficiaryType: event.target.value,
+                    }))
+                  }
+                />
+                <div className="form-grid">
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    placeholder="Funding target"
+                    value={campaignForm.fundingTargetAmount}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        fundingTargetAmount: event.target.value,
+                      }))
+                    }
+                  />
+                  <select
+                    className="select"
+                    value={campaignForm.currency}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        currency: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="GEL">GEL</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <div className="form-grid">
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    placeholder="Operational fee %"
+                    value={campaignForm.operationalFeePercent}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        operationalFeePercent: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="metric-row">
+                    <span>Execution budget</span>
+                    <strong>
+                      {executionBudgetAmount.toLocaleString()} {campaignForm.currency}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </details>
             <textarea
               className="textarea"
               placeholder="Legislation or drafted law"
@@ -3349,10 +4104,16 @@ function CRMCampaignsTab() {
               setCampaignForm((prev) => ({ ...prev, status: event.target.value }))
             }
           >
+            <option value="Draft">Draft</option>
+            <option value="Funding">Funding</option>
+            <option value="Funded">Funded</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Awaiting Verification">Awaiting Verification</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
             <option value="Planned">Planned</option>
             <option value="Active">Active</option>
             <option value="Paused">Paused</option>
-            <option value="Completed">Completed</option>
           </select>
           <div className="form-grid">
             <input
@@ -3413,7 +4174,7 @@ function CRMCampaignsTab() {
         </div>
       </div>
 
-      <div className="module-card module-card__wide">
+      <div className="module-card module-card__wide" id="campaigns-list">
         <h3>Campaigns</h3>
         {loading ? <p className="muted">Loading…</p> : null}
         <div className="table">
@@ -3424,6 +4185,7 @@ function CRMCampaignsTab() {
             <span>Dates</span>
             <span>Owner</span>
             <span>Goal</span>
+            <span>Funding</span>
           </div>
           {campaigns.length === 0 && !loading && (
             <div className="table-row empty">No campaigns yet.</div>
@@ -3446,6 +4208,11 @@ function CRMCampaignsTab() {
                 </span>
                 <span>{campaign.owner || '—'}</span>
                 <span>{campaign.goal ?? 0}</span>
+                <span>
+                  {Number(campaign.fundsRaisedAmount ?? 0).toLocaleString()} /{' '}
+                  {Number(campaign.fundingTargetAmount ?? 0).toLocaleString()}{' '}
+                  {campaign.currency || 'GEL'}
+                </span>
               </button>
             )
           })}
@@ -3521,6 +4288,951 @@ function CRMCampaignsTab() {
               ) : null}
             </div>
             {analysisStatus ? <p className="muted">{analysisStatus}</p> : null}
+          </div>
+        )}
+      </div>
+
+      <div className="module-card module-card__wide">
+        <div className="card-header">
+          <div>
+            <h3>Execution plan</h3>
+            <p className="muted">
+              Move funded campaigns into delivery and verification.
+            </p>
+          </div>
+        </div>
+        {!selectedCampaignId && (
+          <p className="muted">Select a campaign to manage execution.</p>
+        )}
+        {selectedCampaignId && campaignDraft && (
+          <div className="stack">
+            {campaignSaveError ? (
+              <div className="module-alert">{campaignSaveError}</div>
+            ) : null}
+            {campaignSaveStatus ? (
+              <div className="module-alert">{campaignSaveStatus}</div>
+            ) : null}
+            <div className="form-grid">
+              <select
+                className="select"
+                value={campaignDraft.status || 'Planned'}
+                onChange={(event) => handleDraftChange('status', event.target.value)}
+              >
+                <option value="Draft">Draft</option>
+                <option value="Funding">Funding</option>
+                <option value="Funded">Funded</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Awaiting Verification">Awaiting Verification</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Planned">Planned</option>
+                <option value="Active">Active</option>
+                <option value="Paused">Paused</option>
+              </select>
+              <input
+                className="input"
+                placeholder="Responsible owner"
+                value={campaignDraft.responsibleOwner || ''}
+                onChange={(event) =>
+                  handleDraftChange('responsibleOwner', event.target.value)
+                }
+              />
+            </div>
+            <div className="form-grid">
+              <input
+                className="input"
+                placeholder="Community partner"
+                value={campaignDraft.communityPartner || ''}
+                onChange={(event) =>
+                  handleDraftChange('communityPartner', event.target.value)
+                }
+              />
+              <input
+                className="input"
+                type="date"
+                value={campaignDraft.executionStartDate || ''}
+                onChange={(event) =>
+                  handleDraftChange('executionStartDate', event.target.value)
+                }
+              />
+              <input
+                className="input"
+                type="date"
+                value={campaignDraft.expectedCompletionDate || ''}
+                onChange={(event) =>
+                  handleDraftChange('expectedCompletionDate', event.target.value)
+                }
+              />
+            </div>
+            <textarea
+              className="textarea"
+              placeholder="Implementation steps"
+              value={campaignDraft.implementationSteps || ''}
+              onChange={(event) =>
+                handleDraftChange('implementationSteps', event.target.value)
+              }
+            />
+            <button
+              className="button"
+              type="button"
+              onClick={handleSaveExecutionPlan}
+            >
+              Save execution plan
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="module-card module-card__wide">
+        <div className="card-header">
+          <div>
+            <h3>Funding and transparency</h3>
+            <p className="muted">
+              Track progress toward the target and record contributions.
+            </p>
+          </div>
+        </div>
+        {!selectedCampaignId && (
+          <p className="muted">Select a campaign to see funding activity.</p>
+        )}
+        {selectedCampaignId && (
+          <div className="stack">
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Funding summary</h4>
+                <div className="questionnaire-progress">
+                  <div className="questionnaire-progress__track">
+                    <div
+                      className="questionnaire-progress__bar"
+                      style={{ width: `${fundingProgress}%` }}
+                    />
+                  </div>
+                  <span className="questionnaire-progress__label">
+                    {fundingProgress.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="metric-row">
+                  <span>Raised</span>
+                  <strong>
+                    {raisedAmount.toLocaleString()} {displayCurrency}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Target</span>
+                  <strong>
+                    {targetAmount.toLocaleString()} {displayCurrency}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Contributors</span>
+                  <strong>{contributorCount}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Allocated to operations</span>
+                  <strong>
+                    {allocatedOperations.toLocaleString()} {displayCurrency}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Allocated to execution</span>
+                  <strong>
+                    {allocatedExecution.toLocaleString()} {displayCurrency}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="module-card">
+                <h4>Record contribution</h4>
+                {contributionError ? (
+                  <div className="module-alert">{contributionError}</div>
+                ) : null}
+                {contributionStatus ? (
+                  <div className="module-alert">{contributionStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleContributionSubmit}>
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      placeholder="Amount"
+                      value={contributionForm.amount}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          amount: event.target.value,
+                        }))
+                      }
+                    />
+                    <select
+                      className="select"
+                      value={contributionForm.currency}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          currency: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="GEL">GEL</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+                  <input
+                    className="input"
+                    placeholder="Contributor name"
+                    value={contributionForm.contributorName}
+                    onChange={(event) =>
+                      setContributionForm((prev) => ({
+                        ...prev,
+                        contributorName: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="Contributor email"
+                    value={contributionForm.contributorEmail}
+                    onChange={(event) =>
+                      setContributionForm((prev) => ({
+                        ...prev,
+                        contributorEmail: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Note (optional)"
+                    value={contributionForm.note}
+                    onChange={(event) =>
+                      setContributionForm((prev) => ({
+                        ...prev,
+                        note: event.target.value,
+                      }))
+                    }
+                  />
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={contributionForm.isAnonymous}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          isAnonymous: event.target.checked,
+                        }))
+                      }
+                    />
+                    Contribute anonymously
+                  </label>
+                  <button className="button" type="submit">
+                    Record contribution
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className="module-card">
+              <h4>Recent contributions</h4>
+              {contributions.length === 0 ? (
+                <p className="muted">No contributions recorded yet.</p>
+              ) : (
+                <ul className="compact-list">
+                  {contributions.slice(0, 5).map((contrib) => (
+                    <li key={contrib.contributionId}>
+                      {contrib.isAnonymous
+                        ? 'Anonymous'
+                        : contrib.contributorName || 'Supporter'}{' '}
+                      — {contrib.amount} {contrib.currency}{' '}
+                      {contrib.paymentStatus ? `(${contrib.paymentStatus})` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="module-card module-card__wide">
+        <div className="card-header">
+          <div>
+            <h3>Execution, proof, and partners</h3>
+            <p className="muted">
+              Track milestones, spending, proof of work, and local partners.
+            </p>
+          </div>
+        </div>
+        {!selectedCampaignId && (
+          <p className="muted">Select a campaign to manage execution.</p>
+        )}
+        {selectedCampaignId && (
+          <div className="stack">
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Milestones</h4>
+                {milestoneError ? (
+                  <div className="module-alert">{milestoneError}</div>
+                ) : null}
+                {milestoneStatus ? (
+                  <div className="module-alert">{milestoneStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleMilestoneSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Milestone title"
+                    value={milestoneForm.title}
+                    onChange={(event) =>
+                      setMilestoneForm((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      placeholder="Amount target"
+                      value={milestoneForm.amountTarget}
+                      onChange={(event) =>
+                        setMilestoneForm((prev) => ({
+                          ...prev,
+                          amountTarget: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      type="date"
+                      value={milestoneForm.dueDate}
+                      onChange={(event) =>
+                        setMilestoneForm((prev) => ({
+                          ...prev,
+                          dueDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={milestoneForm.status}
+                      onChange={(event) =>
+                        setMilestoneForm((prev) => ({
+                          ...prev,
+                          status: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="Planned">Planned</option>
+                      <option value="Funding">Funding</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="Completion %"
+                      value={milestoneForm.completionPercent}
+                      onChange={(event) =>
+                        setMilestoneForm((prev) => ({
+                          ...prev,
+                          completionPercent: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <button className="button" type="submit">
+                    Add milestone
+                  </button>
+                </form>
+                {milestones.length === 0 ? (
+                  <p className="muted">No milestones yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {milestones.slice(0, 5).map((milestone) => (
+                      <li key={milestone.milestoneId}>
+                        {milestone.title} — {milestone.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="module-card">
+                <h4>Expenses</h4>
+                {expenseError ? (
+                  <div className="module-alert">{expenseError}</div>
+                ) : null}
+                {expenseStatus ? (
+                  <div className="module-alert">{expenseStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleExpenseSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Category"
+                    value={expenseForm.category}
+                    onChange={(event) =>
+                      setExpenseForm((prev) => ({
+                        ...prev,
+                        category: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      placeholder="Vendor"
+                      value={expenseForm.vendor}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          vendor: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      placeholder="Amount"
+                      value={expenseForm.amount}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          amount: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={expenseForm.currency}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          currency: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="GEL">GEL</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={expenseForm.milestoneId}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          milestoneId: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Link to milestone</option>
+                      {milestones.map((milestone) => (
+                        <option
+                          key={`expense-${milestone.milestoneId}`}
+                          value={milestone.milestoneId}
+                        >
+                          {milestone.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    className="input"
+                    placeholder="Receipt link"
+                    value={expenseForm.receiptLink}
+                    onChange={(event) =>
+                      setExpenseForm((prev) => ({
+                        ...prev,
+                        receiptLink: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Approved by"
+                    value={expenseForm.approvedBy}
+                    onChange={(event) =>
+                      setExpenseForm((prev) => ({
+                        ...prev,
+                        approvedBy: event.target.value,
+                      }))
+                    }
+                  />
+                  <button className="button" type="submit">
+                    Record expense
+                  </button>
+                </form>
+                {expenses.length === 0 ? (
+                  <p className="muted">No expenses yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {expenses.slice(0, 5).map((expense) => (
+                      <li key={expense.expenseId}>
+                      {expense.category} — {expense.amount} {expense.currency}{' '}
+                      {expense.approvalStatus
+                        ? `(${expense.approvalStatus})`
+                        : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Proof of work</h4>
+                {proofError ? <div className="module-alert">{proofError}</div> : null}
+                {proofStatus ? (
+                  <div className="module-alert">{proofStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleProofSubmit}>
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={proofForm.artifactType}
+                      onChange={(event) =>
+                        setProofForm((prev) => ({
+                          ...prev,
+                          artifactType: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="image">Image</option>
+                      <option value="pdf">PDF</option>
+                      <option value="video">Video</option>
+                      <option value="link">Link</option>
+                      <option value="text">Text update</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={proofForm.milestoneId}
+                      onChange={(event) =>
+                        setProofForm((prev) => ({
+                          ...prev,
+                          milestoneId: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Link to milestone</option>
+                      {milestones.map((milestone) => (
+                        <option
+                          key={`proof-${milestone.milestoneId}`}
+                          value={milestone.milestoneId}
+                        >
+                          {milestone.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    className="input"
+                    placeholder="Proof URL"
+                    value={proofForm.url}
+                    onChange={(event) =>
+                      setProofForm((prev) => ({
+                        ...prev,
+                        url: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Uploaded by"
+                    value={proofForm.uploadedBy}
+                    onChange={(event) =>
+                      setProofForm((prev) => ({
+                        ...prev,
+                        uploadedBy: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Caption"
+                    value={proofForm.caption}
+                    onChange={(event) =>
+                      setProofForm((prev) => ({
+                        ...prev,
+                        caption: event.target.value,
+                      }))
+                    }
+                  />
+                  <select
+                    className="select"
+                    value={proofForm.verificationStatus}
+                    onChange={(event) =>
+                      setProofForm((prev) => ({
+                        ...prev,
+                        verificationStatus: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Verified">Verified</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                  <button className="button" type="submit">
+                    Add proof
+                  </button>
+                </form>
+                {proofArtifacts.length === 0 ? (
+                  <p className="muted">No proof artifacts yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {proofArtifacts.slice(0, 5).map((artifact) => (
+                      <li key={artifact.proofId}>
+                        {artifact.artifactType} — {artifact.caption || artifact.url}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="module-card">
+                <h4>Partners</h4>
+                {partnerError ? (
+                  <div className="module-alert">{partnerError}</div>
+                ) : null}
+                {partnerStatus ? (
+                  <div className="module-alert">{partnerStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handlePartnerSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Partner name"
+                    value={partnerForm.name}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Role"
+                    value={partnerForm.role}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        role: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Contact"
+                    value={partnerForm.contact}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        contact: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Verification notes"
+                    value={partnerForm.verificationNotes}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        verificationNotes: event.target.value,
+                      }))
+                    }
+                  />
+                  <button className="button" type="submit">
+                    Add partner
+                  </button>
+                </form>
+                {partners.length === 0 ? (
+                  <p className="muted">No partners yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {partners.slice(0, 5).map((partner) => (
+                      <li key={partner.partnerId}>
+                        {partner.name} — {partner.role || 'Partner'}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Campaign updates</h4>
+                {campaignUpdateError ? (
+                  <div className="module-alert">{campaignUpdateError}</div>
+                ) : null}
+                {campaignUpdateStatus ? (
+                  <div className="module-alert">{campaignUpdateStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleCampaignUpdateSubmit}>
+                  <textarea
+                    className="textarea"
+                    placeholder="Update message"
+                    value={campaignUpdateForm.message}
+                    onChange={(event) =>
+                      setCampaignUpdateForm((prev) => ({
+                        ...prev,
+                        message: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      placeholder="Posted by"
+                      value={campaignUpdateForm.createdBy}
+                      onChange={(event) =>
+                        setCampaignUpdateForm((prev) => ({
+                          ...prev,
+                          createdBy: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Status note (optional)"
+                      value={campaignUpdateForm.status}
+                      onChange={(event) =>
+                        setCampaignUpdateForm((prev) => ({
+                          ...prev,
+                          status: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <button className="button" type="submit">
+                    Post update
+                  </button>
+                </form>
+                {campaignUpdates.length === 0 ? (
+                  <p className="muted">No updates yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {campaignUpdates.slice(0, 5).map((update) => (
+                      <li key={update.updateId}>
+                        {update.message}
+                        {update.createdBy ? ` — ${update.createdBy}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="module-card">
+                <h4>Execution tasks</h4>
+                {campaignTaskError ? (
+                  <div className="module-alert">{campaignTaskError}</div>
+                ) : null}
+                {campaignTaskStatus ? (
+                  <div className="module-alert">{campaignTaskStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleCampaignTaskSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Task title"
+                    value={campaignTaskForm.title}
+                    onChange={(event) =>
+                      setCampaignTaskForm((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Task description"
+                    value={campaignTaskForm.description}
+                    onChange={(event) =>
+                      setCampaignTaskForm((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={campaignTaskForm.status}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          status: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="Open">Open</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <input
+                      className="input"
+                      type="date"
+                      value={campaignTaskForm.dueDate}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          dueDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      placeholder="Assignee email"
+                      value={campaignTaskForm.assigneeEmail}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          assigneeEmail: event.target.value,
+                        }))
+                      }
+                    />
+                    <select
+                      className="select"
+                      value={campaignTaskForm.milestoneId}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          milestoneId: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Link to milestone</option>
+                      {milestones.map((milestone) => (
+                        <option
+                          key={`task-${milestone.milestoneId}`}
+                          value={milestone.milestoneId}
+                        >
+                          {milestone.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button className="button" type="submit">
+                    Create task
+                  </button>
+                </form>
+                {campaignTasks.length === 0 ? (
+                  <p className="muted">No tasks yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {campaignTasks.slice(0, 5).map((task) => (
+                      <li key={task.taskId}>
+                        {task.title} — {task.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Volunteer roster</h4>
+                {campaignVolunteerError ? (
+                  <div className="module-alert">{campaignVolunteerError}</div>
+                ) : null}
+                {campaignVolunteerStatus ? (
+                  <div className="module-alert">{campaignVolunteerStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleCampaignVolunteerSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Volunteer name"
+                    value={campaignVolunteerForm.name}
+                    onChange={(event) =>
+                      setCampaignVolunteerForm((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      placeholder="Email"
+                      value={campaignVolunteerForm.email}
+                      onChange={(event) =>
+                        setCampaignVolunteerForm((prev) => ({
+                          ...prev,
+                          email: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Phone"
+                      value={campaignVolunteerForm.phone}
+                      onChange={(event) =>
+                        setCampaignVolunteerForm((prev) => ({
+                          ...prev,
+                          phone: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <input
+                    className="input"
+                    placeholder="Role"
+                    value={campaignVolunteerForm.role}
+                    onChange={(event) =>
+                      setCampaignVolunteerForm((prev) => ({
+                        ...prev,
+                        role: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Notes"
+                    value={campaignVolunteerForm.notes}
+                    onChange={(event) =>
+                      setCampaignVolunteerForm((prev) => ({
+                        ...prev,
+                        notes: event.target.value,
+                      }))
+                    }
+                  />
+                  <button className="button" type="submit">
+                    Add volunteer
+                  </button>
+                </form>
+                {campaignVolunteers.length === 0 ? (
+                  <p className="muted">No volunteers yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {campaignVolunteers.slice(0, 5).map((volunteer) => (
+                      <li key={volunteer.volunteerId}>
+                        {volunteer.name} — {volunteer.role || 'Volunteer'}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="module-card">
+                <h4>Workday planning</h4>
+                <p className="muted">
+                  Use the Events tab to schedule community action days.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -4597,8 +6309,13 @@ function CRMMapTab() {
         )}
         </div>
         <div className="module-card module-card__wide panel">
-        <h3>Filtered people</h3>
-        <div className="table">
+        <div className="card-header">
+          <div>
+            <h3>Filtered people</h3>
+            <p className="muted">Results update as filters change.</p>
+          </div>
+        </div>
+        <div className="table table--scroll">
           <div className="table-row table-row--map table-head">
             <span>Name</span>
             <span>Email</span>
