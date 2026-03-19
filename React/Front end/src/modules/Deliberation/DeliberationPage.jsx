@@ -157,9 +157,19 @@ const intersectSets = (setA, setB) => {
   return result
 }
 
-export function DeliberationPage({ t }) {
+export function DeliberationPage({
+  t,
+  activeTabOverride,
+  onTabChange,
+  showTabs = true,
+}) {
   const translate = t || ((key, vars) => key)
   const [activeTab, setActiveTab] = useState('overview')
+  const applyActiveTab = (nextTab) => {
+    if (!nextTab) return
+    setActiveTab(nextTab)
+    if (onTabChange) onTabChange(nextTab)
+  }
   const [conversations, setConversations] = useState([])
   const [convoError, setConvoError] = useState('')
   const [activeId, setActiveId] = useState('')
@@ -204,6 +214,12 @@ export function DeliberationPage({ t }) {
   const [polisSiteId, setPolisSiteId] = useState('polis_site_id_dZO8TFLSfUGNe651NN')
   const [polisPageId, setPolisPageId] = useState('PAGE_ID')
   const [polisConversationId, setPolisConversationId] = useState('')
+
+  useEffect(() => {
+    if (activeTabOverride && activeTabOverride !== activeTab) {
+      setActiveTab(activeTabOverride)
+    }
+  }, [activeTabOverride, activeTab])
 
   const vennData = useMemo(() => {
     const summaries = report?.cluster_summaries || []
@@ -968,141 +984,60 @@ export function DeliberationPage({ t }) {
   const vennABOnly = new Set([...vennAB].filter((item) => !vennC.has(item)))
   const vennACOnly = new Set([...vennAC].filter((item) => !vennB.has(item)))
   const vennBCOnly = new Set([...vennBC].filter((item) => !vennA.has(item)))
-
   return (
     <section className="module">
-      <header className="module-header">
-        <div className="module-header__text">
-          <h2>{translate('deliberation.header.title')}</h2>
-          <p>{translate('deliberation.header.subtitle')}</p>
+      <details className="dashboard-detail">
+        <summary>Survey stats</summary>
+        <div className="dashboard-detail__body">
+          <div className="module-header__meta">
+            <div className="module-header__metric">
+              <span>Conversations</span>
+              <strong>{conversations.length}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Approved</span>
+              <strong>{approvedComments.length}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Pending</span>
+              <strong>{pendingComments.length}</strong>
+            </div>
+          </div>
         </div>
-        <div className="module-header__meta">
-          <div className="module-header__metric">
-            <span>Conversations</span>
-            <strong>{conversations.length}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Approved</span>
-            <strong>{approvedComments.length}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Pending</span>
-            <strong>{pendingComments.length}</strong>
-          </div>
-        </div>
-      </header>
+      </details>
 
       {convoError ? <div className="module-alert">{convoError}</div> : null}
 
-      <div className="subtabs">
-        {[
-          { id: 'overview', label: translate('deliberation.tabs.overview') },
-          { id: 'setup', label: translate('deliberation.tabs.setup') },
-          { id: 'distribute', label: translate('deliberation.tabs.distribute') },
-          { id: 'insights', label: translate('deliberation.tabs.insights') },
-          { id: 'data', label: translate('deliberation.tabs.dataEntry') },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {showTabs ? (
+        <div className="subtabs">
+          {[
+            { id: 'overview', label: translate('deliberation.tabs.overview') },
+            { id: 'setup', label: translate('deliberation.tabs.setup') },
+            { id: 'distribute', label: translate('deliberation.tabs.distribute') },
+            { id: 'moderation', label: 'Moderation' },
+            { id: 'insights', label: translate('deliberation.tabs.insights') },
+            { id: 'data', label: translate('deliberation.tabs.dataEntry') },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={tab.id === activeTab ? 'subtab active' : 'subtab'}
+              onClick={() => applyActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {activeTab === 'overview' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Survey journey</h3>
-                <p className="muted">Follow a clear flow from setup to insights.</p>
-              </div>
-            </div>
-            <div className="journey-grid">
-              <div className="journey-card">
-                <span className="pill">Step 1</span>
-                <h4>Setup the conversation</h4>
-                <p className="muted">Define topic, rules, and participation settings.</p>
-                <div className="journey-card__actions">
-                  <button className="button-secondary" type="button" onClick={() => setActiveTab('setup')}>
-                    Go to Setup
-                  </button>
-                </div>
-              </div>
-              <div className="journey-card">
-                <span className="pill">Step 2</span>
-                <h4>Collect responses</h4>
-                <p className="muted">Launch participation and moderate comments.</p>
-                <div className="journey-card__actions">
-                  <button className="button-secondary" type="button" onClick={() => setActiveTab('overview')}>
-                    Manage conversations
-                  </button>
-                </div>
-              </div>
-              <div className="journey-card">
-                <span className="pill">Step 3</span>
-                <h4>Analyze the survey</h4>
-                <p className="muted">Generate consensus, polarization, and clusters.</p>
-                <div className="journey-card__actions">
-                  <button className="button-secondary" type="button" onClick={() => setActiveTab('insights')}>
-                    View Insights
-                  </button>
-                </div>
-              </div>
-              <div className="journey-card">
-                <span className="pill">Step 4</span>
-                <h4>Import or export data</h4>
-                <p className="muted">Upload datasets or download exports.</p>
-                <div className="journey-card__actions">
-                  <button className="button-secondary" type="button" onClick={() => setActiveTab('data')}>
-                    Go to Data
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
-                <h3>Conversation control center</h3>
-                <p className="muted">Select the active conversation to manage.</p>
+                <h3>Conversations</h3>
+                <p className="muted">Open, close, and select the active conversation.</p>
               </div>
-            </div>
-            <select
-              className="select"
-              value={activeId}
-              onChange={(event) => setActiveId(event.target.value)}
-            >
-              <option value="">Select conversation</option>
-              {conversations.map((convo) => (
-                <option key={convo.id} value={convo.id}>
-                  {convo.topic}
-                </option>
-              ))}
-            </select>
-            {activeConvo ? (
-              <div className="stack">
-                <p className="muted">
-                  Status: {activeConvo.is_open ? 'Open' : 'Closed'} | Comments:{' '}
-                  {activeConvo.allow_comment_submission ? 'Enabled' : 'Disabled'}
-                </p>
-                <p className="muted">{activeConvo.description}</p>
-                <p className="muted">
-                  Approved comments: {approvedComments.length} | Pending:{' '}
-                  {pendingComments.length}
-                </p>
-              </div>
-            ) : (
-              <p className="muted">Select a conversation to continue.</p>
-            )}
-
-            <div className="card-divider">
-              <h4>Conversation manager</h4>
             </div>
             <div className="table">
               <div className="table-row table-head">
@@ -1169,30 +1104,25 @@ export function DeliberationPage({ t }) {
 
       {activeTab === 'setup' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Setup checklist</h3>
-                <p className="muted">
-                  Define the conversation, seed statements, and set participation rules before launch.
-                </p>
-              </div>
+          <details className="dashboard-detail">
+            <summary>Setup checklist</summary>
+            <div className="dashboard-detail__body">
+              <ul className="compact-list">
+                <li>
+                  <span>Create or update the conversation</span>
+                  <strong>Topic + description</strong>
+                </li>
+                <li>
+                  <span>Seed the initial statements</span>
+                  <strong>CSV or manual entry</strong>
+                </li>
+                <li>
+                  <span>Share participation link</span>
+                  <strong>Invite supporters and members</strong>
+                </li>
+              </ul>
             </div>
-            <ul className="compact-list">
-              <li>
-                <span>Create or update the conversation</span>
-                <strong>Topic + description</strong>
-              </li>
-              <li>
-                <span>Seed the initial statements</span>
-                <strong>CSV or manual entry</strong>
-              </li>
-              <li>
-                <span>Share participation link</span>
-                <strong>Invite supporters and members</strong>
-              </li>
-            </ul>
-          </div>
+          </details>
 
           <div className="module-grid">
             <div className="module-card">
@@ -1404,17 +1334,12 @@ export function DeliberationPage({ t }) {
 
       {activeTab === 'distribute' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Distribute the survey</h3>
-                <p className="muted">
-                  Share the participation link or embed the survey into your site.
-                </p>
-              </div>
-              <div className="pill">Distribute</div>
+          <details className="dashboard-detail">
+            <summary>Distribute the survey</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">Share the participation link or embed the survey into your site.</p>
             </div>
-          </div>
+          </details>
 
           <div className="module-grid">
             <div className="module-card">
@@ -2092,30 +2017,28 @@ export function DeliberationPage({ t }) {
 
       {activeTab === 'data' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Data entry and import</h3>
-                <p className="muted">
-                  Bring your own dataset or use the templates to seed new surveys.
-                </p>
-              </div>
+          <details className="dashboard-detail">
+            <summary>Data entry and import</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">
+                Bring your own dataset or use templates to seed new surveys.
+              </p>
+              <ul className="compact-list">
+                <li>
+                  <span>Import votes and comments</span>
+                  <strong>CSV upload</strong>
+                </li>
+                <li>
+                  <span>Seed statements quickly</span>
+                  <strong>Download templates</strong>
+                </li>
+                <li>
+                  <span>Run analysis after import</span>
+                  <strong>Optional</strong>
+                </li>
+              </ul>
             </div>
-            <ul className="compact-list">
-              <li>
-                <span>Import votes and comments</span>
-                <strong>CSV upload</strong>
-              </li>
-              <li>
-                <span>Seed statements quickly</span>
-                <strong>Download templates</strong>
-              </li>
-              <li>
-                <span>Run analysis after import</span>
-                <strong>Optional</strong>
-              </li>
-            </ul>
-          </div>
+          </details>
 
           <div className="module-card module-card__wide">
             <h3>CSV import</h3>

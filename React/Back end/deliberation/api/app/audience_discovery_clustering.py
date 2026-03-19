@@ -4,8 +4,12 @@ from typing import Dict, List, Optional
 import numpy as np
 from sklearn.cluster import KMeans
 
+from .audience_discovery_entities import top_entities
 
-def cluster_chunks(chunks: List[Dict[str, object]], cluster_count: Optional[int] = None) -> List[Dict[str, object]]:
+
+def cluster_chunks(
+    chunks: List[Dict[str, object]], cluster_count: Optional[int] = None
+) -> List[Dict[str, object]]:
     embeddings = [chunk.get("embedding") for chunk in chunks if chunk.get("embedding")]
     if len(embeddings) < 2:
         return []
@@ -32,4 +36,10 @@ def cluster_chunks(chunks: List[Dict[str, object]], cluster_count: Optional[int]
         if len(cluster["sampleSnippets"]) < 3:
             snippet = chunk["text"][:180].strip()
             cluster["sampleSnippets"].append(snippet)
+        for entity in chunk.get("entities", []) or []:
+            cluster.setdefault("_entity_counts", []).append(entity)
+    for cluster in clusters.values():
+        top = top_entities(cluster.get("_entity_counts", []), limit=2)
+        cluster["label"] = " / ".join(top)
+        cluster.pop("_entity_counts", None)
     return list(clusters.values())

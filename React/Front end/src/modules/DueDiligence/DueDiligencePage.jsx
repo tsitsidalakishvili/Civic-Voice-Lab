@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE, getJson, requestJson } from '../../services/api'
+import { InfoBox } from '../../ui'
 
-export function DueDiligencePage({ t }) {
+export function DueDiligencePage({
+  t,
+  activeTabOverride,
+  onTabChange,
+  showTabs = true,
+}) {
   const translate = t || ((key, vars) => key)
   const [activeTab, setActiveTab] = useState('analysis')
+  const applyActiveTab = (nextTab) => {
+    if (!nextTab) return
+    setActiveTab(nextTab)
+    if (onTabChange) onTabChange(nextTab)
+  }
   const [summary, setSummary] = useState(null)
   const [crmSummary, setCrmSummary] = useState(null)
   const [competitors, setCompetitors] = useState([])
@@ -51,6 +62,12 @@ export function DueDiligencePage({ t }) {
   const [gmailTo, setGmailTo] = useState(
     () => localStorage.getItem('ddGmailTo') || '',
   )
+
+  useEffect(() => {
+    if (activeTabOverride && activeTabOverride !== activeTab) {
+      setActiveTab(activeTabOverride)
+    }
+  }, [activeTabOverride, activeTab])
 
   const parseCsvText = (text) => {
     const rows = []
@@ -586,77 +603,61 @@ export function DueDiligencePage({ t }) {
 
   return (
     <section className="module">
-      <header className="module-header">
-        <div className="module-header__text">
-          <h2>{translate('dueDiligence.header.title')}</h2>
-          <p>{translate('dueDiligence.header.subtitle')}</p>
+      <details className="dashboard-detail">
+        <summary>Risk pipeline stats</summary>
+        <div className="dashboard-detail__body">
+          <div className="module-header__meta">
+            <div className="module-header__metric">
+              <span>Competitors</span>
+              <strong>{summary?.competitors ?? '—'}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Network People</span>
+              <strong>{crmSummary?.total_people ?? '—'}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Supporters</span>
+              <strong>{crmSummary?.supporters ?? '—'}</strong>
+            </div>
+          </div>
         </div>
-        <div className="module-header__meta">
-          <div className="module-header__metric">
-            <span>Competitors</span>
-            <strong>{summary?.competitors ?? '—'}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Network People</span>
-            <strong>{crmSummary?.total_people ?? '—'}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Supporters</span>
-            <strong>{crmSummary?.supporters ?? '—'}</strong>
-          </div>
-        </div>
-      </header>
+      </details>
 
       {error ? <div className="module-alert">{error}</div> : null}
 
-      <div className="subtabs">
-        {[
-          { id: 'how-it-works', label: translate('dueDiligence.tabs.how') },
-          { id: 'configure', label: translate('dueDiligence.tabs.configure') },
-          { id: 'analysis', label: translate('dueDiligence.tabs.analysis') },
-          { id: 'debate-prep', label: translate('dueDiligence.tabs.debate') },
-          { id: 'launch', label: translate('dueDiligence.tabs.launch') },
-          { id: 'watchlist', label: translate('dueDiligence.tabs.watchlist') },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {showTabs ? (
+        <div className="subtabs">
+          {[
+            { id: 'how-it-works', label: translate('dueDiligence.tabs.how') },
+            { id: 'configure', label: translate('dueDiligence.tabs.configure') },
+            { id: 'analysis', label: translate('dueDiligence.tabs.analysis') },
+            { id: 'debate-prep', label: translate('dueDiligence.tabs.debate') },
+            { id: 'launch', label: translate('dueDiligence.tabs.launch') },
+            { id: 'watchlist', label: translate('dueDiligence.tabs.watchlist') },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={tab.id === activeTab ? 'subtab active' : 'subtab'}
+              onClick={() => applyActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {activeTab === 'how-it-works' && (
-        <div className="module-card module-card__wide section-intro">
-          <div className="card-header">
-            <div>
-              <h3>How the workflow runs</h3>
-              <p className="muted">From intake to external review.</p>
-            </div>
-            <div className="pill">Due Diligence</div>
+        <details className="dashboard-detail">
+          <summary>How the workflow runs</summary>
+          <div className="dashboard-detail__body">
+            <InfoBox
+              title="Workflow summary"
+              summary="Intake → Enrich → Evidence → Risk → Report → Watchlist."
+              hint="1) Choose a subject and confirm Network context. 2) Configure sources (Wikidata, OpenSanctions, News/Web). 3) Run analysis for risk summary and PDF report. 4) Use Debate prep for evidence cards. 5) Save to watchlist or launch external DD app."
+            />
           </div>
-          <div className="stack">
-            <p>
-              1) Choose a subject (person or organization) and confirm the Network context.
-            </p>
-            <p>
-              2) Configure sources (Wikidata, OpenSanctions, News/Web) to scope the analysis.
-            </p>
-            <p>
-              3) Run analysis to generate the risk summary, source hits, and a PDF report.
-            </p>
-            <p>
-              4) Use Debate prep to map themes, counterpoints, and evidence cards for live debates.
-            </p>
-            <p>
-              5) Save the subject to the watchlist or launch the external DD app with prefilled
-              parameters.
-            </p>
-          </div>
-        </div>
+        </details>
       )}
 
       {activeTab === 'analysis' && (

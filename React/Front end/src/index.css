@@ -1,18 +1,35 @@
 :root {
-  --text: #475569;
+  --text: #334155;
   --text-h: #0f172a;
-  --bg: #f1f5f9;
+  --muted: #64748b;
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --surface-strong: #eef2ff;
   --border: #e2e8f0;
+  --border-strong: #cbd5f5;
   --accent: #2563eb;
+  --accent-strong: #1d4ed8;
   --accent-bg: rgba(37, 99, 235, 0.12);
   --accent-border: rgba(37, 99, 235, 0.45);
-  --shadow:
-    rgba(15, 23, 42, 0.08) 0 12px 24px -12px,
-    rgba(15, 23, 42, 0.08) 0 8px 12px -8px;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --focus-ring: rgba(37, 99, 235, 0.35);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 12px 24px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 22px 40px rgba(15, 23, 42, 0.12);
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
 
-  font-family: system-ui, 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, 'Segoe UI', sans-serif;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -57,4 +74,13 @@ h3 {
 
 p {
   margin: 0;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }

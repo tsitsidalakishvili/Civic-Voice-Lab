@@ -26,8 +26,10 @@ def _keyword_segments(text: str, limit: int = 4) -> List[Dict[str, object]]:
     return keyword_segments(text, limit=limit)
 
 
-def generate_segment_drafts(text: str, description: str) -> Dict[str, object]:
-    return generate_segments_llm(text=text, description=description)
+def generate_segment_drafts(
+    text: str, description: str, locale: Optional[str] = None
+) -> Dict[str, object]:
+    return generate_segments_llm(text=text, description=description, locale=locale)
 
 
 def validate_segments(raw_payload: Dict[str, object]) -> SegmentDraftResponse:

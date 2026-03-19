@@ -1,26 +1,46 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, BarElement, CategoryScale, Legend, LinearScale, Tooltip } from 'chart.js'
-import { API_BASE, requestJson } from '../../services/api'
+import { API_BASE, requestForm, requestJson } from '../../services/api'
+import { Field, FormSection, InfoBox, InfoHint, StatusMessage } from '../../ui'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
-const DEFAULT_URL = ''
+const DEFAULT_URL = 'https://www.hubspot.com/sitemap.xml'
+const DEFAULT_LOCALE = 'en'
+const DEFAULT_LANGUAGE_PRESET = 'en'
+const VIEWS = ['overview', 'pages', 'segments', 'clusters', 'messaging', 'metrics']
+const SUGGESTED_LINKS = [
+  'https://freedomsquare.ge/wp-content/uploads/2025/02/FS_PROGRAM.pdf',
+  'https://freedomsquare.ge',
+  'https://transparency.ge',
+  'https://ombudsman.ge',
+  'https://geostat.ge',
+  'https://nbg.gov.ge',
+  'https://europa.eu',
+  'https://ec.europa.eu',
+]
 
-export function AudienceDiscoveryPage({ t }) {
+export function AudienceDiscoveryPage({
+  t,
+  activeViewOverride,
+  onViewChange,
+  showTabs = true,
+}) {
   const translate = t || ((key) => key)
   const [targetUrl, setTargetUrl] = useState(DEFAULT_URL)
   const [manualUrls, setManualUrls] = useState('')
   const [description, setDescription] = useState('')
   const [brand, setBrand] = useState('')
-  const [locale, setLocale] = useState('')
+  const [locale, setLocale] = useState(DEFAULT_LOCALE)
   const [crawlDepth, setCrawlDepth] = useState(1)
   const [allowedDomains, setAllowedDomains] = useState('')
   const [productRules, setProductRules] = useState('')
   const [crawlTimeout, setCrawlTimeout] = useState(12)
-  const [maxPages, setMaxPages] = useState(200)
+  const [maxPages, setMaxPages] = useState(2)
   const [clusterCount, setClusterCount] = useState('')
-  const [languagePreset, setLanguagePreset] = useState('auto')
+  const [languagePreset, setLanguagePreset] = useState(DEFAULT_LANGUAGE_PRESET)
+  const [suggestedUrl, setSuggestedUrl] = useState('')
   const [analysis, setAnalysis] = useState(null)
   const [segments, setSegments] = useState([])
   const [pages, setPages] = useState([])
@@ -33,14 +53,43 @@ export function AudienceDiscoveryPage({ t }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState(null)
-  const [activeView, setActiveView] = useState('overview')
+  const getViewFromUrl = () => {
+    const search = new URLSearchParams(window.location.search)
+    return search.get('audience_view')
+  }
+  const [activeView, setActiveView] = useState(() => {
+    const fromUrl = getViewFromUrl()
+    return VIEWS.includes(fromUrl) ? fromUrl : 'overview'
+  })
+  const applyActiveView = (nextView) => {
+    if (!nextView) return
+    setActiveView(nextView)
+    if (onViewChange) onViewChange(nextView)
+  }
   const [exportStatus, setExportStatus] = useState('')
   const [runNotice, setRunNotice] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [viewLoading, setViewLoading] = useState('')
+  const [pdfFile, setPdfFile] = useState(null)
+  const [pdfNotice, setPdfNotice] = useState('')
   const [copyNotice, setCopyNotice] = useState('')
   const [sitemapNotice, setSitemapNotice] = useState('')
   const [pageFilter, setPageFilter] = useState('')
   const [segmentGroupBy, setSegmentGroupBy] = useState('cluster')
   const [segmentClusterFilter, setSegmentClusterFilter] = useState('')
+
+  useEffect(() => {
+    if (!VIEWS.includes(activeView)) return
+    const url = new URL(window.location.href)
+    url.searchParams.set('audience_view', activeView)
+    window.history.replaceState({}, '', url)
+  }, [activeView])
+
+  useEffect(() => {
+    if (activeViewOverride && activeViewOverride !== activeView) {
+      setActiveView(activeViewOverride)
+    }
+  }, [activeViewOverride, activeView])
 
   const metrics = useMemo(() => {
     if (!analysis?.summary) return []
@@ -187,12 +236,13 @@ export function AudienceDiscoveryPage({ t }) {
   const analysisSource = useMemo(() => {
     if (analysis?.url) return analysis.url
     if (targetUrl.trim()) return targetUrl.trim()
+    if (pdfFile?.name) return pdfFile.name
     const firstManual = manualUrls
       .split(/\r?\n/)
       .map((item) => item.trim())
       .find(Boolean)
     return firstManual || ''
-  }, [analysis?.url, manualUrls, targetUrl])
+  }, [analysis?.url, manualUrls, targetUrl, pdfFile])
 
   useEffect(() => {
     if (!analysis?.runId) return
@@ -232,8 +282,8 @@ export function AudienceDiscoveryPage({ t }) {
       .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean)
-    if (!trimmedUrl && manualList.length === 0) {
-      setError('Enter a sitemap URL or at least one product URL.')
+    if (!pdfFile && !trimmedUrl && manualList.length === 0) {
+      setError('Enter a sitemap URL, upload a PDF, or add product URLs.')
       return
     }
     setError('')
@@ -251,34 +301,36 @@ export function AudienceDiscoveryPage({ t }) {
     setExportStatus('')
     setRunNotice('')
     setSitemapNotice('')
+    setPdfNotice('')
     try {
-      const result = await requestJson('/audience-discovery/analysis/start', {
-        payload: {
-          url: trimmedUrl,
-          urls: manualList,
-          description: description.trim(),
-          brand: brand.trim(),
-          locale: locale.trim(),
-          crawlDepth: Number(crawlDepth) || 1,
-          crawlTimeoutS: Number(crawlTimeout) || 12,
-          maxPages: Number(maxPages) || 200,
-          allowedDomains: domainList,
-          productRules: ruleList,
-          clusterCount: clusterCount ? Number(clusterCount) : undefined,
-        },
-      })
+      let result
+      if (pdfFile) {
+        const formData = new FormData()
+        formData.append('file', pdfFile)
+        formData.append('description', description.trim())
+        formData.append('brand', brand.trim())
+        formData.append('locale', locale.trim())
+        result = await requestForm('/audience-discovery/analysis/upload', { formData })
+      } else {
+        result = await requestJson('/audience-discovery/analysis/start', {
+          payload: {
+            url: trimmedUrl,
+            urls: manualList,
+            description: description.trim(),
+            brand: brand.trim(),
+            locale: locale.trim(),
+            crawlDepth: Number(crawlDepth) || 1,
+            crawlTimeoutS: Number(crawlTimeout) || 12,
+            maxPages: Number(maxPages) || 200,
+            allowedDomains: domainList,
+            productRules: ruleList,
+            clusterCount: clusterCount ? Number(clusterCount) : undefined,
+          },
+        })
+      }
       setAnalysis(result)
       setRunNotice(`Run created: ${result.runId}`)
-      const [pagesPayload, segmentsPayload, clustersPayload, metricsPayload] = await Promise.all([
-        requestJson(`/audience-discovery/analysis/${result.runId}/pages`, { method: 'GET' }),
-        requestJson(`/audience-discovery/analysis/${result.runId}/segments`, { method: 'GET' }),
-        requestJson(`/audience-discovery/analysis/${result.runId}/clusters`, { method: 'GET' }),
-        requestJson(`/audience-discovery/analysis/${result.runId}/metrics`, { method: 'GET' }),
-      ])
-      setPages(pagesPayload.pages || [])
-      setSegments(segmentsPayload.segments || [])
-      setClusters(clustersPayload.clusters || [])
-      setAnalysis((prev) => ({ ...(prev || {}), summary: metricsPayload.summary }))
+      await refreshRunData(result.runId)
     } catch (err) {
       const message = err?.message || 'Audience discovery failed.'
       if (message.includes('Failed to fetch')) {
@@ -346,6 +398,8 @@ export function AudienceDiscoveryPage({ t }) {
           return
         }
         setManualUrls(locs.slice(0, 200).join('\n'))
+        setPdfFile(null)
+        setPdfNotice('')
         setSitemapNotice(`Loaded ${Math.min(locs.length, 200)} URLs from sitemap.`)
       } catch (err) {
         setSitemapNotice('Unable to parse sitemap file.')
@@ -382,6 +436,116 @@ export function AudienceDiscoveryPage({ t }) {
     }
   }
 
+  const refreshRunData = async (runId) => {
+    if (!runId) return
+    setRefreshing(true)
+    setError('')
+    try {
+      const [pagesPayload, segmentsPayload, clustersPayload, metricsPayload] = await Promise.all([
+        requestJson(`/audience-discovery/analysis/${runId}/pages`, { method: 'GET' }),
+        requestJson(`/audience-discovery/analysis/${runId}/segments`, { method: 'GET' }),
+        requestJson(`/audience-discovery/analysis/${runId}/clusters`, { method: 'GET' }),
+        requestJson(`/audience-discovery/analysis/${runId}/metrics`, { method: 'GET' }),
+      ])
+      setPages(pagesPayload.pages || [])
+      setSegments(segmentsPayload.segments || [])
+      setClusters(clustersPayload.clusters || [])
+      setAnalysis((prev) => ({ ...(prev || {}), summary: metricsPayload.summary }))
+    } catch (err) {
+      const message = err?.message || 'Unable to refresh analysis results.'
+      if (message.includes('Failed to fetch')) {
+        setError(`Unable to reach the backend at ${API_BASE}. Check the API port and backend logs.`)
+      } else if (message.includes('Internal Server Error')) {
+        setError('Backend error while running discovery. Check backend logs for details.')
+      } else {
+        setError(message)
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const renderEmptyState = (title, message, viewId) => (
+    <div className="module-card module-card__wide">
+      <div className="card-header">
+        <div>
+          <h3>{title}</h3>
+          <p className="muted">{viewLoading === viewId ? 'Loading…' : message}</p>
+        </div>
+      </div>
+      <div className="filter-row">
+        {!analysis?.runId ? (
+          <button
+            className="button-secondary"
+            type="button"
+            onClick={() => applyActiveView('overview')}
+          >
+            Go to overview
+          </button>
+        ) : null}
+        {analysis?.runId ? (
+          <button
+            className="button-secondary"
+            type="button"
+            onClick={() => refreshRunData(analysis.runId)}
+            disabled={refreshing || viewLoading === viewId}
+          >
+            {refreshing || viewLoading === viewId ? 'Refreshing...' : 'Refresh results'}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+
+  const fetchViewData = async (viewId, runId) => {
+    if (!runId) return
+    setViewLoading(viewId)
+    setError('')
+    try {
+      if (viewId === 'pages') {
+        const payload = await requestJson(`/audience-discovery/analysis/${runId}/pages`, {
+          method: 'GET',
+        })
+        setPages(payload.pages || [])
+      }
+      if (viewId === 'segments') {
+        const payload = await requestJson(`/audience-discovery/analysis/${runId}/segments`, {
+          method: 'GET',
+        })
+        setSegments(payload.segments || [])
+      }
+      if (viewId === 'clusters') {
+        const payload = await requestJson(`/audience-discovery/analysis/${runId}/clusters`, {
+          method: 'GET',
+        })
+        setClusters(payload.clusters || [])
+      }
+      if (viewId === 'metrics') {
+        const payload = await requestJson(`/audience-discovery/analysis/${runId}/metrics`, {
+          method: 'GET',
+        })
+        setAnalysis((prev) => ({ ...(prev || {}), summary: payload.summary }))
+      }
+      if (viewId === 'messaging') {
+        const payload = await requestJson(`/audience-discovery/analysis/${runId}/messaging`, {
+          method: 'GET',
+        })
+        setMessaging(payload.messaging || [])
+      }
+    } catch (err) {
+      const message = err?.message || 'Unable to load analysis results.'
+      if (message.includes('Failed to fetch')) {
+        setError(`Unable to reach the backend at ${API_BASE}. Check the API port and backend logs.`)
+      } else if (message.includes('Internal Server Error')) {
+        setError('Backend error while running discovery. Check backend logs for details.')
+      } else {
+        setError(message)
+      }
+    } finally {
+      setViewLoading('')
+    }
+  }
+
   const stageSnapshot = useMemo(() => {
     if (status?.stages?.length) return status.stages
     return analysis?.stages || []
@@ -392,224 +556,417 @@ export function AudienceDiscoveryPage({ t }) {
     ? 'Updated every 2 seconds while the run is active.'
     : 'Pipeline progress for this analysis.'
 
+  useEffect(() => {
+    if (!analysis?.runId) return
+    if (activeView === 'pages' && !pages.length) {
+      fetchViewData('pages', analysis.runId)
+    }
+    if (activeView === 'segments' && !segments.length) {
+      fetchViewData('segments', analysis.runId)
+    }
+    if (activeView === 'clusters' && !clusters.length) {
+      fetchViewData('clusters', analysis.runId)
+    }
+    if (activeView === 'metrics' && !analysis?.summary) {
+      fetchViewData('metrics', analysis.runId)
+    }
+    if (activeView === 'messaging' && !messaging.length) {
+      fetchViewData('messaging', analysis.runId)
+    }
+  }, [
+    activeView,
+    analysis?.runId,
+    analysis?.summary,
+    pages.length,
+    segments.length,
+    clusters.length,
+    messaging.length,
+  ])
+
   return (
     <section className="module">
-      <header className="module-header">
-        <div className="module-header__text">
-          <h2>{translate('module.audienceDiscovery')}</h2>
-          <p>{translate('module.audienceDiscovery.desc')}</p>
+      {showTabs ? (
+        <div className="subtabs">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'pages', label: 'Pages' },
+            { id: 'segments', label: 'Segments' },
+            { id: 'clusters', label: 'Clusters' },
+            { id: 'messaging', label: 'Messaging' },
+            { id: 'metrics', label: 'Metrics' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={activeView === tab.id ? 'subtab active' : 'subtab'}
+              onClick={() => applyActiveView(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-      </header>
-
-      <div className="subtabs">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'pages', label: 'Pages' },
-          { id: 'segments', label: 'Segments' },
-          { id: 'clusters', label: 'Clusters' },
-          { id: 'messaging', label: 'Messaging' },
-          { id: 'metrics', label: 'Metrics' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={activeView === tab.id ? 'subtab active' : 'subtab'}
-            onClick={() => setActiveView(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      ) : null}
+      <StatusMessage tone="error" message={error} />
 
       {activeView === 'overview' && (
         <div className="dashboard-layout">
           <div className="dashboard-main">
-            <div className="module-card module-card__wide section-intro ade-hero">
-              <div className="card-header">
-                <div>
-                  <span className="eyebrow">Predictive Intelligence</span>
-                  <h3>Audience Discovery Engine</h3>
-                  <p className="muted">
-                    AI is the engine. ADE is the roadmap that turns content into audience
-                    decisions with evidence-backed insights.
-                  </p>
+            <details className="dashboard-detail">
+              <summary>Predictive intelligence overview</summary>
+              <div className="dashboard-detail__body">
+                <div className="card-header">
+                  <div>
+                    <span className="eyebrow">Predictive Intelligence</span>
+                    <h3>Signal to segment</h3>
+                    <p className="muted">
+                      Turn content into evidence-backed audience insight.
+                      <InfoHint text="AI is the engine. ADE is the roadmap that turns content into audience decisions with evidence-backed insights." />
+                    </p>
+                  </div>
+                  <div className="pill">PI</div>
                 </div>
-                <div className="pill">PI</div>
+                <div className="journey-grid">
+                  <div className="journey-card">
+                    <h4>Inputs</h4>
+                    <p className="muted">
+                      Sitemaps, PDFs, product pages, and positioning notes.
+                    </p>
+                  </div>
+                  <div className="journey-card">
+                    <h4>Intelligence</h4>
+                    <p className="muted">
+                      Chunking, clustering, evidence verification, and segment validation.
+                    </p>
+                  </div>
+                  <div className="journey-card">
+                    <h4>Outputs</h4>
+                    <p className="muted">
+                      Audience segments, cited evidence, and messaging recommendations.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="journey-grid">
-                <div className="journey-card">
-                  <h4>Inputs</h4>
-                  <p className="muted">Sitemaps, PDFs, product pages, and positioning notes.</p>
-                </div>
-                <div className="journey-card">
-                  <h4>Intelligence</h4>
-                  <p className="muted">
-                    Chunking, clustering, evidence verification, and segment validation.
-                  </p>
-                </div>
-                <div className="journey-card">
-                  <h4>Outputs</h4>
-                  <p className="muted">
-                    Audience segments, cited evidence, and messaging recommendations.
-                  </p>
-                </div>
-              </div>
-            </div>
+            </details>
 
             <div className="module-card module-card__wide section-intro">
               <div className="card-header">
                 <div>
-                  <h3>Run discovery</h3>
+                  <h3>Start a run</h3>
                   <p className="muted">
-                    Provide a sitemap URL, product pages, or a PDF. The analysis returns
-                    audience segments with evidence and messaging recommendations.
+                    Add a sitemap, product URLs, or a PDF to generate segments.
+                    <InfoHint text="The run will extract evidence, cluster content, and generate messaging recommendations for each segment." />
                   </p>
                 </div>
-                <div className="pill">ADE</div>
+                <div className="pill">Run</div>
               </div>
-              <div className="filter-row">
-                <input
-                  className="input"
-                  placeholder="Sitemap or seed URL (https://company.com/sitemap.xml)"
-                  value={targetUrl}
-                  onChange={(event) => setTargetUrl(event.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Short description (optional)"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Brand (optional)"
-                  value={brand}
-                  onChange={(event) => setBrand(event.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Locale (optional)"
-                  value={locale}
-                  onChange={(event) => setLocale(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={languagePreset}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    setLanguagePreset(value)
-                    if (value === 'auto') setLocale('')
-                    if (value === 'en') setLocale('en')
-                    if (value === 'ka') setLocale('ka')
-                  }}
-                >
-                  <option value="auto">Language: Auto</option>
-                  <option value="en">Language: English</option>
-                  <option value="ka">Language: Georgian</option>
-                </select>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleAnalyze}
-                  disabled={loading}
-                >
-                  {loading ? 'Running...' : 'Run analysis'}
-                </button>
-              </div>
-              <div className="stack">
-                <label className="label">Manual product URLs (one per line)</label>
-                <textarea
-                  className="textarea"
-                  placeholder="https://company.com/products/widget-a"
-                  value={manualUrls}
-                  onChange={(event) => setManualUrls(event.target.value)}
-                />
-              </div>
-              <div
-                className="drop-zone"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  handleSitemapFile(event.dataTransfer.files?.[0] || null)
-                }}
+              <FormSection
+                title={
+                  <span>
+                    Sources <InfoHint text="Add at least one source to start the run." />
+                  </span>
+                }
+                description="Start with a sitemap URL or upload files."
               >
-                <p className="muted">Drag and drop a sitemap XML file here.</p>
-                <input
-                  className="input"
-                  type="file"
-                  accept=".xml"
-                  onChange={(event) => handleSitemapFile(event.target.files?.[0] || null)}
+                <div className="form-grid">
+                  <Field
+                    id="ade-url"
+                    label="Sitemap or seed URL"
+                    helper="Use a sitemap or single URL. Leave blank if uploading a PDF or manual URLs."
+                  >
+                    <input
+                      className="input"
+                      placeholder="https://company.com/sitemap.xml"
+                      value={targetUrl}
+                      onChange={(event) => {
+                        setTargetUrl(event.target.value)
+                        if (pdfFile) {
+                          setPdfFile(null)
+                          setPdfNotice('')
+                        }
+                      }}
+                    />
+                  </Field>
+                  <Field id="ade-description" label="Short description" helper="Optional.">
+                    <input
+                      className="input"
+                      placeholder="Civic engagement platform for local communities"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+                  </Field>
+                  <Field id="ade-brand" label="Brand" helper="Optional.">
+                    <input
+                      className="input"
+                      placeholder="Freedom Square"
+                      value={brand}
+                      onChange={(event) => setBrand(event.target.value)}
+                    />
+                  </Field>
+                  <Field id="ade-locale" label="Locale" helper="Optional. e.g., en, ka.">
+                    <input
+                      className="input"
+                      placeholder="en"
+                      value={locale}
+                      onChange={(event) => setLocale(event.target.value)}
+                    />
+                  </Field>
+                  <Field id="ade-language" label="Language preset" helper="Auto or forced.">
+                    <select
+                      className="select"
+                      value={languagePreset}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setLanguagePreset(value)
+                        if (value === 'auto') setLocale('')
+                        if (value === 'en') setLocale('en')
+                        if (value === 'ka') setLocale('ka')
+                      }}
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="en">English</option>
+                      <option value="ka">Georgian</option>
+                    </select>
+                  </Field>
+                  <div className="field field--action">
+                    <label className="label">Run</label>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={handleAnalyze}
+                      disabled={loading}
+                    >
+                      {loading ? 'Running...' : 'Run analysis'}
+                    </button>
+                    <div className="field__helper">Starts the run.</div>
+                  </div>
+                </div>
+                <StatusMessage
+                  tone="info"
+                  message={loading ? 'Analysis running. You can switch tabs to monitor progress.' : ''}
                 />
-                {sitemapNotice ? <p className="muted">{sitemapNotice}</p> : null}
-              </div>
+                <StatusMessage tone="success" message={runNotice} />
+              </FormSection>
               <details className="dashboard-detail">
-                <summary>Advanced crawl settings</summary>
+                <summary>Suggested sources</summary>
                 <div className="dashboard-detail__body">
-                  <label className="label">Crawl depth (0-2)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    max="2"
-                    value={crawlDepth}
-                    onChange={(event) => setCrawlDepth(event.target.value)}
-                  />
-                  <label className="label">Crawl timeout (seconds)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="3"
-                    max="60"
-                    value={crawlTimeout}
-                    onChange={(event) => setCrawlTimeout(event.target.value)}
-                  />
-                  <label className="label">Max pages</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="10"
-                    max="1000"
-                    value={maxPages}
-                    onChange={(event) => setMaxPages(event.target.value)}
-                  />
-                  <label className="label">Allowed domains (comma separated)</label>
-                  <input
-                    className="input"
-                    placeholder="freedomsquare.ge"
-                    value={allowedDomains}
-                    onChange={(event) => setAllowedDomains(event.target.value)}
-                  />
-                  <label className="label">Product URL rules (regex, one per line)</label>
-                  <textarea
-                    className="textarea"
-                    placeholder="/product\n/services\n/program"
-                    value={productRules}
-                    onChange={(event) => setProductRules(event.target.value)}
-                  />
-                  <label className="label">Cluster count (optional)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="2"
-                    max="12"
-                    value={clusterCount}
-                    onChange={(event) => setClusterCount(event.target.value)}
-                  />
-                  <label className="label">Clustering granularity</label>
-                  <input
-                    className="input"
-                    type="range"
-                    min="2"
-                    max="12"
-                    value={clusterCount || 6}
-                    onChange={(event) => setClusterCount(event.target.value)}
-                  />
+                  <div className="form-grid">
+                    <Field id="ade-suggested" label="Suggested link" helper="Optional demo link.">
+                      <select
+                        className="select"
+                        value={suggestedUrl}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setSuggestedUrl(value)
+                          if (value) {
+                            setTargetUrl(value)
+                            setManualUrls('')
+                            setSitemapNotice('')
+                            setPdfFile(null)
+                            setPdfNotice('')
+                          }
+                        }}
+                      >
+                        <option value="">Try a suggested source…</option>
+                        {SUGGESTED_LINKS.map((link) => (
+                          <option key={link} value={link}>
+                            {link}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <div className="field field--action">
+                      <label className="label">Apply</label>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => {
+                          if (suggestedUrl) {
+                            setTargetUrl(suggestedUrl)
+                            setManualUrls('')
+                            setSitemapNotice('')
+                            setPdfFile(null)
+                            setPdfNotice('')
+                          }
+                        }}
+                      >
+                        Use link
+                      </button>
+                      <div className="field__helper">Prefills sitemap URL.</div>
+                    </div>
+                  </div>
                 </div>
               </details>
-              {error ? <div className="module-alert">{error}</div> : null}
-              {runNotice ? (
-                <div className="module-alert module-alert--success">{runNotice}</div>
-              ) : null}
+              <details className="dashboard-detail">
+                <summary>Manual URLs</summary>
+                <div className="dashboard-detail__body">
+                  <Field id="ade-manual-urls" label="Product URLs" helper="One per line.">
+                    <textarea
+                      className="textarea"
+                      placeholder="https://company.com/products/widget-a"
+                      value={manualUrls}
+                      onChange={(event) => {
+                        setManualUrls(event.target.value)
+                        if (pdfFile) {
+                          setPdfFile(null)
+                          setPdfNotice('')
+                        }
+                      }}
+                    />
+                  </Field>
+                </div>
+              </details>
+              <details className="dashboard-detail">
+                <summary>Upload files</summary>
+                <div className="dashboard-detail__body">
+                  <div className="form-grid">
+                    <div className="drop-zone">
+                      <label className="label">Sitemap XML</label>
+                      <input
+                        className="input"
+                        type="file"
+                        accept=".xml"
+                        onChange={(event) => handleSitemapFile(event.target.files?.[0] || null)}
+                      />
+                      <StatusMessage tone="info" message={sitemapNotice} />
+                    </div>
+                    <div className="drop-zone">
+                      <label className="label">PDF file</label>
+                      <input
+                        className="input"
+                        type="file"
+                        accept=".pdf"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null
+                          setPdfFile(file)
+                          if (file) {
+                            setTargetUrl('')
+                            setManualUrls('')
+                            setSitemapNotice('')
+                            setSuggestedUrl('')
+                            setLanguagePreset('ka')
+                            setLocale('ka')
+                            setPdfNotice('PDF selected. Locale set to Georgian (ka).')
+                          } else {
+                            setPdfNotice('')
+                          }
+                        }}
+                      />
+                      {pdfFile ? <p className="muted">Selected: {pdfFile.name}</p> : null}
+                      <StatusMessage tone="info" message={pdfNotice} />
+                      {pdfFile ? (
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => {
+                            setPdfFile(null)
+                            setPdfNotice('')
+                          }}
+                        >
+                          Clear PDF
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details className="dashboard-detail">
+                <summary>Advanced settings</summary>
+                <div className="dashboard-detail__body">
+                  <Field
+                    id="ade-crawl-depth"
+                    label="Crawl depth (0-2)"
+                    helper="0 = only provided URLs. 2 = include linked pages."
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="2"
+                      value={crawlDepth}
+                      onChange={(event) => setCrawlDepth(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id="ade-crawl-timeout"
+                    label="Crawl timeout (seconds)"
+                    helper="How long to wait before timing out each page."
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      min="3"
+                      max="60"
+                      value={crawlTimeout}
+                      onChange={(event) => setCrawlTimeout(event.target.value)}
+                    />
+                  </Field>
+                  <Field id="ade-max-pages" label="Max pages (limit 2)" helper="Upper limit.">
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      max="2"
+                      value={maxPages}
+                      onChange={(event) => setMaxPages(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id="ade-allowed-domains"
+                    label="Allowed domains"
+                    helper="Comma-separated list of domains to include."
+                  >
+                    <input
+                      className="input"
+                      placeholder="freedomsquare.ge"
+                      value={allowedDomains}
+                      onChange={(event) => setAllowedDomains(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id="ade-product-rules"
+                    label="Product URL rules"
+                    helper="Regex patterns, one per line."
+                  >
+                    <textarea
+                      className="textarea"
+                      placeholder="/product\n/services\n/program"
+                      value={productRules}
+                      onChange={(event) => setProductRules(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id="ade-cluster-count"
+                    label="Cluster count (optional)"
+                    helper="Override default cluster count."
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      min="2"
+                      max="12"
+                      value={clusterCount}
+                      onChange={(event) => setClusterCount(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id="ade-cluster-range"
+                    label="Clustering granularity"
+                    helper="Adjust how coarse the clusters should be."
+                  >
+                    <input
+                      className="input"
+                      type="range"
+                      min="2"
+                      max="12"
+                      value={clusterCount || 6}
+                      onChange={(event) => setClusterCount(event.target.value)}
+                    />
+                  </Field>
+                </div>
+              </details>
+              <p className="muted">
+                If a run returns no segments, try a different source or a PDF with dense content.
+              </p>
             </div>
 
             {stageSnapshot.length ? (
@@ -631,7 +988,7 @@ export function AudienceDiscoveryPage({ t }) {
                     <span className="questionnaire-progress__label">{progress}%</span>
                   </div>
                 ) : null}
-                <div className="table">
+                <div className="table table--stacked">
                   <div className="table-row table-head">
                     <span>Stage</span>
                     <span>Status</span>
@@ -640,12 +997,28 @@ export function AudienceDiscoveryPage({ t }) {
                   </div>
                   {stageSnapshot.map((stage) => (
                     <div className="table-row" key={stage.id}>
-                      <span>{stage.label}</span>
-                      <span>{stage.status}</span>
-                      <span>{stage.count ?? '—'}</span>
-                      <span>{stage.durationSec ? `${stage.durationSec}s` : '—'}</span>
+                      <span data-label="Stage">{stage.label}</span>
+                      <span data-label="Status">{stage.status}</span>
+                      <span data-label="Count">{stage.count ?? '—'}</span>
+                      <span data-label="Duration">
+                        {stage.durationSec ? `${stage.durationSec}s` : '—'}
+                      </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : null}
+
+            {analysis?.runId && !segments.length ? (
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>No insights yet</h3>
+                    <p className="muted">
+                      This run did not produce segments. Try a different source or a PDF with
+                      dense content.
+                    </p>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -683,37 +1056,26 @@ export function AudienceDiscoveryPage({ t }) {
             ) : null}
 
             {!analysis && !loading ? (
-              <div className="module-card module-card__wide">
-                <div className="card-header">
-                  <div>
-                    <h3>What you will get</h3>
-                    <p className="muted">
-                      The output includes segments, evidence snippets, and messaging
-                      recommendations ready for marketing teams.
-                    </p>
-                  </div>
+              <details className="dashboard-detail">
+                <summary>What you will get</summary>
+                <div className="dashboard-detail__body">
+                  <InfoBox
+                    title="Outputs"
+                    summary="Segments, evidence, and messaging suggestions."
+                    hint="Outputs include 2–5 segments with rationale, verified quotes tied to URLs, and 3–5 headlines + CTAs per segment."
+                    actions={
+                      <>
+                        <button className="button-secondary" type="button">
+                          View sample outputs
+                        </button>
+                        <button className="button-secondary" type="button">
+                          See demo run
+                        </button>
+                      </>
+                    }
+                  />
                 </div>
-                <div className="module-grid">
-                  <div className="module-card">
-                    <h3>Segments</h3>
-                    <p className="muted">
-                      2 to 5 audience segments with names, rationale, and confidence.
-                    </p>
-                  </div>
-                  <div className="module-card">
-                    <h3>Evidence</h3>
-                    <p className="muted">
-                      Verified quotes tied to source URLs to support each segment.
-                    </p>
-                  </div>
-                  <div className="module-card">
-                    <h3>Messaging</h3>
-                    <p className="muted">
-                      3 to 5 headlines, tone notes, and calls-to-action per segment.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              </details>
             ) : null}
           </div>
 
@@ -769,34 +1131,36 @@ export function AudienceDiscoveryPage({ t }) {
                   <div>
                     <span className="label">Source</span>
                     <p className="muted">
-                      {analysisSource ? (
-                        <a href={analysisSource} target="_blank" rel="noreferrer">
-                          {analysisSource}
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+                      {analysisSource
+                        ? analysisSource.startsWith('http')
+                          ? (
+                              <a href={analysisSource} target="_blank" rel="noreferrer">
+                                {analysisSource}
+                              </a>
+                            )
+                          : analysisSource
+                        : '—'}
                     </p>
                   </div>
                   <div className="filter-row">
                     <button
                       className="button-secondary"
                       type="button"
-                      onClick={() => setActiveView('segments')}
+                    onClick={() => applyActiveView('segments')}
                     >
                       Review segments
                     </button>
                     <button
                       className="button-secondary"
                       type="button"
-                      onClick={() => setActiveView('metrics')}
+                    onClick={() => applyActiveView('metrics')}
                     >
                       View metrics
                     </button>
                     <button
                       className="button-secondary"
                       type="button"
-                      onClick={() => setActiveView('messaging')}
+                    onClick={() => applyActiveView('messaging')}
                     >
                       Messaging
                     </button>
@@ -908,6 +1272,16 @@ export function AudienceDiscoveryPage({ t }) {
         </div>
       ) : null}
 
+      {activeView === 'metrics' && !metrics.length
+        ? renderEmptyState(
+            analysis?.runId ? 'Metrics not ready' : 'No analysis yet',
+            analysis?.runId
+              ? 'Metrics will appear once the run completes. You can also refresh results.'
+              : 'Run analysis in Overview to see metrics.',
+            'metrics',
+          )
+        : null}
+
       {activeView === 'metrics' && analysis?.runId ? (
         <div className="module-card module-card__wide">
           <div className="card-header">
@@ -956,14 +1330,20 @@ export function AudienceDiscoveryPage({ t }) {
             </div>
           </div>
           <div className="filter-row">
-            <input
-              className="input"
-              placeholder="Filter pages by title or URL"
-              value={pageFilter}
-              onChange={(event) => setPageFilter(event.target.value)}
-            />
+            <Field
+              id="ade-page-filter"
+              label="Filter pages"
+              helper="Search by title or URL."
+            >
+              <input
+                className="input"
+                placeholder="e.g., donation or /about"
+                value={pageFilter}
+                onChange={(event) => setPageFilter(event.target.value)}
+              />
+            </Field>
           </div>
-          <div className="table">
+          <div className="table table--stacked">
             <div className="table-row table-head">
               <span>Title</span>
               <span>URL</span>
@@ -974,16 +1354,16 @@ export function AudienceDiscoveryPage({ t }) {
             </div>
             {filteredPages.map((page) => (
               <div className="table-row" key={page.url}>
-                <span>{page.title || 'Untitled'}</span>
-                <span>
+                <span data-label="Title">{page.title || 'Untitled'}</span>
+                <span data-label="URL">
                   <a href={page.url} target="_blank" rel="noreferrer">
                     {page.url}
                   </a>
                 </span>
-                <span>{page.crawlStatus || '—'}</span>
-                <span>{page.chunkCount ?? '—'}</span>
-                <span>{page.wordCount ?? '—'}</span>
-                <span>
+                <span data-label="Status">{page.crawlStatus || '—'}</span>
+                <span data-label="Chunks">{page.chunkCount ?? '—'}</span>
+                <span data-label="Words">{page.wordCount ?? '—'}</span>
+                <span data-label="Inspect">
                   <button
                     className="button-secondary"
                     type="button"
@@ -1015,11 +1395,15 @@ export function AudienceDiscoveryPage({ t }) {
         </div>
       ) : null}
 
-      {activeView === 'pages' && !pages.length && analysis?.runId ? (
-        <div className="module-card module-card__wide">
-          <p className="muted">No pages detected yet. Try a sitemap URL.</p>
-        </div>
-      ) : null}
+      {activeView === 'pages' && !pages.length
+        ? renderEmptyState(
+            analysis?.runId ? 'No pages detected' : 'No analysis yet',
+            analysis?.runId
+              ? 'No pages detected yet. Try a sitemap URL or adjust crawl settings.'
+              : 'Run analysis in Overview to see discovered pages.',
+            'pages',
+          )
+        : null}
 
       {activeView === 'clusters' && clusters.length ? (
         <div className="module-card module-card__wide">
@@ -1032,10 +1416,11 @@ export function AudienceDiscoveryPage({ t }) {
           <div className="cluster-grid">
             {clusters.map((cluster) => (
               <div className="cluster-card" key={cluster.clusterId}>
-                <div className="cluster-card__header">
-                  <h4>{cluster.clusterId}</h4>
+              <div className="cluster-card__header">
+                <h4>{cluster.label || cluster.clusterId}</h4>
                   <span className="pill">{cluster.clusterSize} chunks</span>
                 </div>
+              {cluster.label ? <p className="muted">Cluster ID: {cluster.clusterId}</p> : null}
                 <p className="muted">
                   Segments: {segmentCountsByCluster[cluster.clusterId] || 0}
                 </p>
@@ -1059,7 +1444,7 @@ export function AudienceDiscoveryPage({ t }) {
                   className="button-secondary"
                   type="button"
                   onClick={() => {
-                    setActiveView('segments')
+                    applyActiveView('segments')
                     setSegmentGroupBy('cluster')
                     setSegmentClusterFilter(cluster.clusterId)
                   }}
@@ -1093,11 +1478,15 @@ export function AudienceDiscoveryPage({ t }) {
         </div>
       ) : null}
 
-      {activeView === 'clusters' && !clusters.length && analysis?.runId ? (
-        <div className="module-card module-card__wide">
-          <p className="muted">Clusters will appear once embeddings are created.</p>
-        </div>
-      ) : null}
+      {activeView === 'clusters' && !clusters.length
+        ? renderEmptyState(
+            analysis?.runId ? 'No clusters yet' : 'No analysis yet',
+            analysis?.runId
+              ? 'Clusters will appear once embeddings are created.'
+              : 'Run analysis in Overview to see clustering results.',
+            'clusters',
+          )
+        : null}
 
       {activeView === 'segments' && segments.length ? (
         <>
@@ -1240,11 +1629,15 @@ export function AudienceDiscoveryPage({ t }) {
         </>
       ) : null}
 
-      {activeView === 'segments' && !segments.length && analysis?.runId ? (
-        <div className="module-card module-card__wide">
-          <p className="muted">No segments generated yet.</p>
-        </div>
-      ) : null}
+      {activeView === 'segments' && !segments.length
+        ? renderEmptyState(
+            analysis?.runId ? 'No segments yet' : 'No analysis yet',
+            analysis?.runId
+              ? 'No segments generated yet. Try a different source or a content-rich PDF.'
+              : 'Run analysis in Overview to see audience segments.',
+            'segments',
+          )
+        : null}
 
       {activeView === 'messaging' && messaging.length ? (
         <div className="module-card module-card__wide">
@@ -1296,11 +1689,15 @@ export function AudienceDiscoveryPage({ t }) {
         </div>
       ) : null}
 
-      {activeView === 'messaging' && !messaging.length && analysis?.runId ? (
-        <div className="module-card module-card__wide">
-          <p className="muted">Confirm segments to unlock messaging.</p>
-        </div>
-      ) : null}
+      {activeView === 'messaging' && !messaging.length
+        ? renderEmptyState(
+            analysis?.runId ? 'Messaging not ready' : 'No analysis yet',
+            analysis?.runId
+              ? 'Confirm segments to unlock messaging recommendations.'
+              : 'Run analysis in Overview to generate messaging ideas.',
+            'messaging',
+          )
+        : null}
 
     </section>
   )

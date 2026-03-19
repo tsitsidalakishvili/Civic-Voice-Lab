@@ -39,12 +39,17 @@ const downloadCsv = (filename, rows) => {
   URL.revokeObjectURL(url)
 }
 
-export function AdminPage({ t }) {
+export function AdminPage({ t, showTabs = true }) {
   const translate = t || ((key, vars) => key)
   const [activeTab, setActiveTab] = useState('admin')
   const [status, setStatus] = useState(null)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState([])
+  const [contributions, setContributions] = useState([])
+  const [proofQueue, setProofQueue] = useState([])
+  const [expenseQueue, setExpenseQueue] = useState([])
+  const [moderationStatus, setModerationStatus] = useState('')
+  const [campaignMetrics, setCampaignMetrics] = useState(null)
   const [slackMessage, setSlackMessage] = useState(
     'Freedom Square Network is connected to Slack.',
   )
@@ -61,12 +66,19 @@ export function AdminPage({ t }) {
     conversations: [],
   })
   const [summary, setSummary] = useState(null)
+  const [featureFlags, setFeatureFlags] = useState(null)
+  const [campaignAdminStatus, setCampaignAdminStatus] = useState('')
 
   const loadAdminData = () => {
     setError('')
     Promise.all([
       getJson('/crm/admin/status'),
       getJson('/crm/admin/feedback'),
+      getJson('/crm/admin/contributions?limit=200'),
+      getJson('/crm/admin/proof-queue?status=Pending'),
+      getJson('/crm/admin/expense-queue?status=Pending'),
+      getJson('/crm/admin/campaign-metrics'),
+      getJson('/crm/admin/feature-flags'),
       getJson('/crm/tasks?limit=200'),
       getJson('/crm/events?limit=200'),
       getJson('/crm/segments'),
@@ -78,6 +90,11 @@ export function AdminPage({ t }) {
         ([
           statusPayload,
           feedbackPayload,
+          contributionsPayload,
+          proofQueuePayload,
+          expenseQueuePayload,
+          metricsPayload,
+          flagsPayload,
           tasksPayload,
           eventsPayload,
           segmentsPayload,
@@ -87,6 +104,17 @@ export function AdminPage({ t }) {
         ]) => {
           setStatus(statusPayload)
           setFeedback(Array.isArray(feedbackPayload) ? feedbackPayload : [])
+          setContributions(
+            Array.isArray(contributionsPayload) ? contributionsPayload : [],
+          )
+          setProofQueue(
+            Array.isArray(proofQueuePayload) ? proofQueuePayload : [],
+          )
+          setExpenseQueue(
+            Array.isArray(expenseQueuePayload) ? expenseQueuePayload : [],
+          )
+          setCampaignMetrics(metricsPayload || null)
+          setFeatureFlags(flagsPayload || null)
           setDeleteData({
             tasks: Array.isArray(tasksPayload) ? tasksPayload : [],
             events: Array.isArray(eventsPayload) ? eventsPayload : [],
@@ -113,6 +141,64 @@ export function AdminPage({ t }) {
       })
     } catch (err) {
       setSlackError(err.message || 'Slack test failed.')
+    }
+  }
+
+  const handleProofDecision = async (proofId, status) => {
+    setModerationStatus('')
+    try {
+      await requestJson(`/crm/admin/proof/${proofId}`, {
+        method: 'PATCH',
+        payload: { verificationStatus: status },
+      })
+      setModerationStatus('Proof queue updated.')
+      loadAdminData()
+    } catch (err) {
+      setModerationStatus(err.message || 'Unable to update proof status.')
+    }
+  }
+
+  const handleExpenseDecision = async (expenseId, status) => {
+    setModerationStatus('')
+    try {
+      await requestJson(`/crm/admin/expenses/${expenseId}`, {
+        method: 'PATCH',
+        payload: { approvalStatus: status, approvedBy: 'Admin' },
+      })
+      setModerationStatus('Expense queue updated.')
+      loadAdminData()
+    } catch (err) {
+      setModerationStatus(err.message || 'Unable to update expense status.')
+    }
+  }
+
+  const handleBackfillCampaigns = async () => {
+    setCampaignAdminStatus('')
+    try {
+      const result = await requestJson('/crm/admin/campaigns/backfill', {
+        method: 'POST',
+      })
+      setCampaignAdminStatus(
+        `Backfill complete. Updated ${result?.updated ?? 0} campaigns.`,
+      )
+      loadAdminData()
+    } catch (err) {
+      setCampaignAdminStatus(err.message || 'Backfill failed.')
+    }
+  }
+
+  const handleSeedDemoCampaign = async () => {
+    setCampaignAdminStatus('')
+    try {
+      const result = await requestJson('/crm/admin/campaigns/seed-demo', {
+        method: 'POST',
+      })
+      setCampaignAdminStatus(
+        `Demo campaign seeded (${result?.campaignId || 'ok'}).`,
+      )
+      loadAdminData()
+    } catch (err) {
+      setCampaignAdminStatus(err.message || 'Seed demo failed.')
     }
   }
 
@@ -174,56 +260,54 @@ export function AdminPage({ t }) {
 
   return (
     <section className="module">
-      <header className="module-header">
-        <div className="module-header__text">
-          <h2>{translate('settings.header.title')}</h2>
-          <p>{translate('settings.header.subtitle')}</p>
+      <details className="dashboard-detail">
+        <summary>System status</summary>
+        <div className="dashboard-detail__body">
+          <div className="module-header__meta">
+            <div className="module-header__metric">
+              <span>Neo4j</span>
+              <strong>{status?.neo4j_status ?? '—'}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Survey API</span>
+              <strong>{status?.deliberation_status ?? '—'}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Slack</span>
+              <strong>{status?.slack_configured ? 'On' : 'Off'}</strong>
+            </div>
+          </div>
         </div>
-        <div className="module-header__meta">
-          <div className="module-header__metric">
-            <span>Neo4j</span>
-            <strong>{status?.neo4j_status ?? '—'}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Survey API</span>
-            <strong>{status?.deliberation_status ?? '—'}</strong>
-          </div>
-          <div className="module-header__metric">
-            <span>Slack</span>
-            <strong>{status?.slack_configured ? 'On' : 'Off'}</strong>
-          </div>
-        </div>
-      </header>
+      </details>
 
       {error ? <div className="module-alert">{error}</div> : null}
 
-      <div className="subtabs">
-        {[
-          { id: 'admin', label: translate('settings.tabs.admin') },
-          { id: 'data', label: translate('settings.tabs.data') },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {showTabs ? (
+        <div className="subtabs">
+          {[
+            { id: 'admin', label: translate('settings.tabs.admin') },
+            { id: 'data', label: translate('settings.tabs.data') },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={tab.id === activeTab ? 'subtab active' : 'subtab'}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {activeTab === 'admin' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Settings overview</h3>
-                <p className="muted">Monitor system health and manage admin tools.</p>
-              </div>
-              <div className="pill">Admin</div>
+          <details className="dashboard-detail">
+            <summary>Settings overview</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">Monitor system health and manage admin tools.</p>
             </div>
-          </div>
+          </details>
           <div className="module-grid">
             <div className="module-card">
             <h3>System status</h3>
@@ -248,6 +332,18 @@ export function AdminPage({ t }) {
             <span>Feedback email</span>
             <strong>{status?.feedback_configured ? 'Configured' : 'Not set'}</strong>
           </div>
+            <div className="metric-row">
+              <span>Public campaigns</span>
+              <strong>{featureFlags?.enable_public_campaigns ? 'On' : 'Off'}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Payments</span>
+              <strong>{featureFlags?.enable_payments ? 'On' : 'Off'}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Max contribution</span>
+              <strong>{featureFlags?.max_contribution_amount ?? '—'}</strong>
+            </div>
           </div>
 
           <div className="module-card">
@@ -287,6 +383,193 @@ export function AdminPage({ t }) {
               >
                 {clearLoading ? 'Clearing…' : 'Clear Aura DB'}
               </button>
+            </div>
+          </div>
+
+          {moderationStatus ? (
+            <div className="module-alert">{moderationStatus}</div>
+          ) : null}
+
+          <div className="module-card module-card__wide">
+            <h3>Campaign analytics</h3>
+            <p className="muted">High-level fundraising and trust metrics.</p>
+            <div className="module-grid">
+              <div className="module-card">
+                <div className="metric-row">
+                  <span>Total campaigns</span>
+                  <strong>{campaignMetrics?.totalCampaigns ?? 0}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Total raised</span>
+                  <strong>{campaignMetrics?.totalRaised ?? 0}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Average contribution</span>
+                  <strong>{campaignMetrics?.averageContribution ?? 0}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Contributions</span>
+                  <strong>{campaignMetrics?.contributionCount ?? 0}</strong>
+                </div>
+              </div>
+              <div className="module-card">
+                <div className="metric-row">
+                  <span>Completed campaigns</span>
+                  <strong>{campaignMetrics?.completedCount ?? 0}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Verified campaigns</span>
+                  <strong>{campaignMetrics?.verifiedCount ?? 0}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Avg budget variance</span>
+                  <strong>
+                    {campaignMetrics?.avgBudgetVariance
+                      ? `${(campaignMetrics.avgBudgetVariance * 100).toFixed(1)}%`
+                      : '0%'}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Top cities</span>
+                  <strong>
+                    {(campaignMetrics?.topCities || [])
+                      .map((item) => `${item.city} (${item.count})`)
+                      .join(', ') || '—'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <h3>Campaign tools</h3>
+            <p className="muted">Backfill new fields and seed demo data.</p>
+            {campaignAdminStatus ? (
+              <div className="module-alert">{campaignAdminStatus}</div>
+            ) : null}
+            <div className="table-actions">
+              <button className="button-secondary" type="button" onClick={handleBackfillCampaigns}>
+                Backfill campaigns
+              </button>
+              <button className="button-secondary" type="button" onClick={handleSeedDemoCampaign}>
+                Seed demo campaign
+              </button>
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <h3>Proof verification queue</h3>
+            <p className="muted">Approve or reject proof artifacts.</p>
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Campaign</span>
+                <span>Type</span>
+                <span>Caption</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {proofQueue.length === 0 && (
+                <div className="table-row empty">No proofs pending review.</div>
+              )}
+              {proofQueue.map((row) => (
+                <div className="table-row" key={row.proofId}>
+                  <span>{row.campaignName || 'Campaign'}</span>
+                  <span>{row.artifactType || 'Proof'}</span>
+                  <span>{row.caption || row.url || '—'}</span>
+                  <span>{row.verificationStatus || 'Pending'}</span>
+                  <span>
+                    <button
+                      className="button-secondary button-secondary--small"
+                      type="button"
+                      onClick={() => handleProofDecision(row.proofId, 'Verified')}
+                    >
+                      Verify
+                    </button>
+                    <button
+                      className="button-secondary button-secondary--small"
+                      type="button"
+                      onClick={() => handleProofDecision(row.proofId, 'Rejected')}
+                    >
+                      Reject
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <h3>Expense approval queue</h3>
+            <p className="muted">Review expense approvals and receipts.</p>
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Campaign</span>
+                <span>Category</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {expenseQueue.length === 0 && (
+                <div className="table-row empty">No expenses pending review.</div>
+              )}
+              {expenseQueue.map((row) => (
+                <div className="table-row" key={row.expenseId}>
+                  <span>{row.campaignName || 'Campaign'}</span>
+                  <span>{row.category || 'Expense'}</span>
+                  <span>
+                    {row.amount} {row.currency || 'GEL'}
+                  </span>
+                  <span>{row.approvalStatus || 'Pending'}</span>
+                  <span>
+                    <button
+                      className="button-secondary button-secondary--small"
+                      type="button"
+                      onClick={() => handleExpenseDecision(row.expenseId, 'Approved')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="button-secondary button-secondary--small"
+                      type="button"
+                      onClick={() => handleExpenseDecision(row.expenseId, 'Rejected')}
+                    >
+                      Reject
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <h3>Payments monitor</h3>
+            <p className="muted">Recent contributions and payment status.</p>
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Campaign</span>
+                <span>Contributor</span>
+                <span>Amount</span>
+                <span>Ops share</span>
+                <span>Exec share</span>
+                <span>Status</span>
+                <span>Time</span>
+              </div>
+              {contributions.length === 0 && (
+                <div className="table-row empty">No contributions yet.</div>
+              )}
+              {contributions.map((row) => (
+                <div className="table-row" key={row.contributionId}>
+                  <span>{row.campaignName || 'Campaign'}</span>
+                  <span>{row.contributorName || 'Anonymous'}</span>
+                  <span>
+                    {row.amount} {row.currency || 'GEL'}
+                  </span>
+                  <span>{row.operationalShareAmount ?? 0}</span>
+                  <span>{row.executionShareAmount ?? 0}</span>
+                  <span>{row.paymentStatus || '—'}</span>
+                  <span>{row.createdAt || '—'}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -395,15 +678,12 @@ export function AdminPage({ t }) {
 
       {activeTab === 'data' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Data management</h3>
-                <p className="muted">Export summaries and monitor data quality.</p>
-              </div>
-              <div className="pill">Data</div>
+          <details className="dashboard-detail">
+            <summary>Data management</summary>
+            <div className="dashboard-detail__body">
+              <p className="muted">Export summaries and monitor data quality.</p>
             </div>
-          </div>
+          </details>
           <div className="module-grid">
             <div className="module-card">
             <h3>People data quality</h3>

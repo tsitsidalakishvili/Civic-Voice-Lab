@@ -10,14 +10,15 @@ from urllib.parse import urlparse
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .audience_discovery_chunker import build_chunks
 from .audience_discovery_clustering import cluster_chunks
-from .audience_discovery_crawler import crawl_site
+from .audience_discovery_crawler import CrawlPage, CrawlResult, crawl_site
 from .audience_discovery_embeddings import EmbeddingsService
+from .audience_discovery_entities import extract_entities
 from .audience_discovery_evidence import verify_evidence
 from .audience_discovery_domain_rules import augment_segments_for_domain
 from .audience_discovery_metrics import compute_metrics
@@ -154,7 +155,7 @@ class AnalysisStartRequest(BaseModel):
     seed_urls: List[str] = Field(default_factory=list, alias="seedUrls")
     crawl_depth: int = Field(default=1, alias="crawlDepth", ge=0, le=2)
     crawl_timeout_s: int = Field(default=12, alias="crawlTimeoutS", ge=3, le=60)
-    max_pages: int = Field(default=200, alias="maxPages", ge=10, le=1000)
+    max_pages: int = Field(default=200, alias="maxPages", ge=1, le=1000)
     allowed_domains: List[str] = Field(default_factory=list, alias="allowedDomains")
     product_rules: List[str] = Field(default_factory=list, alias="productRules")
     cluster_count: Optional[int] = Field(default=None, alias="clusterCount")
@@ -327,42 +328,15 @@ def _start_stage(stages: List[dict], stage_id: str):
             break
 
 
-def _run_analysis(payload: AnalysisStartRequest) -> dict:
-    start = time.time()
-    stages = _init_stages()
-
-    sitemap_url = (payload.sitemap_url or "").strip()
-    seed_urls = payload.seed_urls or payload.urls or []
-    seed_urls = [item.strip() for item in seed_urls if item.strip()]
-    primary_url = (payload.url or "").strip()
-    if primary_url:
-        if _looks_like_sitemap_url(primary_url) and not sitemap_url:
-            sitemap_url = primary_url
-        else:
-            seed_urls.append(primary_url)
-    if not sitemap_url and not seed_urls:
-        raise HTTPException(status_code=400, detail="Provide a sitemap URL or product URLs.")
-
-    env_timeout = _env_int("ADE_CRAWL_TIMEOUT_S", payload.crawl_timeout_s)
-    env_max_pages = _env_int("ADE_MAX_PAGES", payload.max_pages)
-    env_cluster_count = _env_int("ADE_CLUSTER_COUNT", 0)
-    crawl_timeout = env_timeout if payload.crawl_timeout_s == 12 else payload.crawl_timeout_s
-    max_pages = env_max_pages if payload.max_pages == 200 else payload.max_pages
-    cluster_count = (
-        payload.cluster_count
-        if payload.cluster_count is not None
-        else (env_cluster_count if env_cluster_count > 0 else None)
-    )
-
-    crawl_result = crawl_site(
-        sitemap_url=sitemap_url or None,
-        seed_urls=seed_urls,
-        depth=payload.crawl_depth,
-        allowed_domains=payload.allowed_domains,
-        product_rules=payload.product_rules,
-        timeout=crawl_timeout,
-        max_pages=max_pages,
-    )
+def _finalize_run(
+    payload: AnalysisStartRequest,
+    crawl_result: CrawlResult,
+    run_url: str,
+    stages: List[dict],
+    start_time: float,
+    cluster_count: Optional[int],
+    extra_notes: Optional[List[str]] = None,
+) -> dict:
     _complete_stage(stages, "crawl", count=len(crawl_result.pages))
 
     _start_stage(stages, "chunk")
@@ -413,6 +387,7 @@ def _run_analysis(payload: AnalysisStartRequest) -> dict:
                     "startOffset": chunk["start_offset"],
                     "endOffset": chunk["end_offset"],
                     "sectionHeading": chunk.get("section_heading") or "",
+                    "entities": extract_entities(chunk["text"]),
                 }
             )
         page_summary = PageSummary(
@@ -514,7 +489,9 @@ def _run_analysis(payload: AnalysisStartRequest) -> dict:
                     retrieval_text = " ".join(row.get("text", "") for row in knn_rows)
             except Exception as exc:
                 errors.append(f"neo4j retrieval failure: {exc}")
-        raw_segments = generate_segment_drafts(retrieval_text, payload.description or "")
+        raw_segments = generate_segment_drafts(
+            retrieval_text, payload.description or "", payload.locale or ""
+        )
         if raw_segments.get("error"):
             errors.append(f"llm json failure: {raw_segments['error']}")
         validated = validate_segments(raw_segments["parsed"])
@@ -541,9 +518,14 @@ def _run_analysis(payload: AnalysisStartRequest) -> dict:
         segment["confirmed"] = False
 
     _start_stage(stages, "messaging")
-    _complete_stage(stages, "messaging")
+    confirmed_count = len([segment for segment in segments if segment.get("confirmed")])
+    _complete_stage(stages, "messaging", count=confirmed_count)
+    for stage in stages:
+        if stage["id"] == "messaging":
+            stage["detail"] = "Generated on demand for confirmed segments."
+            break
 
-    runtime = round(time.time() - start, 2)
+    runtime = round(time.time() - start_time, 2)
     notes = []
     if not pages:
         notes.append("No product pages detected; analyzed the primary URL only.")
@@ -553,12 +535,14 @@ def _run_analysis(payload: AnalysisStartRequest) -> dict:
         notes.append("See crawl logs for skipped or failed pages.")
     if evidence_rejections:
         notes.append(f"Rejected {evidence_rejections} evidence quotes not found in text.")
+    if extra_notes:
+        notes.extend(extra_notes)
 
     run = {
         "runId": run_id,
         "status": "completed",
         "createdAt": _now_iso(),
-        "url": sitemap_url or (seed_urls[0] if seed_urls else ""),
+        "url": run_url,
         "description": payload.description or "",
         "brand": payload.brand or "",
         "locale": payload.locale or "",
@@ -578,6 +562,46 @@ def _run_analysis(payload: AnalysisStartRequest) -> dict:
     run["summary"] = compute_metrics(run)
     RUN_STORE[run_id] = run
     return run
+
+
+def _run_analysis(payload: AnalysisStartRequest) -> dict:
+    start = time.time()
+    stages = _init_stages()
+
+    sitemap_url = (payload.sitemap_url or "").strip()
+    seed_urls = payload.seed_urls or payload.urls or []
+    seed_urls = [item.strip() for item in seed_urls if item.strip()]
+    primary_url = (payload.url or "").strip()
+    if primary_url:
+        if _looks_like_sitemap_url(primary_url) and not sitemap_url:
+            sitemap_url = primary_url
+        else:
+            seed_urls.append(primary_url)
+    if not sitemap_url and not seed_urls:
+        raise HTTPException(status_code=400, detail="Provide a sitemap URL or product URLs.")
+
+    env_timeout = _env_int("ADE_CRAWL_TIMEOUT_S", payload.crawl_timeout_s)
+    env_max_pages = _env_int("ADE_MAX_PAGES", payload.max_pages)
+    env_cluster_count = _env_int("ADE_CLUSTER_COUNT", 0)
+    crawl_timeout = env_timeout if payload.crawl_timeout_s == 12 else payload.crawl_timeout_s
+    max_pages = env_max_pages if payload.max_pages == 200 else payload.max_pages
+    cluster_count = (
+        payload.cluster_count
+        if payload.cluster_count is not None
+        else (env_cluster_count if env_cluster_count > 0 else None)
+    )
+
+    crawl_result = crawl_site(
+        sitemap_url=sitemap_url or None,
+        seed_urls=seed_urls,
+        depth=payload.crawl_depth,
+        allowed_domains=payload.allowed_domains,
+        product_rules=payload.product_rules,
+        timeout=crawl_timeout,
+        max_pages=max_pages,
+    )
+    run_url = sitemap_url or (seed_urls[0] if seed_urls else "")
+    return _finalize_run(payload, crawl_result, run_url, stages, start, cluster_count)
 
 
 def _get_run(run_id: str) -> dict:
@@ -625,6 +649,68 @@ def _p95_runtime(current_runtime: float) -> float:
 @router.post("/analysis/start", response_model=AnalysisStartOut)
 def start_analysis(payload: AnalysisStartRequest):
     run = _run_analysis(payload)
+    try:
+        _log_run_summary(run)
+    except Exception as exc:
+        LOG.warning("ADE run logging failed: %s", exc)
+    return AnalysisStartOut(
+        runId=run["runId"],
+        status=run["status"],
+        createdAt=run["createdAt"],
+        stages=[StageStatus(**stage) for stage in run["stages"]],
+        description=run.get("description"),
+        brand=run.get("brand"),
+        locale=run.get("locale"),
+    )
+
+
+@router.post("/analysis/upload", response_model=AnalysisStartOut)
+async def start_analysis_upload(
+    file: UploadFile = File(...),
+    description: str = Form(""),
+    brand: str = Form(""),
+    locale: str = Form(""),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Upload a PDF file.")
+    content_type = (file.content_type or "").lower()
+    if "pdf" not in content_type and not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    payload = AnalysisStartRequest(
+        url="",
+        urls=[],
+        description=description,
+        brand=brand,
+        locale=locale,
+    )
+    crawl_result = CrawlResult(
+        pages=[
+            CrawlPage(
+                url=file.filename or "uploaded.pdf",
+                status="success",
+                html="",
+                content_type=content_type or "application/pdf",
+                raw_bytes=raw_bytes,
+            )
+        ],
+        logs=[f"Uploaded file: {file.filename or 'uploaded.pdf'}"],
+    )
+    env_cluster_count = _env_int("ADE_CLUSTER_COUNT", 0)
+    cluster_count = env_cluster_count if env_cluster_count > 0 else None
+    stages = _init_stages()
+    run = _finalize_run(
+        payload,
+        crawl_result,
+        run_url="",
+        stages=stages,
+        start_time=time.time(),
+        cluster_count=cluster_count,
+        extra_notes=[f"Uploaded file: {file.filename or 'uploaded.pdf'}"],
+    )
     try:
         _log_run_summary(run)
     except Exception as exc:
