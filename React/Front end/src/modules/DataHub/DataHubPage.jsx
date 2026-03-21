@@ -10,7 +10,7 @@ import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/ic
 import { API_BASE, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
-const VIEWS = ['overview', 'explorer', 'nodes', 'relationships']
+const VIEWS = ['overview', 'explorer', 'connectors', 'nodes', 'relationships']
 const DEFAULT_LIMIT = 80
 const COLOR_PALETTE = [
   '#0ea5e9',
@@ -265,6 +265,7 @@ export function DataHubPage({
   const [error, setError] = useState('')
   const [selectedNode, setSelectedNode] = useState(null)
   const [selectedEdge, setSelectedEdge] = useState(null)
+  const [showAllLabels, setShowAllLabels] = useState(false)
 
   const applyView = (viewId) => {
     if (!viewId) return
@@ -443,6 +444,30 @@ export function DataHubPage({
     [edges.length, nodes.length, summary.nodeCount, summary.relationshipCount],
   )
 
+  const connectorCatalog = useMemo(
+    () => [
+      {
+        id: 'dbms',
+        title: 'Database APIs',
+        description: 'Connect to external DBMS sources before writing to Neo4j.',
+        items: ['PostgreSQL', 'MySQL', 'MongoDB', 'BigQuery'],
+      },
+      {
+        id: 'public',
+        title: 'Public sources',
+        description: 'Pull data from open data portals and public APIs.',
+        items: ['OpenStreetMap', 'World Bank', 'UN Data', 'OpenSanctions'],
+      },
+      {
+        id: 'streams',
+        title: 'Event streams',
+        description: 'Ingest streaming updates to keep Neo4j current.',
+        items: ['Webhook feed', 'Kafka topic', 'CSV drop'],
+      },
+    ],
+    [],
+  )
+
   return (
     <section className="module">
       <CivicStatGrid
@@ -455,6 +480,7 @@ export function DataHubPage({
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'explorer', label: 'Explorer' },
+            { id: 'connectors', label: 'Data connectors' },
             { id: 'nodes', label: 'Nodes' },
             { id: 'relationships', label: 'Relationships' },
           ].map((tab) => (
@@ -565,60 +591,35 @@ export function DataHubPage({
 
       {activeView === 'explorer' && (
         <div className="stack">
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Neo4j snapshot</h3>
-                <p className="muted">
-                  High-level counts of nodes and relationships currently in the database.
-                </p>
-              </div>
-              <div className="pill">Graph</div>
-            </div>
-            <div className="report-metrics">
-              <div className="report-metric">
-                <span>Total nodes</span>
-                <strong>{formatNumber(summary.nodeCount)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Total relationships</span>
-                <strong>{formatNumber(summary.relationshipCount)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Snapshot nodes</span>
-                <strong>{formatNumber(nodes.length)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Snapshot relationships</span>
-                <strong>{formatNumber(edges.length)}</strong>
-              </div>
-            </div>
-            <div className="filter-row">
-              <button className="button-secondary" type="button" onClick={loadGraph} disabled={loading}>
-                {loading ? 'Refreshing...' : 'Refresh snapshot'}
-              </button>
-            </div>
-          </div>
-
-          {nodes.length ? (
-            <div className="module-card module-card__wide">
-              <div className="card-header">
-                <div>
-                  <h3>Graph explorer</h3>
-                  <p className="muted">
-                    Drag nodes to reposition the network. Click a node or relationship for details.
-                  </p>
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>Neo4j snapshot</h3>
+                    <p className="muted">
+                      High-level counts of nodes and relationships currently in the database.
+                    </p>
+                  </div>
+                  <div className="pill">Graph</div>
                 </div>
-              </div>
-              <FormSection
-                title={
-                  <span>
-                    Snapshot settings{' '}
-                    <InfoHint text="Limit controls how many relationships we pull from Neo4j." />
-                  </span>
-                }
-                description="Filter by label to focus the graph."
-                actions={
+                <div className="report-metrics">
+                  <div className="report-metric">
+                    <span>Total nodes</span>
+                    <strong>{formatNumber(summary.nodeCount)}</strong>
+                  </div>
+                  <div className="report-metric">
+                    <span>Total relationships</span>
+                    <strong>{formatNumber(summary.relationshipCount)}</strong>
+                  </div>
+                  <div className="report-metric">
+                    <span>Snapshot nodes</span>
+                    <strong>{formatNumber(nodes.length)}</strong>
+                  </div>
+                  <div className="report-metric">
+                    <span>Snapshot relationships</span>
+                    <strong>{formatNumber(edges.length)}</strong>
+                  </div>
+                </div>
+                <div className="filter-row">
                   <button
                     className="button-secondary"
                     type="button"
@@ -627,110 +628,224 @@ export function DataHubPage({
                   >
                     {loading ? 'Refreshing...' : 'Refresh snapshot'}
                   </button>
-                }
-              >
-                <div className="form-grid">
-                  <Field id="datahub-label" label="Label filter">
-                    <select
-                      className="select"
-                      value={labelFilter}
-                      onChange={(event) => setLabelFilter(event.target.value)}
-                    >
-                      <option value="">All labels</option>
-                      {labelOptions.map((label) => (
-                        <option key={label} value={label}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field id="datahub-limit" label="Relationship limit" helper="Max 300 relationships.">
-                    <input
-                      className="input"
-                      type="number"
-                      min="10"
-                      max="300"
-                      value={limit}
-                      onChange={(event) => setLimit(event.target.value)}
-                    />
-                  </Field>
-                </div>
-              </FormSection>
-              <div className="graph-frame">
-                <div className="graph-layout">
-                  <DataHubGraph
-                    nodes={nodes}
-                    edges={edges}
-                    labelColors={labelColors}
-                    selectedNodeId={selectedNode?.id}
-                    selectedEdgeId={selectedEdge?.id}
-                    onNodeSelect={(node) => {
-                      setSelectedNode(node)
-                      setSelectedEdge(null)
-                    }}
-                    onEdgeSelect={(edge) => {
-                      setSelectedEdge(edge)
-                      setSelectedNode(null)
-                    }}
-                    onClearSelection={() => {
-                      setSelectedNode(null)
-                      setSelectedEdge(null)
-                    }}
-                  />
-                  <aside className="graph-legend">
-                    <div className="graph-details">
-                      <h4>Selection</h4>
-                      {selectedNode ? (
-                        <>
-                          <span className="pill">Node</span>
-                          <h5>{selectedNode.display || selectedNode.id}</h5>
-                          <p className="muted">
-                            {(selectedNode.labels || []).join(', ') || 'No labels'}
-                          </p>
-                          <pre className="code-block">{stringifyProps(selectedNode.properties)}</pre>
-                        </>
-                      ) : null}
-                      {selectedEdge ? (
-                        <>
-                          <span className="pill">Relationship</span>
-                          <h5>{selectedEdge.type || 'Related to'}</h5>
-                          <p className="muted">
-                            {nodeLookup[selectedEdge.source]?.display || selectedEdge.source} {'->'}{' '}
-                            {nodeLookup[selectedEdge.target]?.display || selectedEdge.target}
-                          </p>
-                          <pre className="code-block">{stringifyProps(selectedEdge.properties)}</pre>
-                        </>
-                      ) : null}
-                      {!selectedNode && !selectedEdge ? (
-                        <p className="muted">Click a node or relationship to inspect details.</p>
-                      ) : null}
-                    </div>
-                    <div className="graph-details">
-                      <h4>Labels</h4>
-                      <div className="graph-legend__list">
-                        {(labelOptions.length ? labelOptions : ['Node']).map((label) => (
-                          <div className="graph-legend__item" key={label}>
-                            <span
-                              className="graph-legend__swatch"
-                              style={{ background: labelColors[label] }}
-                            />
-                            <span>{label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </aside>
                 </div>
               </div>
-            </div>
-          ) : null}
 
-          {!nodes.length && !loading
-            ? renderEmptyState(
-                'No graph data yet',
-                'Load nodes into Neo4j to visualize them in the graph explorer.',
-              )
-            : null}
+              {nodes.length ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Graph explorer</h3>
+                      <p className="muted">
+                        Drag nodes to reposition the network. Click a node or relationship for details.
+                      </p>
+                    </div>
+                  </div>
+                  <FormSection
+                    title={
+                      <span>
+                        Snapshot settings{' '}
+                        <InfoHint text="Limit controls how many relationships we pull from Neo4j." />
+                      </span>
+                    }
+                    description="Filter by label to focus the graph."
+                    actions={
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={loadGraph}
+                        disabled={loading}
+                      >
+                        {loading ? 'Refreshing...' : 'Refresh snapshot'}
+                      </button>
+                    }
+                  >
+                    <div className="form-grid">
+                      <Field id="datahub-label" label="Label filter">
+                        <select
+                          className="select"
+                          value={labelFilter}
+                          onChange={(event) => setLabelFilter(event.target.value)}
+                        >
+                          <option value="">All labels</option>
+                          {labelOptions.map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field id="datahub-limit" label="Relationship limit" helper="Max 300 relationships.">
+                        <input
+                          className="input"
+                          type="number"
+                          min="10"
+                          max="300"
+                          value={limit}
+                          onChange={(event) => setLimit(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+                  </FormSection>
+                  <div className="graph-frame">
+                    <div className="graph-layout">
+                      <DataHubGraph
+                        nodes={nodes}
+                        edges={edges}
+                        labelColors={labelColors}
+                        selectedNodeId={selectedNode?.id}
+                        selectedEdgeId={selectedEdge?.id}
+                        onNodeSelect={(node) => {
+                          setSelectedNode(node)
+                          setSelectedEdge(null)
+                        }}
+                        onEdgeSelect={(edge) => {
+                          setSelectedEdge(edge)
+                          setSelectedNode(null)
+                        }}
+                        onClearSelection={() => {
+                          setSelectedNode(null)
+                          setSelectedEdge(null)
+                        }}
+                      />
+                      <aside className="graph-legend">
+                        <div className="graph-details">
+                          <h4>Selection</h4>
+                          {selectedNode ? (
+                            <>
+                              <span className="pill">Node</span>
+                              <h5>{selectedNode.display || selectedNode.id}</h5>
+                              <p className="muted">
+                                {(selectedNode.labels || []).join(', ') || 'No labels'}
+                              </p>
+                              <pre className="code-block">{stringifyProps(selectedNode.properties)}</pre>
+                            </>
+                          ) : null}
+                          {selectedEdge ? (
+                            <>
+                              <span className="pill">Relationship</span>
+                              <h5>{selectedEdge.type || 'Related to'}</h5>
+                              <p className="muted">
+                                {nodeLookup[selectedEdge.source]?.display || selectedEdge.source} {'->'}{' '}
+                                {nodeLookup[selectedEdge.target]?.display || selectedEdge.target}
+                              </p>
+                              <pre className="code-block">{stringifyProps(selectedEdge.properties)}</pre>
+                            </>
+                          ) : null}
+                          {!selectedNode && !selectedEdge ? (
+                            <p className="muted">Click a node or relationship to inspect details.</p>
+                          ) : null}
+                        </div>
+                        <div className="graph-details">
+                          <h4>Labels</h4>
+                          <div className="graph-legend__list">
+                            {(labelOptions.length ? labelOptions : ['Node'])
+                              .slice(0, showAllLabels ? labelOptions.length : 6)
+                              .map((label) => (
+                              <div className="graph-legend__item" key={label}>
+                                <span
+                                  className="graph-legend__swatch"
+                                  style={{ background: labelColors[label] }}
+                                />
+                                <span>{label}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {labelOptions.length > 6 ? (
+                            <button
+                              className="button-secondary button-secondary--small"
+                              type="button"
+                              onClick={() => setShowAllLabels((prev) => !prev)}
+                            >
+                              {showAllLabels ? 'See fewer' : 'See more'}
+                            </button>
+                          ) : null}
+                        </div>
+                      </aside>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {!nodes.length && !loading
+                ? renderEmptyState(
+                    'No graph data yet',
+                    'Load nodes into Neo4j to visualize them in the graph explorer.',
+                  )
+                : null}
+        </div>
+      )}
+
+      {activeView === 'connectors' && (
+        <div className="stack">
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Connector staging layer</h3>
+                <p className="muted">
+                  Neo4j is the system of record. Use connectors to pull from DBMS APIs or public
+                  sources, validate them, then promote into Neo4j.
+                </p>
+              </div>
+              <div className="pill">Staging</div>
+            </div>
+            <div className="report-metrics">
+              <div className="report-metric">
+                <span>Sources connected</span>
+                <strong>0</strong>
+              </div>
+              <div className="report-metric">
+                <span>Pending imports</span>
+                <strong>0</strong>
+              </div>
+              <div className="report-metric">
+                <span>Last sync</span>
+                <strong>—</strong>
+              </div>
+              <div className="report-metric">
+                <span>Neo4j status</span>
+                <strong>Ready</strong>
+              </div>
+            </div>
+            <div className="filter-row">
+              <button className="button-secondary" type="button">
+                Add connector
+              </button>
+              <button className="button-secondary" type="button">
+                Review staging queue
+              </button>
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Connector catalog</h3>
+                <p className="muted">
+                  Choose a source type, map fields, and validate before ingesting to Neo4j.
+                </p>
+              </div>
+            </div>
+            <div className="cluster-grid">
+              {connectorCatalog.map((group) => (
+                <div className="cluster-card" key={group.id}>
+                  <div className="cluster-card__header">
+                    <h4>{group.title}</h4>
+                    <span className="pill">{group.items.length}</span>
+                  </div>
+                  <p className="muted">{group.description}</p>
+                  <ul className="compact-list">
+                    {group.items.map((item) => (
+                      <li key={item}>
+                        <span>{item}</span>
+                        <strong>Configure</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

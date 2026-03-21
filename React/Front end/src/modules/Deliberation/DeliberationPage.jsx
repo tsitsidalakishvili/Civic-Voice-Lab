@@ -814,8 +814,10 @@ export function DeliberationPage({
 
   const buildQuestionnaireLink = (questionnaireType, view) => {
     if (!activeId) return ''
-    const url = new URL(window.location.href)
+    const basePath = window.location.origin + window.location.pathname
+    const url = new URL(basePath)
     url.search = ''
+    url.hash = ''
     url.searchParams.set('questionnaire', questionnaireType)
     url.searchParams.set('conversation_id', activeId)
     if (view) url.searchParams.set('view', view)

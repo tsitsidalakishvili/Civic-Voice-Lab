@@ -404,12 +404,14 @@ function App() {
       defaultTab: 'explorer',
       primaryActions: [
         { label: 'Explorer', type: 'tab', value: 'explorer', hint: 'Graph and snapshot.' },
+        { label: 'Data connectors', type: 'tab', value: 'connectors', hint: 'Stage new data.' },
         { label: 'Nodes', type: 'tab', value: 'nodes', hint: 'Review nodes.' },
         { label: 'Relationships', type: 'tab', value: 'relationships', hint: 'Review edges.' },
       ],
       sections: [
         { label: 'Overview', type: 'tab', value: 'overview', hint: 'Graph summary.' },
         { label: 'Explorer', type: 'tab', value: 'explorer', hint: 'Graph explorer and snapshot.' },
+        { label: 'Data connectors', type: 'tab', value: 'connectors', hint: 'Stage data sources.' },
         { label: 'Nodes', type: 'tab', value: 'nodes', hint: 'Browse node details.' },
         {
           label: 'Relationships',
@@ -912,10 +914,7 @@ function App() {
                         </Text>
                       </div>
                     </Group>
-                    <Group justify="space-between" mt="md">
-                      <Badge variant="light" color="civic">
-                        Ready
-                      </Badge>
+                    <Group justify="flex-end" mt="md">
                       <Button
                         variant="subtle"
                         size="xs"
