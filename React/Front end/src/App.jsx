@@ -3,6 +3,7 @@ import {
   AdminPage,
   AudienceDiscoveryPage,
   CRMPage,
+  DataHubPage,
   DeliberationPage,
   DueDiligencePage,
   HowItWorksPage,
@@ -167,6 +168,12 @@ function App() {
         Component: AudienceDiscoveryPage,
       },
       {
+        id: 'data-hub',
+        label: t('module.dataHub'),
+        description: t('module.dataHub.desc'),
+        Component: DataHubPage,
+      },
+      {
         id: 'admin',
         label: t('module.settings'),
         description: t('module.settings.desc'),
@@ -180,6 +187,7 @@ function App() {
     'deliberation',
     'due-diligence',
     'audience-discovery',
+    'data-hub',
   ]
   const hubModules = useMemo(
     () => modules.filter((module) => hubModuleIds.includes(module.id)),
@@ -239,7 +247,12 @@ function App() {
       primaryActions: [
         { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create a conversation.' },
         { label: 'Share', type: 'tab', value: 'distribute', hint: 'Share the link.' },
-        { label: 'Insights', type: 'tab', value: 'insights', hint: 'Review results.' },
+        {
+          label: 'Monitoring and Reporting',
+          type: 'tab',
+          value: 'insights',
+          hint: 'Review results.',
+        },
       ],
       sections: [
         {
@@ -250,7 +263,12 @@ function App() {
         },
         { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create and configure.' },
         { label: 'Share', type: 'tab', value: 'distribute', hint: 'Send the link out.' },
-        { label: 'Insights', type: 'tab', value: 'insights', hint: 'Consensus analytics.' },
+        {
+          label: 'Monitoring and Reporting',
+          type: 'tab',
+          value: 'insights',
+          hint: 'Consensus analytics.',
+        },
         { label: 'Moderate', type: 'tab', value: 'moderation', hint: 'Review comments.' },
       ],
     },
@@ -290,6 +308,29 @@ function App() {
         { label: 'Evidence', type: 'tab', value: 'pages', hint: 'Inspect supporting content.' },
         { label: 'Hooks', type: 'tab', value: 'messaging', hint: 'Messaging ideas.' },
         { label: 'Metrics', type: 'tab', value: 'metrics', hint: 'Quality metrics.' },
+      ],
+    },
+    'data-hub': {
+      title: 'Data Hub',
+      description: 'Explore Neo4j data as a connected graph.',
+      flowTitle: 'Explore the graph',
+      flowSummary: 'Browse nodes, relationships, and labels from Neo4j.',
+      defaultTab: 'explorer',
+      primaryActions: [
+        { label: 'Explorer', type: 'tab', value: 'explorer', hint: 'Graph and snapshot.' },
+        { label: 'Nodes', type: 'tab', value: 'nodes', hint: 'Review nodes.' },
+        { label: 'Relationships', type: 'tab', value: 'relationships', hint: 'Review edges.' },
+      ],
+      sections: [
+        { label: 'Overview', type: 'tab', value: 'overview', hint: 'Graph summary.' },
+        { label: 'Explorer', type: 'tab', value: 'explorer', hint: 'Graph explorer and snapshot.' },
+        { label: 'Nodes', type: 'tab', value: 'nodes', hint: 'Browse node details.' },
+        {
+          label: 'Relationships',
+          type: 'tab',
+          value: 'relationships',
+          hint: 'Browse relationship details.',
+        },
       ],
     },
   }
@@ -890,6 +931,10 @@ function DeliberationQuestionnaire({
   const [conversation, setConversation] = useState(null)
   const [votedIds, setVotedIds] = useState([])
   const dragStartRef = useRef(null)
+  const dragTypeRef = useRef(null)
+  const dragPointerIdRef = useRef(null)
+  const supportsPointerEvents =
+    typeof window !== 'undefined' && typeof window.PointerEvent !== 'undefined'
 
   const params = new URLSearchParams(window.location.search)
   const sid = params.get('sid') || ''
@@ -997,6 +1042,8 @@ function DeliberationQuestionnaire({
     setDragOffset({ x: 0, y: 0 })
     setIsDragging(false)
     dragStartRef.current = null
+    dragTypeRef.current = null
+    dragPointerIdRef.current = null
   }
 
   useEffect(() => {
@@ -1023,12 +1070,52 @@ function DeliberationQuestionnaire({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentCommentId, handleVote, pendingVote])
 
+  const beginDrag = useCallback(
+    (clientX, clientY, type, pointerId = null) => {
+      if (pendingVote || !currentCommentId) return
+      dragStartRef.current = { x: clientX, y: clientY }
+      dragTypeRef.current = type
+      dragPointerIdRef.current = pointerId
+      setDragOffset({ x: 0, y: 0 })
+      setIsDragging(true)
+    },
+    [currentCommentId, pendingVote],
+  )
+
+  const updateDrag = useCallback((clientX, clientY, type, pointerId = null) => {
+    if (!dragStartRef.current || dragTypeRef.current !== type) return
+    if (type === 'pointer' && dragPointerIdRef.current !== pointerId) return
+    setDragOffset({
+      x: clientX - dragStartRef.current.x,
+      y: clientY - dragStartRef.current.y,
+    })
+  }, [])
+
+  const endDrag = useCallback(
+    (clientX, clientY, type, pointerId = null) => {
+      if (!dragStartRef.current || dragTypeRef.current !== type) return
+      if (type === 'pointer' && dragPointerIdRef.current !== pointerId) return
+      const start = dragStartRef.current
+      const endX =
+        typeof clientX === 'number' ? clientX : start.x + dragOffset.x
+      const endY =
+        typeof clientY === 'number' ? clientY : start.y + dragOffset.y
+      const x = endX - start.x
+      const y = endY - start.y
+      const threshold = 70
+      const choice =
+        x > threshold ? 1 : x < -threshold ? -1 : y > threshold ? 0 : null
+      resetDrag()
+      if (choice !== null) {
+        handleVote(currentCommentId, choice)
+      }
+    },
+    [currentCommentId, dragOffset.x, dragOffset.y, handleVote],
+  )
+
   const handlePointerDown = (event) => {
-    if (pendingVote || !currentCommentId) return
     if (event.button !== undefined && event.button !== 0) return
-    dragStartRef.current = { x: event.clientX, y: event.clientY }
-    setDragOffset({ x: 0, y: 0 })
-    setIsDragging(true)
+    beginDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
     } catch (err) {
@@ -1037,29 +1124,47 @@ function DeliberationQuestionnaire({
   }
 
   const handlePointerMove = (event) => {
-    if (!dragStartRef.current || !isDragging) return
-    setDragOffset({
-      x: event.clientX - dragStartRef.current.x,
-      y: event.clientY - dragStartRef.current.y,
-    })
+    updateDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
   }
 
   const handlePointerEnd = (event) => {
-    if (!dragStartRef.current) return
-    const start = dragStartRef.current
-    const endX =
-      event && typeof event.clientX === 'number' ? event.clientX : start.x + dragOffset.x
-    const endY =
-      event && typeof event.clientY === 'number' ? event.clientY : start.y + dragOffset.y
-    const x = endX - start.x
-    const y = endY - start.y
-    const threshold = 70
-    const choice =
-      x > threshold ? 1 : x < -threshold ? -1 : y > threshold ? 0 : null
-    resetDrag()
-    if (choice !== null) {
-      handleVote(currentCommentId, choice)
-    }
+    endDrag(event?.clientX, event?.clientY, 'pointer', event?.pointerId)
+  }
+
+  const handleTouchStart = (event) => {
+    if (supportsPointerEvents) return
+    const touch = event.touches?.[0]
+    if (!touch) return
+    beginDrag(touch.clientX, touch.clientY, 'touch')
+  }
+
+  const handleTouchMove = (event) => {
+    if (supportsPointerEvents) return
+    const touch = event.touches?.[0]
+    if (!touch) return
+    updateDrag(touch.clientX, touch.clientY, 'touch')
+  }
+
+  const handleTouchEnd = (event) => {
+    if (supportsPointerEvents) return
+    const touch = event.changedTouches?.[0]
+    endDrag(touch?.clientX, touch?.clientY, 'touch')
+  }
+
+  const handleMouseDown = (event) => {
+    if (supportsPointerEvents) return
+    if (event.button !== 0) return
+    beginDrag(event.clientX, event.clientY, 'mouse')
+  }
+
+  const handleMouseMove = (event) => {
+    if (supportsPointerEvents) return
+    updateDrag(event.clientX, event.clientY, 'mouse')
+  }
+
+  const handleMouseUp = (event) => {
+    if (supportsPointerEvents) return
+    endDrag(event.clientX, event.clientY, 'mouse')
   }
 
   return (
@@ -1108,6 +1213,14 @@ function DeliberationQuestionnaire({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerEnd}
               onPointerCancel={handlePointerEnd}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
             >
                     <div className="questionnaire-card__title">
                       {translate('questionnaire.questionLabel', {

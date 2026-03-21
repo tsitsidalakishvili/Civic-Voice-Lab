@@ -214,12 +214,19 @@ export function DeliberationPage({
   const [polisSiteId, setPolisSiteId] = useState('polis_site_id_dZO8TFLSfUGNe651NN')
   const [polisPageId, setPolisPageId] = useState('PAGE_ID')
   const [polisConversationId, setPolisConversationId] = useState('')
+  const [copyStatus, setCopyStatus] = useState(null)
 
   useEffect(() => {
     if (activeTabOverride && activeTabOverride !== activeTab) {
       setActiveTab(activeTabOverride)
     }
   }, [activeTabOverride, activeTab])
+
+  useEffect(() => {
+    if (!copyStatus) return
+    const timer = setTimeout(() => setCopyStatus(null), 2400)
+    return () => clearTimeout(timer)
+  }, [copyStatus])
 
   const vennData = useMemo(() => {
     const summaries = report?.cluster_summaries || []
@@ -421,6 +428,19 @@ export function DeliberationPage({
       .sort((a, b) => b.size - a.size)
   }, [report])
 
+  const reportSummary = useMemo(() => {
+    if (!report?.metrics) return null
+    return {
+      participants: Number(report.metrics.total_participants || 0),
+      statements: Number(report.metrics.total_comments || 0),
+      votes: Number(report.metrics.total_votes || 0),
+      topConsensus: reportCharts?.consensusTop?.[0]?.text || '',
+      topPolarizing: reportCharts?.polarizingTop?.[0]?.text || '',
+      largestCluster: clusterCards[0]?.id || '',
+      agreementTopics: report.potential_agreements?.length || 0,
+    }
+  }, [clusterCards, report, reportCharts])
+
   const horizontalBarOptions = useMemo(
     () => ({
       indexAxis: 'y',
@@ -591,6 +611,20 @@ export function DeliberationPage({
     [activeId],
   )
 
+  const pageEmbedCode = useMemo(
+    () =>
+      `<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}"></div>
+<script async src="https://pol.is/embed.js"></script>`,
+    [polisPageId, polisSiteId],
+  )
+
+  const conversationEmbedCode = useMemo(
+    () =>
+      `<div class="polis" data-conversation_id="${polisConversationId || 'CONVERSATION_ID'}"></div>
+<script async src="https://pol.is/embed.js"></script>`,
+    [polisConversationId],
+  )
+
   useEffect(() => {
     if (!activeId || !questionnaireLink) {
       setSlackMessage('')
@@ -664,6 +698,23 @@ export function DeliberationPage({
       setWhatsappError(err.message || 'Unable to send to WhatsApp.')
     } finally {
       setSendingWhatsapp(false)
+    }
+  }
+
+  const handleCopy = async (value, label) => {
+    if (!value) return
+    if (!navigator?.clipboard) {
+      setCopyStatus({
+        message: 'Clipboard unavailable in this browser.',
+        tone: 'error',
+      })
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopyStatus({ message: `${label} copied.`, tone: 'success' })
+    } catch (err) {
+      setCopyStatus({ message: 'Unable to copy to clipboard.', tone: 'error' })
     }
   }
 
@@ -1001,6 +1052,13 @@ export function DeliberationPage({
       </details>
 
       {convoError ? <div className="module-alert">{convoError}</div> : null}
+      {copyStatus ? (
+        <div
+          className={`module-alert ${copyStatus.tone === 'success' ? 'module-alert--success' : ''}`}
+        >
+          {copyStatus.message}
+        </div>
+      ) : null}
 
       {showTabs ? (
         <div className="subtabs">
@@ -1025,50 +1083,6 @@ export function DeliberationPage({
 
       {activeTab === 'overview' && (
         <div className="stack">
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Quick start</h3>
-                <p className="muted">
-                  Set up a conversation, share the link, then review the results.
-                </p>
-              </div>
-            </div>
-            <ul className="compact-list">
-              <li>
-                <span>Step 1</span>
-                <strong>Create a conversation and add starter statements.</strong>
-              </li>
-              <li>
-                <span>Step 2</span>
-                <strong>Share the participant link with supporters.</strong>
-              </li>
-              <li>
-                <span>Step 3</span>
-                <strong>Run analysis and review consensus insights.</strong>
-              </li>
-            </ul>
-            <div className="filter-row">
-              <button className="button" type="button" onClick={() => applyActiveTab('setup')}>
-                Set up
-              </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => applyActiveTab('distribute')}
-              >
-                Share link
-              </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => applyActiveTab('insights')}
-              >
-                View insights
-              </button>
-            </div>
-          </div>
-
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
@@ -1100,6 +1114,13 @@ export function DeliberationPage({
                     onClick={() => applyActiveTab('distribute')}
                   >
                     Share link
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleCopy(questionnaireLink, 'Participant link')}
+                  >
+                    Copy link
                   </button>
                   <a
                     className="button-secondary"
@@ -1284,359 +1305,392 @@ export function DeliberationPage({
               </button>
             </div>
 
-            <div className="module-card">
-              <h3>Edit active conversation</h3>
-              <p className="muted">Adjust the topic, description, and settings.</p>
-              {updateForm ? (
-                <div className="stack">
-                  <input
-                    className="input"
-                    value={updateForm.topic}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
-                    }
-                  />
+            {activeConvo ? (
+              <>
+                <div className="module-card">
+                  <h3>Edit active conversation</h3>
+                  <p className="muted">Adjust the topic, description, and settings.</p>
+                  {updateForm ? (
+                    <div className="stack">
+                      <input
+                        className="input"
+                        value={updateForm.topic}
+                        onChange={(event) =>
+                          setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
+                        }
+                      />
+                      <textarea
+                        className="textarea"
+                        value={updateForm.description}
+                        onChange={(event) =>
+                          setUpdateForm((prev) => ({
+                            ...prev,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={updateForm.allowCommentSubmission}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              allowCommentSubmission: event.target.checked,
+                            }))
+                          }
+                        />
+                        Allow comments
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={updateForm.allowViz}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              allowViz: event.target.checked,
+                            }))
+                          }
+                        />
+                        Allow visualization
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={updateForm.moderationRequired}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              moderationRequired: event.target.checked,
+                            }))
+                          }
+                        />
+                        Moderation required
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={updateForm.isOpen}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              isOpen: event.target.checked,
+                            }))
+                          }
+                        />
+                        Open for participation
+                      </label>
+                      <button className="button" type="button" onClick={handleUpdateConversation}>
+                        Save settings
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="muted">Select a conversation in Overview.</p>
+                  )}
+                </div>
+
+                <div className="module-card">
+                  <h3>Add starter statements</h3>
+                  <p className="muted">One statement per line. Participants vote on these.</p>
                   <textarea
                     className="textarea"
-                    value={updateForm.description}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
+                    placeholder="One comment per line"
+                    value={seedText}
+                    onChange={(event) => setSeedText(event.target.value)}
                   />
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.allowCommentSubmission}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          allowCommentSubmission: event.target.checked,
-                        }))
-                      }
-                    />
-                    Allow comments
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.allowViz}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          allowViz: event.target.checked,
-                        }))
-                      }
-                    />
-                    Allow visualization
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.moderationRequired}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          moderationRequired: event.target.checked,
-                        }))
-                      }
-                    />
-                    Moderation required
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.isOpen}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          isOpen: event.target.checked,
-                        }))
-                      }
-                    />
-                    Open for participation
-                  </label>
-                  <button className="button" type="button" onClick={handleUpdateConversation}>
-                    Save settings
+                  <button className="button" type="button" onClick={handleSeedComments}>
+                    Add seed comments
                   </button>
                 </div>
-              ) : (
-                <p className="muted">Select a conversation in Overview.</p>
-              )}
-            </div>
-
-            <div className="module-card">
-              <h3>Add starter statements</h3>
-              <p className="muted">One statement per line. Participants vote on these.</p>
-              <textarea
-                className="textarea"
-                placeholder="One comment per line"
-                value={seedText}
-                onChange={(event) => setSeedText(event.target.value)}
-              />
-              <button className="button" type="button" onClick={handleSeedComments}>
-                Add seed comments
-              </button>
-            </div>
+              </>
+            ) : (
+              <div className="module-card module-card__wide">
+                <h3>Select an active conversation</h3>
+                <p className="muted">
+                  Go to Overview to choose the conversation you want to configure.
+                </p>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => applyActiveTab('overview')}
+                >
+                  Go to Overview
+                </button>
+              </div>
+            )}
           </div>
 
           <details className="dashboard-detail">
             <summary>Advanced setup</summary>
-            <div className="dashboard-detail__body">
-              <p className="muted">
-                Optional tools for importing datasets or generating demo votes.
-              </p>
-              <ul className="compact-list">
-                <li>
-                  <span>Import votes and comments</span>
-                  <strong>CSV upload</strong>
-                </li>
-                <li>
-                  <span>Seed statements quickly</span>
-                  <strong>Download templates</strong>
-                </li>
-                <li>
-                  <span>Run analysis after import</span>
-                  <strong>Optional</strong>
-                </li>
-              </ul>
+            {activeConvo ? (
+              <div className="dashboard-detail__body">
+                <p className="muted">
+                  Optional tools for importing datasets or generating demo votes.
+                </p>
+                <ul className="compact-list">
+                  <li>
+                    <span>Import votes and comments</span>
+                    <strong>CSV upload</strong>
+                  </li>
+                  <li>
+                    <span>Seed statements quickly</span>
+                    <strong>Download templates</strong>
+                  </li>
+                  <li>
+                    <span>Run analysis after import</span>
+                    <strong>Optional</strong>
+                  </li>
+                </ul>
 
-              <div className="module-grid">
-                <div className="module-card">
-                  <h3>Generate demo votes</h3>
-                  <p className="muted">Use mock participants to preview analytics.</p>
-                  <input
-                    className="input"
-                    type="number"
-                    value={simulateForm.participants}
-                    onChange={(event) =>
-                      setSimulateForm((prev) => ({
-                        ...prev,
-                        participants: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    value={simulateForm.votesPerParticipant}
-                    onChange={(event) =>
-                      setSimulateForm((prev) => ({
-                        ...prev,
-                        votesPerParticipant: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    value={simulateForm.seed}
-                    onChange={(event) =>
-                      setSimulateForm((prev) => ({ ...prev, seed: event.target.value }))
-                    }
-                  />
-                  <button className="button" type="button" onClick={handleSimulateVotes}>
-                    Generate votes
-                  </button>
-                </div>
-              </div>
-
-              <div className="module-card module-card__wide">
-                <h3>Import data (CSV)</h3>
-                <input
-                  className="input"
-                  type="file"
-                  accept=".csv"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) parseCsvFile(file)
-                  }}
-                />
-                <div className="stack">
-                  <p className="muted">
-                    Required columns: <strong>conversation_id</strong>,{' '}
-                    <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
-                    <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
-                    <strong>vote</strong>.
-                  </p>
-                  <p className="muted">
-                    Optional columns: comment_created_at, reaction_created_at, participant_cluster.
-                  </p>
-                  <p className="muted">
-                    Seed comments CSV: <strong>comment_text</strong> column required.
-                  </p>
-                </div>
-                {csvColumns.length ? (
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={csvMap.conversation_id || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
-                      }
-                    >
-                      <option value="">Conversation ID column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.comment_id || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, comment_id: event.target.value }))
-                      }
-                    >
-                      <option value="">Comment ID column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.participant_id || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, participant_id: event.target.value }))
-                      }
-                    >
-                      <option value="">Participant ID column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.participant_cluster || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, participant_cluster: event.target.value }))
-                      }
-                    >
-                      <option value="">Participant cluster column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.comment_text || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, comment_text: event.target.value }))
-                      }
-                    >
-                      <option value="">Comment text column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.is_seed || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, is_seed: event.target.value }))
-                      }
-                    >
-                      <option value="">Is seed column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.comment_created_at || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, comment_created_at: event.target.value }))
-                      }
-                    >
-                      <option value="">Comment created_at column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.vote || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, vote: event.target.value }))
-                      }
-                    >
-                      <option value="">Vote column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="select"
-                      value={csvMap.reaction_created_at || ''}
-                      onChange={(event) =>
-                        setCsvMap((prev) => ({ ...prev, reaction_created_at: event.target.value }))
-                      }
-                    >
-                      <option value="">Vote created_at column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                <div className="filter-row">
-                  <select
-                    className="select"
-                    value={seedCsvColumn}
-                    onChange={(event) => setSeedCsvColumn(event.target.value)}
-                  >
-                    <option value="">Seed comments from column</option>
-                    {csvColumns.map((col) => (
-                      <option key={col} value={col}>
-                        {col}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="input"
-                    type="number"
-                    min="1"
-                    placeholder="Max rows"
-                    value={seedCsvLimit}
-                    onChange={(event) => setSeedCsvLimit(event.target.value)}
-                  />
-                  <button className="button-secondary" type="button" onClick={handleSeedFromCsv}>
-                    Seed comments
-                  </button>
-                  <button className="button" type="button" onClick={handleImportDataset}>
-                    Import dataset
-                  </button>
-                  <label className="checkbox">
+                <div className="module-grid">
+                  <div className="module-card">
+                    <h3>Generate demo votes</h3>
+                    <p className="muted">Use mock participants to preview analytics.</p>
                     <input
-                      type="checkbox"
-                      checked={runAnalysisAfterImport}
-                      onChange={(event) => setRunAnalysisAfterImport(event.target.checked)}
+                      className="input"
+                      type="number"
+                      value={simulateForm.participants}
+                      onChange={(event) =>
+                        setSimulateForm((prev) => ({
+                          ...prev,
+                          participants: event.target.value,
+                        }))
+                      }
                     />
-                    Run analysis after import
-                  </label>
+                    <input
+                      className="input"
+                      type="number"
+                      value={simulateForm.votesPerParticipant}
+                      onChange={(event) =>
+                        setSimulateForm((prev) => ({
+                          ...prev,
+                          votesPerParticipant: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      type="number"
+                      value={simulateForm.seed}
+                      onChange={(event) =>
+                        setSimulateForm((prev) => ({ ...prev, seed: event.target.value }))
+                      }
+                    />
+                    <button className="button" type="button" onClick={handleSimulateVotes}>
+                      Generate votes
+                    </button>
+                  </div>
                 </div>
-                {csvStatus ? <p className="muted">{csvStatus}</p> : null}
+
+                <div className="module-card module-card__wide">
+                  <h3>Import data (CSV)</h3>
+                  <input
+                    className="input"
+                    type="file"
+                    accept=".csv"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (file) parseCsvFile(file)
+                    }}
+                  />
+                  <div className="stack">
+                    <p className="muted">
+                      Required columns: <strong>conversation_id</strong>,{' '}
+                      <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
+                      <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
+                      <strong>vote</strong>.
+                    </p>
+                    <p className="muted">
+                      Optional columns: comment_created_at, reaction_created_at, participant_cluster.
+                    </p>
+                    <p className="muted">
+                      Seed comments CSV: <strong>comment_text</strong> column required.
+                    </p>
+                  </div>
+                  {csvColumns.length ? (
+                    <div className="form-grid">
+                      <select
+                        className="select"
+                        value={csvMap.conversation_id || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
+                        }
+                      >
+                        <option value="">Conversation ID column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.comment_id || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, comment_id: event.target.value }))
+                        }
+                      >
+                        <option value="">Comment ID column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.participant_id || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, participant_id: event.target.value }))
+                        }
+                      >
+                        <option value="">Participant ID column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.participant_cluster || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, participant_cluster: event.target.value }))
+                        }
+                      >
+                        <option value="">Participant cluster column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.comment_text || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, comment_text: event.target.value }))
+                        }
+                      >
+                        <option value="">Comment text column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.is_seed || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, is_seed: event.target.value }))
+                        }
+                      >
+                        <option value="">Is seed column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.comment_created_at || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, comment_created_at: event.target.value }))
+                        }
+                      >
+                        <option value="">Comment created_at column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.vote || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, vote: event.target.value }))
+                        }
+                      >
+                        <option value="">Vote column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        value={csvMap.reaction_created_at || ''}
+                        onChange={(event) =>
+                          setCsvMap((prev) => ({ ...prev, reaction_created_at: event.target.value }))
+                        }
+                      >
+                        <option value="">Vote created_at column</option>
+                        {csvColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                  <div className="filter-row">
+                    <select
+                      className="select"
+                      value={seedCsvColumn}
+                      onChange={(event) => setSeedCsvColumn(event.target.value)}
+                    >
+                      <option value="">Seed comments from column</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      placeholder="Max rows"
+                      value={seedCsvLimit}
+                      onChange={(event) => setSeedCsvLimit(event.target.value)}
+                    />
+                    <button className="button-secondary" type="button" onClick={handleSeedFromCsv}>
+                      Seed comments
+                    </button>
+                    <button className="button" type="button" onClick={handleImportDataset}>
+                      Import dataset
+                    </button>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={runAnalysisAfterImport}
+                        onChange={(event) => setRunAnalysisAfterImport(event.target.checked)}
+                      />
+                      Run analysis after import
+                    </label>
+                  </div>
+                  {csvStatus ? <p className="muted">{csvStatus}</p> : null}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="dashboard-detail__body">
+                <p className="muted">
+                  Select an active conversation in Overview to use advanced setup tools.
+                </p>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => applyActiveTab('overview')}
+                >
+                  Go to Overview
+                </button>
+              </div>
+            )}
           </details>
         </div>
       )}
@@ -1650,203 +1704,277 @@ export function DeliberationPage({
             </div>
           </details>
 
-          <div className="module-card module-card__wide">
-            <h3>Participant link</h3>
-            <p className="muted">This link opens the swipe experience.</p>
-            {questionnaireLink ? (
-              <div className="stack">
-                <input className="input" value={questionnaireLink} readOnly />
-                <div className="filter-row">
-                  <a
-                    className="button"
-                    href={questionnaireLink}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open participant view
-                  </a>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => applyActiveTab('setup')}
-                  >
-                    Edit setup
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="muted">Select a conversation in Overview to generate a link.</p>
-            )}
-          </div>
-
-          <details className="dashboard-detail">
-            <summary>Team channels and admin link</summary>
-            <div className="dashboard-detail__body">
-              {slackError ? <div className="module-alert">{slackError}</div> : null}
-              {slackStatus ? (
-                <div className="module-alert module-alert--success">{slackStatus}</div>
-              ) : null}
-              {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
-              {whatsappStatus ? (
-                <div className="module-alert module-alert--success">{whatsappStatus}</div>
-              ) : null}
-              <div className="stack">
-                <div>
-                  <label className="label">Admin link</label>
-                  <input className="input" value={adminQuestionnaireLink} readOnly />
-                </div>
-                <textarea
-                  className="textarea"
-                  value={slackMessage}
-                  onChange={(event) => setSlackMessage(event.target.value)}
-                  placeholder="Slack message"
-                />
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleSendSlack}
-                  disabled={sendingSlack || !questionnaireLink}
-                >
-                  {sendingSlack ? 'Sending…' : 'Send to Slack'}
-                </button>
-                <div className="card-divider">
-                  <h4>WhatsApp share</h4>
-                </div>
-                <select
-                  className="select"
-                  value={whatsappGroupId}
-                  onChange={(event) => setWhatsappGroupId(event.target.value)}
-                >
-                  <option value="">Select WhatsApp group</option>
-                  {whatsappGroups.map((group) => (
-                    <option key={group.groupId} value={group.groupId}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-                <textarea
-                  className="textarea"
-                  value={whatsappMessage}
-                  onChange={(event) => setWhatsappMessage(event.target.value)}
-                  placeholder="WhatsApp message"
-                />
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleSendWhatsapp}
-                  disabled={sendingWhatsapp || !questionnaireLink}
-                >
-                  {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
-                </button>
-              </div>
+          {!activeConvo ? (
+            <div className="module-card module-card__wide">
+              <h3>Select an active conversation</h3>
+              <p className="muted">Choose a conversation in Overview to generate sharing links.</p>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => applyActiveTab('overview')}
+              >
+                Go to Overview
+              </button>
             </div>
-          </details>
-
-          <details className="dashboard-detail">
-            <summary>Embed on your site</summary>
-            <div className="dashboard-detail__body">
-              <p className="muted">
-                Use a stable page id for persistent conversations, or embed a single
-                conversation id.
-              </p>
-              <div className="stack">
-                <input
-                  className="input"
-                  value={polisPageId}
-                  onChange={(event) => setPolisPageId(event.target.value)}
-                  placeholder="PAGE_ID"
-                />
-                <input
-                  className="input"
-                  value={polisSiteId}
-                  onChange={(event) => setPolisSiteId(event.target.value)}
-                  placeholder="Polis site id"
-                />
-                <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}"></div>
-<script async src="https://pol.is/embed.js"></script>`}</pre>
-                <div className="card-divider">
-                  <h4>Single conversation embed</h4>
-                </div>
-                <input
-                  className="input"
-                  value={polisConversationId}
-                  onChange={(event) => setPolisConversationId(event.target.value)}
-                  placeholder="Polis conversation id"
-                />
-                <pre className="code-block">{`<div class="polis" data-conversation_id="${polisConversationId || 'CONVERSATION_ID'}"></div>
-<script async src="https://pol.is/embed.js"></script>`}</pre>
+          ) : (
+            <>
+              <div className="module-card module-card__wide">
+                <h3>Participant link</h3>
+                <p className="muted">This link opens the swipe experience.</p>
+                {questionnaireLink ? (
+                  <div className="stack">
+                    <input className="input" value={questionnaireLink} readOnly />
+                    <div className="filter-row">
+                      <a
+                        className="button"
+                        href={questionnaireLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open participant view
+                      </a>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleCopy(questionnaireLink, 'Participant link')}
+                      >
+                        Copy link
+                      </button>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => applyActiveTab('setup')}
+                      >
+                        Edit setup
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted">Select a conversation in Overview to generate a link.</p>
+                )}
               </div>
-            </div>
-          </details>
 
-          <details className="dashboard-detail">
-            <summary>Participant identity (XID)</summary>
-            <div className="dashboard-detail__body">
-              <p className="muted">
-                If you have known users, attach an xid to match participants with your data.
-              </p>
-              <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
-              <p className="muted">
-                Use a stable id like a GUID. Avoid personal emails unless required.
-              </p>
-            </div>
-          </details>
+              <details className="dashboard-detail">
+                <summary>Team channels and admin link</summary>
+                <div className="dashboard-detail__body">
+                  {slackError ? <div className="module-alert">{slackError}</div> : null}
+                  {slackStatus ? (
+                    <div className="module-alert module-alert--success">{slackStatus}</div>
+                  ) : null}
+                  {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
+                  {whatsappStatus ? (
+                    <div className="module-alert module-alert--success">{whatsappStatus}</div>
+                  ) : null}
+                  <div className="stack">
+                    <div>
+                      <label className="label">Admin link</label>
+                      <input className="input" value={adminQuestionnaireLink} readOnly />
+                    </div>
+                    <div className="filter-row">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleCopy(adminQuestionnaireLink, 'Admin link')}
+                      >
+                        Copy admin link
+                      </button>
+                    </div>
+                    <textarea
+                      className="textarea"
+                      value={slackMessage}
+                      onChange={(event) => setSlackMessage(event.target.value)}
+                      placeholder="Slack message"
+                    />
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={handleSendSlack}
+                      disabled={sendingSlack || !questionnaireLink}
+                    >
+                      {sendingSlack ? 'Sending…' : 'Send to Slack'}
+                    </button>
+                    <div className="card-divider">
+                      <h4>WhatsApp share</h4>
+                    </div>
+                    <select
+                      className="select"
+                      value={whatsappGroupId}
+                      onChange={(event) => setWhatsappGroupId(event.target.value)}
+                    >
+                      <option value="">Select WhatsApp group</option>
+                      {whatsappGroups.map((group) => (
+                        <option key={group.groupId} value={group.groupId}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      className="textarea"
+                      value={whatsappMessage}
+                      onChange={(event) => setWhatsappMessage(event.target.value)}
+                      placeholder="WhatsApp message"
+                    />
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={handleSendWhatsapp}
+                      disabled={sendingWhatsapp || !questionnaireLink}
+                    >
+                      {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
+                    </button>
+                  </div>
+                </div>
+              </details>
+
+              <details className="dashboard-detail">
+                <summary>Embed on your site</summary>
+                <div className="dashboard-detail__body">
+                  <p className="muted">
+                    Use a stable page id for persistent conversations, or embed a single
+                    conversation id.
+                  </p>
+                  <div className="stack">
+                    <input
+                      className="input"
+                      value={polisPageId}
+                      onChange={(event) => setPolisPageId(event.target.value)}
+                      placeholder="PAGE_ID"
+                    />
+                    <input
+                      className="input"
+                      value={polisSiteId}
+                      onChange={(event) => setPolisSiteId(event.target.value)}
+                      placeholder="Polis site id"
+                    />
+                    <pre className="code-block">{pageEmbedCode}</pre>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleCopy(pageEmbedCode, 'Embed code')}
+                    >
+                      Copy embed code
+                    </button>
+                    <div className="card-divider">
+                      <h4>Single conversation embed</h4>
+                    </div>
+                    <input
+                      className="input"
+                      value={polisConversationId}
+                      onChange={(event) => setPolisConversationId(event.target.value)}
+                      placeholder="Polis conversation id"
+                    />
+                    <pre className="code-block">{conversationEmbedCode}</pre>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleCopy(conversationEmbedCode, 'Embed code')}
+                    >
+                      Copy embed code
+                    </button>
+                  </div>
+                </div>
+              </details>
+
+              <details className="dashboard-detail">
+                <summary>Participant identity (XID)</summary>
+                <div className="dashboard-detail__body">
+                  <p className="muted">
+                    If you have known users, attach an xid to match participants with your data.
+                  </p>
+                  <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
+                  <p className="muted">
+                    Use a stable id like a GUID. Avoid personal emails unless required.
+                  </p>
+                </div>
+              </details>
+            </>
+          )}
         </div>
       )}
 
       {activeTab === 'moderation' && (
-        <div className="module-card module-card__wide">
-          <h3>Pending comments</h3>
-          {pendingComments.length === 0 ? (
-            <p className="muted">No pending comments.</p>
+        <div className="stack">
+          {!activeConvo ? (
+            <div className="module-card module-card__wide">
+              <h3>Select an active conversation</h3>
+              <p className="muted">Choose a conversation in Overview to moderate comments.</p>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => applyActiveTab('overview')}
+              >
+                Go to Overview
+              </button>
+            </div>
           ) : (
-            pendingComments.map((comment) => (
-              <div key={comment.id} className="comment-row">
-                <p>{comment.text}</p>
-                <div className="table-actions">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleApprove(comment.id, 'approved')}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleApprove(comment.id, 'rejected')}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))
+            <div className="module-card module-card__wide">
+              <h3>Pending comments</h3>
+              {pendingComments.length === 0 ? (
+                <p className="muted">No pending comments.</p>
+              ) : (
+                pendingComments.map((comment) => (
+                  <div key={comment.id} className="comment-row">
+                    <p>{comment.text}</p>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleApprove(comment.id, 'approved')}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleApprove(comment.id, 'rejected')}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
       )}
 
       {activeTab === 'insights' && (
-        <div className="module-card module-card__wide">
-          <div className="filter-row">
-            <button className="button" type="button" onClick={handleRunAnalysis}>
-              Run analysis
-            </button>
-            <button className="button-secondary" type="button" onClick={handleLoadReport}>
-              Load report
-            </button>
-          </div>
-          {reportError ? <div className="module-alert">{reportError}</div> : null}
-          {report ? (
-            <div className="stack report-stack">
-              <div className="report-header">
-                <div>
-                  <h4>Survey report</h4>
-                  <p className="muted">
-                    A plain-language summary of participation, clusters, and top statements.
-                  </p>
-                </div>
-                <span className="pill">Report loaded</span>
+        <div className="stack">
+          {!activeConvo ? (
+            <div className="module-card module-card__wide">
+              <h3>Select an active conversation</h3>
+              <p className="muted">Choose a conversation in Overview to run insights.</p>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => applyActiveTab('overview')}
+              >
+                Go to Overview
+              </button>
+            </div>
+          ) : (
+            <div className="module-card module-card__wide">
+              <div className="filter-row">
+                <button className="button" type="button" onClick={handleRunAnalysis}>
+                  Run analysis
+                </button>
+                <button className="button-secondary" type="button" onClick={handleLoadReport}>
+                  Load report
+                </button>
               </div>
+              {reportError ? <div className="module-alert">{reportError}</div> : null}
+              {report ? (
+                <div className="stack report-stack">
+                  <div className="report-header">
+                    <div>
+                      <h4>Survey report</h4>
+                      <p className="muted">
+                        A plain-language summary of participation, clusters, and top statements.
+                      </p>
+                    </div>
+                    <span className="pill">Report loaded</span>
+                  </div>
 
               <div className="report-metrics">
                 <div className="report-metric">
@@ -1872,6 +2000,41 @@ export function DeliberationPage({
               </div>
 
               <div className="report-highlights">
+                {reportSummary ? (
+                  <div className="module-card report-card">
+                    <h4>Auto summary</h4>
+                    <p className="muted">
+                      {reportSummary.participants} participants shared {reportSummary.votes} votes
+                      across {reportSummary.statements} statements.
+                    </p>
+                    <ul className="compact-list">
+                      <li>
+                        <span>Largest opinion group</span>
+                        <strong>{reportSummary.largestCluster || '—'}</strong>
+                      </li>
+                      <li>
+                        <span>Top consensus</span>
+                        <strong>
+                          {reportSummary.topConsensus
+                            ? truncateText(reportSummary.topConsensus, 70)
+                            : '—'}
+                        </strong>
+                      </li>
+                      <li>
+                        <span>Top divisive</span>
+                        <strong>
+                          {reportSummary.topPolarizing
+                            ? truncateText(reportSummary.topPolarizing, 70)
+                            : '—'}
+                        </strong>
+                      </li>
+                      <li>
+                        <span>Potential agreement topics</span>
+                        <strong>{reportSummary.agreementTopics}</strong>
+                      </li>
+                    </ul>
+                  </div>
+                ) : null}
                 <div className="module-card report-card">
                   <h4>Highlights</h4>
                   <ul className="compact-list">
@@ -2360,9 +2523,11 @@ export function DeliberationPage({
                 </div>
               </details>
 
+                </div>
+              ) : (
+                <p className="muted">Run analysis or load a report to view insights.</p>
+              )}
             </div>
-          ) : (
-            <p className="muted">Run analysis or load a report to view insights.</p>
           )}
         </div>
       )}
