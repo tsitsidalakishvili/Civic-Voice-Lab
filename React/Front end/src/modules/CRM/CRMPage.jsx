@@ -4,6 +4,8 @@ import {
   requestForm,
   requestJson,
 } from '../../services/api'
+import { CivicStatGrid, PageHeader } from '../../ui'
+import { IconClipboardList, IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -1050,9 +1052,53 @@ export function CRMPage({
     },
   }
 
+  const openTaskCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) => String(task?.status || '').toLowerCase() === 'open',
+      ).length,
+    [tasks],
+  )
+
+  const crmPulseStats = useMemo(
+    () => [
+      {
+        label: 'Network size',
+        value: summary?.total_people ?? people.length ?? '—',
+        icon: <IconUsers size={18} />,
+        badge: 'Active',
+      },
+      {
+        label: 'Supporters',
+        value: summary?.supporters ?? '—',
+        icon: <IconUsers size={18} />,
+        note: 'Community reach',
+      },
+      {
+        label: 'Open tasks',
+        value: openTaskCount,
+        icon: <IconClipboardList size={18} />,
+        badge: 'Today',
+      },
+      {
+        label: 'Segments',
+        value: segments.length,
+        icon: <IconTarget size={18} />,
+        note: 'Ready to activate',
+      },
+    ],
+    [openTaskCount, people.length, segments.length, summary],
+  )
+
   return (
     <section className="module">
       {error ? <div className="module-alert">{error}</div> : null}
+
+      <CivicStatGrid
+        title="Network pulse"
+        description="Live health checks for supporters, tasks, and outreach readiness."
+        items={crmPulseStats}
+      />
 
       {!hideTabs && showTabs ? (
         <div className="subtabs">
@@ -3222,6 +3268,11 @@ function CRMCampaignsTab() {
     goal: '',
     notes: '',
   })
+  const [campaignSearch, setCampaignSearch] = useState('')
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState('All')
+  const [campaignOwnerFilter, setCampaignOwnerFilter] = useState('All')
+  const [campaignSort, setCampaignSort] = useState('recent')
+  const [campaignSection, setCampaignSection] = useState('strategy')
 
   const loadCampaigns = () => {
     setError('')
@@ -3427,6 +3478,7 @@ function CRMCampaignsTab() {
       loadCampaigns()
       if (created?.campaignId) {
         setSelectedCampaignId(created.campaignId)
+        setCampaignSection('strategy')
       }
     } catch (err) {
       setError(err.message || 'Unable to create campaign.')
@@ -3858,6 +3910,26 @@ function CRMCampaignsTab() {
     }
   }
 
+  const scrollToSection = (sectionId) => {
+    if (typeof document === 'undefined') return
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const clearCampaignSelection = () => {
+    setSelectedCampaignId('')
+    setCampaignSection('strategy')
+  }
+
+  const clearCampaignFilters = () => {
+    setCampaignSearch('')
+    setCampaignStatusFilter('All')
+    setCampaignOwnerFilter('All')
+    setCampaignSort('recent')
+  }
+
   const totalCampaigns = campaigns.length
   const activeCampaigns = campaigns.filter((row) => row.status === 'Active').length
   const plannedCampaigns = campaigns.filter((row) => row.status === 'Planned').length
@@ -3894,72 +3966,269 @@ function CRMCampaignsTab() {
   const contributorCount =
     fundingSummary?.contributorCount ?? contributions.length ?? 0
 
+  const ownerOptions = useMemo(() => {
+    const owners = campaigns.map((row) => row.owner).filter(Boolean)
+    return ['All', ...Array.from(new Set(owners)).sort()]
+  }, [campaigns])
+
+  const filteredCampaigns = useMemo(() => {
+    const searchTerm = campaignSearch.trim().toLowerCase()
+    let rows = [...campaigns]
+    if (campaignStatusFilter !== 'All') {
+      rows = rows.filter(
+        (row) => (row.status || 'Planned') === campaignStatusFilter,
+      )
+    }
+    if (campaignOwnerFilter !== 'All') {
+      rows = rows.filter((row) => (row.owner || '—') === campaignOwnerFilter)
+    }
+    if (searchTerm) {
+      rows = rows.filter((row) =>
+        [row.name, row.topic, row.owner, row.status].some((value) =>
+          String(value || '')
+            .toLowerCase()
+            .includes(searchTerm),
+        ),
+      )
+    }
+    const toDateValue = (value) => {
+      const time = Date.parse(value || '')
+      return Number.isNaN(time) ? 0 : time
+    }
+    const fundingRatio = (row) => {
+      const raised = Number(row.fundsRaisedAmount ?? 0)
+      const target = Number(row.fundingTargetAmount ?? 0)
+      return target ? raised / target : 0
+    }
+    const sorters = {
+      recent: (a, b) =>
+        toDateValue(b.startDate) - toDateValue(a.startDate) ||
+        (a.name || '').localeCompare(b.name || ''),
+      name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+      status: (a, b) => (a.status || '').localeCompare(b.status || ''),
+      funding: (a, b) =>
+        fundingRatio(b) - fundingRatio(a) ||
+        (a.name || '').localeCompare(b.name || ''),
+    }
+    rows.sort(sorters[campaignSort] || sorters.recent)
+    return rows
+  }, [
+    campaigns,
+    campaignOwnerFilter,
+    campaignSearch,
+    campaignSort,
+    campaignStatusFilter,
+  ])
+
+  const selectedCampaign = campaignDraft || campaignDetail
+  const campaignNextSteps = useMemo(() => {
+    if (!selectedCampaignId || !selectedCampaign) return []
+    const steps = []
+    if (!selectedCampaign.objective) {
+      steps.push('Add a clear objective for the campaign.')
+    }
+    if (!selectedCampaign.owner && !selectedCampaign.responsibleOwner) {
+      steps.push('Assign a campaign owner to keep delivery on track.')
+    }
+    if (!Number(selectedCampaign.fundingTargetAmount)) {
+      steps.push('Set a funding target to unlock transparency goals.')
+    }
+    if (!selectedCampaign.implementationSteps) {
+      steps.push('Draft the execution plan so the team knows the next steps.')
+    }
+    if (!selectedCampaign.deliberationConversationId) {
+      steps.push('Launch the survey to capture supporter feedback.')
+    }
+    const statements =
+      selectedCampaign.consensusStatements ||
+      selectedCampaign.polarizationStatements ||
+      []
+    if (!statements.length) {
+      steps.push('Run analysis to generate consensus statements.')
+    }
+    return steps.slice(0, 4)
+  }, [selectedCampaign, selectedCampaignId])
+
+  const campaignStatusOptions = [
+    'All',
+    'Draft',
+    'Planned',
+    'Active',
+    'Funding',
+    'Funded',
+    'In Progress',
+    'Awaiting Verification',
+    'Completed',
+    'Cancelled',
+    'Paused',
+  ]
+  const campaignDetailTabs = [
+    { id: 'strategy', label: 'Strategy' },
+    { id: 'execution', label: 'Execution' },
+    { id: 'funding', label: 'Funding' },
+    { id: 'operations', label: 'Operations' },
+    { id: 'updates', label: 'Updates' },
+    { id: 'people', label: 'People' },
+    { id: 'statements', label: 'Statements' },
+    { id: 'insights', label: 'Insights' },
+  ]
+
   return (
     <div className="module-grid">
+      <PageHeader
+        eyebrow="Campaigns hub"
+        title="Campaigns"
+        description="Plan, fund, execute, and communicate campaigns with clear next steps."
+        className="page-header--hero module-card__wide campaigns-header"
+        meta={
+          <div className="module-header__meta">
+            <div className="module-header__metric">
+              <span>Total</span>
+              <strong>{totalCampaigns}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Active</span>
+              <strong>{activeCampaigns}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>Funding</span>
+              <strong>{fundingCampaigns}</strong>
+            </div>
+            <div className="module-header__metric">
+              <span>In progress</span>
+              <strong>{inProgressCampaigns}</strong>
+            </div>
+          </div>
+        }
+        actions={
+          <>
+            <button
+              className="button"
+              type="button"
+              onClick={() => scrollToSection('campaigns-create')}
+            >
+              New campaign
+            </button>
+            <button className="button-secondary" type="button" onClick={loadCampaigns}>
+              Refresh list
+            </button>
+            <button
+              className="button-ghost"
+              type="button"
+              onClick={clearCampaignSelection}
+              disabled={!selectedCampaignId}
+            >
+              Clear selection
+            </button>
+          </>
+        }
+      />
+
       <div className="campaigns-top-grid">
         <div className="module-card campaigns-overview" id="campaigns-overview">
-          <h3>Campaign overview</h3>
-          <p className="muted">Create campaigns and guide surveys.</p>
-          <div className="metric-row">
-            <span>Total</span>
-            <strong>{totalCampaigns}</strong>
+          <div className="card-header">
+            <div>
+              <h3>Campaign overview</h3>
+              <p className="muted">Status snapshot and quick filters.</p>
+            </div>
+            <div className="pill">Live</div>
           </div>
-          <div className="metric-row">
-            <span>Active</span>
-            <strong>{activeCampaigns}</strong>
+          <div className="campaigns-overview__stats">
+            <div className="metric-row">
+              <span>Total</span>
+              <strong>{totalCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Active</span>
+              <strong>{activeCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Draft</span>
+              <strong>{draftCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Planned</span>
+              <strong>{plannedCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Funding</span>
+              <strong>{fundingCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>In progress</span>
+              <strong>{inProgressCampaigns}</strong>
+            </div>
+            <div className="metric-row">
+              <span>Completed</span>
+              <strong>{completedCampaigns}</strong>
+            </div>
           </div>
-          <div className="metric-row">
-            <span>Draft</span>
-            <strong>{draftCampaigns}</strong>
+          <div className="campaigns-quick-filters">
+            {[
+              { label: 'All', value: 'All', count: totalCampaigns },
+              { label: 'Active', value: 'Active', count: activeCampaigns },
+              { label: 'Draft', value: 'Draft', count: draftCampaigns },
+              { label: 'Funding', value: 'Funding', count: fundingCampaigns },
+              { label: 'In progress', value: 'In Progress', count: inProgressCampaigns },
+              { label: 'Completed', value: 'Completed', count: completedCampaigns },
+            ].map((filter) => (
+              <button
+                key={filter.value}
+                className={`button-secondary button-secondary--small ${campaignStatusFilter === filter.value ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => setCampaignStatusFilter(filter.value)}
+                aria-pressed={campaignStatusFilter === filter.value}
+              >
+                {filter.label} ({filter.count})
+              </button>
+            ))}
           </div>
-          <div className="metric-row">
-            <span>Planned</span>
-            <strong>{plannedCampaigns}</strong>
-          </div>
-          <div className="metric-row">
-            <span>Funding</span>
-            <strong>{fundingCampaigns}</strong>
-          </div>
-          <div className="metric-row">
-            <span>In progress</span>
-            <strong>{inProgressCampaigns}</strong>
-          </div>
-          <div className="metric-row">
-            <span>Completed</span>
-            <strong>{completedCampaigns}</strong>
-          </div>
+          <p className="muted">
+            Showing {filteredCampaigns.length} of {totalCampaigns} campaigns.
+          </p>
         </div>
 
         <div className="module-card campaigns-create" id="campaigns-create">
-          <h3>Create campaign</h3>
+          <div className="card-header">
+            <div>
+              <h3>New campaign</h3>
+              <p className="muted">
+                Start with the essentials. Add details as you go.
+              </p>
+            </div>
+          </div>
           {error ? <div className="module-alert">{error}</div> : null}
           {statusMessage ? <div className="module-alert">{statusMessage}</div> : null}
           <form className="stack" onSubmit={handleCreateCampaign}>
-          <div className="campaign-create-grid">
-            <input
-              className="input"
-              placeholder="Campaign name"
-              value={campaignForm.name}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, name: event.target.value }))
-              }
-            />
-            <input
-              className="input"
-              placeholder="Topic (e.g., Holly's Law)"
-              value={campaignForm.topic}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, topic: event.target.value }))
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Objective"
-              value={campaignForm.objective}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, objective: event.target.value }))
-              }
-            />
+            <div className="campaign-create-grid">
+              <input
+                className="input"
+                placeholder="Campaign name"
+                value={campaignForm.name}
+                onChange={(event) =>
+                  setCampaignForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+              />
+              <input
+                className="input"
+                placeholder="Topic (e.g., Holly's Law)"
+                value={campaignForm.topic}
+                onChange={(event) =>
+                  setCampaignForm((prev) => ({ ...prev, topic: event.target.value }))
+                }
+              />
+              <textarea
+                className="textarea"
+                placeholder="Objective"
+                value={campaignForm.objective}
+                onChange={(event) =>
+                  setCampaignForm((prev) => ({
+                    ...prev,
+                    objective: event.target.value,
+                  }))
+                }
+              />
+            </div>
             <details className="dashboard-detail">
               <summary>Problem & funding</summary>
               <div className="stack">
@@ -4072,112 +4341,211 @@ function CRMCampaignsTab() {
                 </div>
               </div>
             </details>
-            <textarea
-              className="textarea"
-              placeholder="Legislation or drafted law"
-              value={campaignForm.legislationText}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, legislationText: event.target.value }))
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Freedom Square manifesto statements"
-              value={campaignForm.manifestoText}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, manifestoText: event.target.value }))
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Expert prompt"
-              value={campaignForm.expertPrompt}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, expertPrompt: event.target.value }))
-              }
-            />
-          </div>
-          <select
-            className="select"
-            value={campaignForm.status}
-            onChange={(event) =>
-              setCampaignForm((prev) => ({ ...prev, status: event.target.value }))
-            }
-          >
-            <option value="Draft">Draft</option>
-            <option value="Funding">Funding</option>
-            <option value="Funded">Funded</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Awaiting Verification">Awaiting Verification</option>
-            <option value="Completed">Completed</option>
-            <option value="Cancelled">Cancelled</option>
-            <option value="Planned">Planned</option>
-            <option value="Active">Active</option>
-            <option value="Paused">Paused</option>
-          </select>
-          <div className="form-grid">
-            <input
-              className="input"
-              type="date"
-              value={campaignForm.startDate}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, startDate: event.target.value }))
-              }
-            />
-            <input
-              className="input"
-              type="date"
-              value={campaignForm.endDate}
-              onChange={(event) =>
-                setCampaignForm((prev) => ({ ...prev, endDate: event.target.value }))
-              }
-            />
-          </div>
-          <input
-            className="input"
-            placeholder="Owner"
-            value={campaignForm.owner}
-            onChange={(event) =>
-              setCampaignForm((prev) => ({ ...prev, owner: event.target.value }))
-            }
-          />
-          <input
-            className="input"
-            placeholder="Target group"
-            value={campaignForm.targetGroup}
-            onChange={(event) =>
-              setCampaignForm((prev) => ({ ...prev, targetGroup: event.target.value }))
-            }
-          />
-          <input
-            className="input"
-            type="number"
-            min="0"
-            placeholder="Goal (people)"
-            value={campaignForm.goal}
-            onChange={(event) =>
-              setCampaignForm((prev) => ({ ...prev, goal: event.target.value }))
-            }
-          />
-          <textarea
-            className="textarea"
-            placeholder="Notes (optional)"
-            value={campaignForm.notes}
-            onChange={(event) =>
-              setCampaignForm((prev) => ({ ...prev, notes: event.target.value }))
-            }
-          />
-          <button className="button" type="submit">
-            Create campaign
-          </button>
-        </form>
+            <details className="dashboard-detail">
+              <summary>Policy & research</summary>
+              <div className="stack">
+                <textarea
+                  className="textarea"
+                  placeholder="Legislation or drafted law"
+                  value={campaignForm.legislationText}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      legislationText: event.target.value,
+                    }))
+                  }
+                />
+                <textarea
+                  className="textarea"
+                  placeholder="Freedom Square manifesto statements"
+                  value={campaignForm.manifestoText}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      manifestoText: event.target.value,
+                    }))
+                  }
+                />
+                <textarea
+                  className="textarea"
+                  placeholder="Expert prompt"
+                  value={campaignForm.expertPrompt}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      expertPrompt: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </details>
+            <details className="dashboard-detail">
+              <summary>Operations & ownership</summary>
+              <div className="stack">
+                <select
+                  className="select"
+                  value={campaignForm.status}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      status: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="Funding">Funding</option>
+                  <option value="Funded">Funded</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Awaiting Verification">Awaiting Verification</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Planned">Planned</option>
+                  <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
+                </select>
+                <div className="form-grid">
+                  <input
+                    className="input"
+                    type="date"
+                    value={campaignForm.startDate}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        startDate: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={campaignForm.endDate}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({
+                        ...prev,
+                        endDate: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <input
+                  className="input"
+                  placeholder="Owner"
+                  value={campaignForm.owner}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      owner: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="input"
+                  placeholder="Target group"
+                  value={campaignForm.targetGroup}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      targetGroup: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  placeholder="Goal (people)"
+                  value={campaignForm.goal}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      goal: event.target.value,
+                    }))
+                  }
+                />
+                <textarea
+                  className="textarea"
+                  placeholder="Notes (optional)"
+                  value={campaignForm.notes}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </details>
+            <button className="button" type="submit">
+              Create campaign
+            </button>
+          </form>
         </div>
       </div>
 
       <div className="module-card module-card__wide" id="campaigns-list">
-        <h3>Campaigns</h3>
+        <div className="card-header">
+          <div>
+            <h3>Campaigns</h3>
+            <p className="muted">Select a campaign to open its workspace.</p>
+          </div>
+          {selectedCampaignId ? <div className="pill">Selected</div> : null}
+        </div>
         {loading ? <p className="muted">Loading…</p> : null}
-        <div className="table">
+        <div className="campaigns-list-toolbar">
+          <div className="filter-row">
+            <input
+              className="input"
+              placeholder="Search by name, topic, owner, or status"
+              value={campaignSearch}
+              onChange={(event) => setCampaignSearch(event.target.value)}
+            />
+            <select
+              className="select"
+              value={campaignStatusFilter}
+              onChange={(event) => setCampaignStatusFilter(event.target.value)}
+            >
+              {campaignStatusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status === 'All' ? 'All statuses' : status}
+                </option>
+              ))}
+            </select>
+            <select
+              className="select"
+              value={campaignOwnerFilter}
+              onChange={(event) => setCampaignOwnerFilter(event.target.value)}
+            >
+              {ownerOptions.map((owner) => (
+                <option key={owner} value={owner}>
+                  {owner === 'All' ? 'All owners' : owner}
+                </option>
+              ))}
+            </select>
+            <select
+              className="select"
+              value={campaignSort}
+              onChange={(event) => setCampaignSort(event.target.value)}
+            >
+              <option value="recent">Most recent</option>
+              <option value="name">Name A–Z</option>
+              <option value="status">Status</option>
+              <option value="funding">Funding progress</option>
+            </select>
+          </div>
+          <div className="campaigns-list-actions">
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={() => downloadCsv('campaigns.csv', filteredCampaigns)}
+            >
+              Export CSV
+            </button>
+            <button className="button-ghost" type="button" onClick={clearCampaignFilters}>
+              Clear filters
+            </button>
+          </div>
+        </div>
+        <div className="table table--stacked">
           <div className="table-row table-row--campaigns table-head">
             <span>Name</span>
             <span>Topic</span>
@@ -4187,28 +4555,37 @@ function CRMCampaignsTab() {
             <span>Goal</span>
             <span>Funding</span>
           </div>
-          {campaigns.length === 0 && !loading && (
-            <div className="table-row empty">No campaigns yet.</div>
+          {filteredCampaigns.length === 0 && !loading && (
+            <div className="table-row empty">
+              {campaigns.length === 0
+                ? 'No campaigns yet.'
+                : 'No campaigns match these filters.'}
+            </div>
           )}
-          {campaigns.map((campaign) => {
+          {filteredCampaigns.map((campaign) => {
             const startDate = campaign.startDate || '—'
             const endDate = campaign.endDate || '—'
+            const isSelected = selectedCampaignId === campaign.campaignId
             return (
               <button
                 type="button"
-                className="table-row table-row--campaigns table-row__button"
+                className={`table-row table-row--campaigns table-row__button ${isSelected ? 'is-active' : ''}`}
                 key={campaign.campaignId}
-                onClick={() => setSelectedCampaignId(campaign.campaignId)}
+                onClick={() => {
+                  setSelectedCampaignId(campaign.campaignId)
+                  setCampaignSection('strategy')
+                }}
+                aria-pressed={isSelected}
               >
-                <span>{campaign.name}</span>
-                <span>{campaign.topic || '—'}</span>
-                <span>{campaign.status || 'Planned'}</span>
-                <span>
+                <span data-label="Name">{campaign.name}</span>
+                <span data-label="Topic">{campaign.topic || '—'}</span>
+                <span data-label="Status">{campaign.status || 'Planned'}</span>
+                <span data-label="Dates">
                   {startDate} → {endDate}
                 </span>
-                <span>{campaign.owner || '—'}</span>
-                <span>{campaign.goal ?? 0}</span>
-                <span>
+                <span data-label="Owner">{campaign.owner || '—'}</span>
+                <span data-label="Goal">{campaign.goal ?? 0}</span>
+                <span data-label="Funding">
                   {Number(campaign.fundsRaisedAmount ?? 0).toLocaleString()} /{' '}
                   {Number(campaign.fundingTargetAmount ?? 0).toLocaleString()}{' '}
                   {campaign.currency || 'GEL'}
@@ -4219,757 +4596,891 @@ function CRMCampaignsTab() {
         </div>
       </div>
 
-      <div className="module-card module-card__wide">
+      <div className="module-card module-card__wide campaigns-detail-header">
         <div className="card-header">
           <div>
-            <h3>Campaign workspace</h3>
+            <h3>{selectedCampaign?.name || 'Campaign details'}</h3>
             <p className="muted">
-              Run analysis, launch survey, and review insights.
+              Strategy, execution, funding, and updates in one workspace.
             </p>
           </div>
-          {selectedCampaignId ? <div className="pill">{selectedCampaignId}</div> : null}
+          {selectedCampaignId ? (
+            <div className="pill">{selectedCampaign?.status || 'Planned'}</div>
+          ) : null}
         </div>
         {detailError ? <div className="module-alert">{detailError}</div> : null}
-        {!selectedCampaignId && <p className="muted">Select a campaign to continue.</p>}
-        {selectedCampaignId && campaignDraft && (
-          <div className="stack">
-            <div className="form-grid">
-              <input
-                className="input"
-                placeholder="Topic"
-                value={campaignDraft.topic || ''}
-                onChange={(event) => handleDraftChange('topic', event.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Objective"
-                value={campaignDraft.objective || ''}
-                onChange={(event) => handleDraftChange('objective', event.target.value)}
-              />
-            </div>
-            <textarea
-              className="textarea"
-              placeholder="Legislation or drafted law"
-              value={campaignDraft.legislationText || ''}
-              onChange={(event) =>
-                handleDraftChange('legislationText', event.target.value)
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Freedom Square manifesto statements"
-              value={campaignDraft.manifestoText || ''}
-              onChange={(event) =>
-                handleDraftChange('manifestoText', event.target.value)
-              }
-            />
-            <textarea
-              className="textarea"
-              placeholder="Expert prompt"
-              value={campaignDraft.expertPrompt || ''}
-              onChange={(event) =>
-                handleDraftChange('expertPrompt', event.target.value)
-              }
-            />
-            <div className="table-actions">
-              <button className="button" type="button" onClick={handleRunAnalysis}>
-                Run analysis
-              </button>
-              <button className="button-secondary" type="button" onClick={handleLaunchDeliberation}>
-                Launch survey
-              </button>
-              <button className="button-secondary" type="button" onClick={handleRefreshInsights}>
-                Refresh insights
-              </button>
-              {conversationLink ? (
-                <a className="button-secondary" href={conversationLink} target="_blank" rel="noreferrer">
-                  Open questionnaire
-                </a>
+        {!selectedCampaignId || !selectedCampaign ? (
+          <p className="muted">Select a campaign to view its workspace.</p>
+        ) : (
+          <>
+            <div className="campaigns-detail-grid">
+              <div className="campaigns-detail-metrics">
+                <div className="metric-row">
+                  <span>Owner</span>
+                  <strong>
+                    {selectedCampaign.responsibleOwner ||
+                      selectedCampaign.owner ||
+                      '—'}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Status</span>
+                  <strong>{selectedCampaign.status || 'Planned'}</strong>
+                </div>
+                <div className="metric-row">
+                  <span>Dates</span>
+                  <strong>
+                    {selectedCampaign.startDate ||
+                      selectedCampaign.executionStartDate ||
+                      '—'}{' '}
+                    →{' '}
+                    {selectedCampaign.endDate ||
+                      selectedCampaign.expectedCompletionDate ||
+                      '—'}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Funding</span>
+                  <strong>
+                    {raisedAmount.toLocaleString()} / {targetAmount.toLocaleString()}{' '}
+                    {displayCurrency}
+                  </strong>
+                </div>
+                <div className="metric-row">
+                  <span>Goal</span>
+                  <strong>{Number(selectedCampaign.goal ?? 0).toLocaleString()}</strong>
+                </div>
+              </div>
+              <div className="campaigns-detail-actions">
+                <div className="table-actions">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={handleRunAnalysis}
+                    disabled={!campaignDraft}
+                  >
+                    Run analysis
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={handleLaunchDeliberation}
+                    disabled={!selectedCampaignId}
+                  >
+                    Launch survey
+                  </button>
+                  <button
+                    className="button-ghost"
+                    type="button"
+                    onClick={handleRefreshInsights}
+                    disabled={!campaignDetail?.deliberationConversationId}
+                  >
+                    Refresh insights
+                  </button>
+                  {conversationLink ? (
+                    <a
+                      className="button-ghost"
+                      href={conversationLink}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open questionnaire
+                    </a>
+                  ) : null}
+                </div>
+                {analysisStatus ? <p className="muted">{analysisStatus}</p> : null}
+              </div>
+              {campaignNextSteps.length ? (
+                <div className="campaigns-next-steps">
+                  <h4>Smart next steps</h4>
+                  <ul className="compact-list">
+                    {campaignNextSteps.map((step, index) => (
+                      <li key={`step-${index}`}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </div>
-            {analysisStatus ? <p className="muted">{analysisStatus}</p> : null}
-          </div>
+            <div className="subtabs campaigns-detail-tabs">
+              {campaignDetailTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`subtab ${campaignSection === tab.id ? 'active' : ''}`}
+                  onClick={() => setCampaignSection(tab.id)}
+                  aria-pressed={campaignSection === tab.id}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Execution plan</h3>
-            <p className="muted">
-              Move funded campaigns into delivery and verification.
-            </p>
+      {campaignSection === 'strategy' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Strategy and analysis</h3>
+              <p className="muted">
+                Refine your topic, objective, and research inputs.
+              </p>
+            </div>
           </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to edit strategy.</p>
+          )}
+          {selectedCampaignId && campaignDraft && (
+            <div className="stack">
+              <div className="form-grid">
+                <input
+                  className="input"
+                  placeholder="Topic"
+                  value={campaignDraft.topic || ''}
+                  onChange={(event) => handleDraftChange('topic', event.target.value)}
+                />
+                <input
+                  className="input"
+                  placeholder="Objective"
+                  value={campaignDraft.objective || ''}
+                  onChange={(event) =>
+                    handleDraftChange('objective', event.target.value)
+                  }
+                />
+              </div>
+              <textarea
+                className="textarea"
+                placeholder="Legislation or drafted law"
+                value={campaignDraft.legislationText || ''}
+                onChange={(event) =>
+                  handleDraftChange('legislationText', event.target.value)
+                }
+              />
+              <textarea
+                className="textarea"
+                placeholder="Freedom Square manifesto statements"
+                value={campaignDraft.manifestoText || ''}
+                onChange={(event) =>
+                  handleDraftChange('manifestoText', event.target.value)
+                }
+              />
+              <textarea
+                className="textarea"
+                placeholder="Expert prompt"
+                value={campaignDraft.expertPrompt || ''}
+                onChange={(event) =>
+                  handleDraftChange('expertPrompt', event.target.value)
+                }
+              />
+            </div>
+          )}
         </div>
-        {!selectedCampaignId && (
-          <p className="muted">Select a campaign to manage execution.</p>
-        )}
-        {selectedCampaignId && campaignDraft && (
-          <div className="stack">
-            {campaignSaveError ? (
-              <div className="module-alert">{campaignSaveError}</div>
-            ) : null}
-            {campaignSaveStatus ? (
-              <div className="module-alert">{campaignSaveStatus}</div>
-            ) : null}
-            <div className="form-grid">
-              <select
-                className="select"
-                value={campaignDraft.status || 'Planned'}
-                onChange={(event) => handleDraftChange('status', event.target.value)}
+      )}
+
+      {campaignSection === 'execution' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Execution plan</h3>
+              <p className="muted">
+                Move funded campaigns into delivery and verification.
+              </p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to manage execution.</p>
+          )}
+          {selectedCampaignId && campaignDraft && (
+            <div className="stack">
+              {campaignSaveError ? (
+                <div className="module-alert">{campaignSaveError}</div>
+              ) : null}
+              {campaignSaveStatus ? (
+                <div className="module-alert">{campaignSaveStatus}</div>
+              ) : null}
+              <div className="form-grid">
+                <select
+                  className="select"
+                  value={campaignDraft.status || 'Planned'}
+                  onChange={(event) => handleDraftChange('status', event.target.value)}
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="Funding">Funding</option>
+                  <option value="Funded">Funded</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Awaiting Verification">Awaiting Verification</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Planned">Planned</option>
+                  <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
+                </select>
+                <input
+                  className="input"
+                  placeholder="Responsible owner"
+                  value={campaignDraft.responsibleOwner || ''}
+                  onChange={(event) =>
+                    handleDraftChange('responsibleOwner', event.target.value)
+                  }
+                />
+              </div>
+              <div className="form-grid">
+                <input
+                  className="input"
+                  placeholder="Community partner"
+                  value={campaignDraft.communityPartner || ''}
+                  onChange={(event) =>
+                    handleDraftChange('communityPartner', event.target.value)
+                  }
+                />
+                <input
+                  className="input"
+                  type="date"
+                  value={campaignDraft.executionStartDate || ''}
+                  onChange={(event) =>
+                    handleDraftChange('executionStartDate', event.target.value)
+                  }
+                />
+                <input
+                  className="input"
+                  type="date"
+                  value={campaignDraft.expectedCompletionDate || ''}
+                  onChange={(event) =>
+                    handleDraftChange('expectedCompletionDate', event.target.value)
+                  }
+                />
+              </div>
+              <textarea
+                className="textarea"
+                placeholder="Implementation steps"
+                value={campaignDraft.implementationSteps || ''}
+                onChange={(event) =>
+                  handleDraftChange('implementationSteps', event.target.value)
+                }
+              />
+              <button
+                className="button"
+                type="button"
+                onClick={handleSaveExecutionPlan}
               >
-                <option value="Draft">Draft</option>
-                <option value="Funding">Funding</option>
-                <option value="Funded">Funded</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Awaiting Verification">Awaiting Verification</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-                <option value="Planned">Planned</option>
-                <option value="Active">Active</option>
-                <option value="Paused">Paused</option>
-              </select>
-              <input
-                className="input"
-                placeholder="Responsible owner"
-                value={campaignDraft.responsibleOwner || ''}
-                onChange={(event) =>
-                  handleDraftChange('responsibleOwner', event.target.value)
-                }
-              />
+                Save execution plan
+              </button>
             </div>
-            <div className="form-grid">
-              <input
-                className="input"
-                placeholder="Community partner"
-                value={campaignDraft.communityPartner || ''}
-                onChange={(event) =>
-                  handleDraftChange('communityPartner', event.target.value)
-                }
-              />
-              <input
-                className="input"
-                type="date"
-                value={campaignDraft.executionStartDate || ''}
-                onChange={(event) =>
-                  handleDraftChange('executionStartDate', event.target.value)
-                }
-              />
-              <input
-                className="input"
-                type="date"
-                value={campaignDraft.expectedCompletionDate || ''}
-                onChange={(event) =>
-                  handleDraftChange('expectedCompletionDate', event.target.value)
-                }
-              />
-            </div>
-            <textarea
-              className="textarea"
-              placeholder="Implementation steps"
-              value={campaignDraft.implementationSteps || ''}
-              onChange={(event) =>
-                handleDraftChange('implementationSteps', event.target.value)
-              }
-            />
-            <button
-              className="button"
-              type="button"
-              onClick={handleSaveExecutionPlan}
-            >
-              Save execution plan
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Funding and transparency</h3>
-            <p className="muted">
-              Track progress toward the target and record contributions.
-            </p>
-          </div>
+          )}
         </div>
-        {!selectedCampaignId && (
-          <p className="muted">Select a campaign to see funding activity.</p>
-        )}
-        {selectedCampaignId && (
-          <div className="stack">
-            <div className="module-grid">
-              <div className="module-card">
-                <h4>Funding summary</h4>
-                <div className="questionnaire-progress">
-                  <div className="questionnaire-progress__track">
-                    <div
-                      className="questionnaire-progress__bar"
-                      style={{ width: `${fundingProgress}%` }}
-                    />
+      )}
+
+      {campaignSection === 'funding' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Funding and transparency</h3>
+              <p className="muted">
+                Track progress toward the target and record contributions.
+              </p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to see funding activity.</p>
+          )}
+          {selectedCampaignId && (
+            <div className="stack">
+              <div className="module-grid">
+                <div className="module-card">
+                  <h4>Funding summary</h4>
+                  <div className="questionnaire-progress">
+                    <div className="questionnaire-progress__track">
+                      <div
+                        className="questionnaire-progress__bar"
+                        style={{ width: `${fundingProgress}%` }}
+                      />
+                    </div>
+                    <span className="questionnaire-progress__label">
+                      {fundingProgress.toFixed(0)}%
+                    </span>
                   </div>
-                  <span className="questionnaire-progress__label">
-                    {fundingProgress.toFixed(0)}%
-                  </span>
+                  <div className="metric-row">
+                    <span>Raised</span>
+                    <strong>
+                      {raisedAmount.toLocaleString()} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Target</span>
+                    <strong>
+                      {targetAmount.toLocaleString()} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Contributors</span>
+                    <strong>{contributorCount}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Allocated to operations</span>
+                    <strong>
+                      {allocatedOperations.toLocaleString()} {displayCurrency}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Allocated to execution</span>
+                    <strong>
+                      {allocatedExecution.toLocaleString()} {displayCurrency}
+                    </strong>
+                  </div>
                 </div>
-                <div className="metric-row">
-                  <span>Raised</span>
-                  <strong>
-                    {raisedAmount.toLocaleString()} {displayCurrency}
-                  </strong>
-                </div>
-                <div className="metric-row">
-                  <span>Target</span>
-                  <strong>
-                    {targetAmount.toLocaleString()} {displayCurrency}
-                  </strong>
-                </div>
-                <div className="metric-row">
-                  <span>Contributors</span>
-                  <strong>{contributorCount}</strong>
-                </div>
-                <div className="metric-row">
-                  <span>Allocated to operations</span>
-                  <strong>
-                    {allocatedOperations.toLocaleString()} {displayCurrency}
-                  </strong>
-                </div>
-                <div className="metric-row">
-                  <span>Allocated to execution</span>
-                  <strong>
-                    {allocatedExecution.toLocaleString()} {displayCurrency}
-                  </strong>
+
+                <div className="module-card">
+                  <h4>Record contribution</h4>
+                  {contributionError ? (
+                    <div className="module-alert">{contributionError}</div>
+                  ) : null}
+                  {contributionStatus ? (
+                    <div className="module-alert">{contributionStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handleContributionSubmit}>
+                    <div className="form-grid">
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        placeholder="Amount"
+                        value={contributionForm.amount}
+                        onChange={(event) =>
+                          setContributionForm((prev) => ({
+                            ...prev,
+                            amount: event.target.value,
+                          }))
+                        }
+                      />
+                      <select
+                        className="select"
+                        value={contributionForm.currency}
+                        onChange={(event) =>
+                          setContributionForm((prev) => ({
+                            ...prev,
+                            currency: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="GEL">GEL</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                      </select>
+                    </div>
+                    <input
+                      className="input"
+                      placeholder="Contributor name"
+                      value={contributionForm.contributorName}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          contributorName: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      type="email"
+                      placeholder="Contributor email"
+                      value={contributionForm.contributorEmail}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          contributorEmail: event.target.value,
+                        }))
+                      }
+                    />
+                    <textarea
+                      className="textarea"
+                      placeholder="Note (optional)"
+                      value={contributionForm.note}
+                      onChange={(event) =>
+                        setContributionForm((prev) => ({
+                          ...prev,
+                          note: event.target.value,
+                        }))
+                      }
+                    />
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={contributionForm.isAnonymous}
+                        onChange={(event) =>
+                          setContributionForm((prev) => ({
+                            ...prev,
+                            isAnonymous: event.target.checked,
+                          }))
+                        }
+                      />
+                      Contribute anonymously
+                    </label>
+                    <button className="button" type="submit">
+                      Record contribution
+                    </button>
+                  </form>
                 </div>
               </div>
 
               <div className="module-card">
-                <h4>Record contribution</h4>
-                {contributionError ? (
-                  <div className="module-alert">{contributionError}</div>
-                ) : null}
-                {contributionStatus ? (
-                  <div className="module-alert">{contributionStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleContributionSubmit}>
-                  <div className="form-grid">
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      placeholder="Amount"
-                      value={contributionForm.amount}
-                      onChange={(event) =>
-                        setContributionForm((prev) => ({
-                          ...prev,
-                          amount: event.target.value,
-                        }))
-                      }
-                    />
-                    <select
-                      className="select"
-                      value={contributionForm.currency}
-                      onChange={(event) =>
-                        setContributionForm((prev) => ({
-                          ...prev,
-                          currency: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="GEL">GEL</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
-                  </div>
-                  <input
-                    className="input"
-                    placeholder="Contributor name"
-                    value={contributionForm.contributorName}
-                    onChange={(event) =>
-                      setContributionForm((prev) => ({
-                        ...prev,
-                        contributorName: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    type="email"
-                    placeholder="Contributor email"
-                    value={contributionForm.contributorEmail}
-                    onChange={(event) =>
-                      setContributionForm((prev) => ({
-                        ...prev,
-                        contributorEmail: event.target.value,
-                      }))
-                    }
-                  />
-                  <textarea
-                    className="textarea"
-                    placeholder="Note (optional)"
-                    value={contributionForm.note}
-                    onChange={(event) =>
-                      setContributionForm((prev) => ({
-                        ...prev,
-                        note: event.target.value,
-                      }))
-                    }
-                  />
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={contributionForm.isAnonymous}
-                      onChange={(event) =>
-                        setContributionForm((prev) => ({
-                          ...prev,
-                          isAnonymous: event.target.checked,
-                        }))
-                      }
-                    />
-                    Contribute anonymously
-                  </label>
-                  <button className="button" type="submit">
-                    Record contribution
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div className="module-card">
-              <h4>Recent contributions</h4>
-              {contributions.length === 0 ? (
-                <p className="muted">No contributions recorded yet.</p>
-              ) : (
-                <ul className="compact-list">
-                  {contributions.slice(0, 5).map((contrib) => (
-                    <li key={contrib.contributionId}>
-                      {contrib.isAnonymous
-                        ? 'Anonymous'
-                        : contrib.contributorName || 'Supporter'}{' '}
-                      — {contrib.amount} {contrib.currency}{' '}
-                      {contrib.paymentStatus ? `(${contrib.paymentStatus})` : ''}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Execution, proof, and partners</h3>
-            <p className="muted">
-              Track milestones, spending, proof of work, and local partners.
-            </p>
-          </div>
-        </div>
-        {!selectedCampaignId && (
-          <p className="muted">Select a campaign to manage execution.</p>
-        )}
-        {selectedCampaignId && (
-          <div className="stack">
-            <div className="module-grid">
-              <div className="module-card">
-                <h4>Milestones</h4>
-                {milestoneError ? (
-                  <div className="module-alert">{milestoneError}</div>
-                ) : null}
-                {milestoneStatus ? (
-                  <div className="module-alert">{milestoneStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleMilestoneSubmit}>
-                  <input
-                    className="input"
-                    placeholder="Milestone title"
-                    value={milestoneForm.title}
-                    onChange={(event) =>
-                      setMilestoneForm((prev) => ({
-                        ...prev,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                  <div className="form-grid">
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      placeholder="Amount target"
-                      value={milestoneForm.amountTarget}
-                      onChange={(event) =>
-                        setMilestoneForm((prev) => ({
-                          ...prev,
-                          amountTarget: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      className="input"
-                      type="date"
-                      value={milestoneForm.dueDate}
-                      onChange={(event) =>
-                        setMilestoneForm((prev) => ({
-                          ...prev,
-                          dueDate: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={milestoneForm.status}
-                      onChange={(event) =>
-                        setMilestoneForm((prev) => ({
-                          ...prev,
-                          status: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="Planned">Planned</option>
-                      <option value="Funding">Funding</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="Completion %"
-                      value={milestoneForm.completionPercent}
-                      onChange={(event) =>
-                        setMilestoneForm((prev) => ({
-                          ...prev,
-                          completionPercent: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <button className="button" type="submit">
-                    Add milestone
-                  </button>
-                </form>
-                {milestones.length === 0 ? (
-                  <p className="muted">No milestones yet.</p>
+                <h4>Recent contributions</h4>
+                {contributions.length === 0 ? (
+                  <p className="muted">No contributions recorded yet.</p>
                 ) : (
                   <ul className="compact-list">
-                    {milestones.slice(0, 5).map((milestone) => (
-                      <li key={milestone.milestoneId}>
-                        {milestone.title} — {milestone.status}
+                    {contributions.slice(0, 5).map((contrib) => (
+                      <li key={contrib.contributionId}>
+                        {contrib.isAnonymous
+                          ? 'Anonymous'
+                          : contrib.contributorName || 'Supporter'}{' '}
+                        — {contrib.amount} {contrib.currency}{' '}
+                        {contrib.paymentStatus ? `(${contrib.paymentStatus})` : ''}
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
+            </div>
+          )}
+        </div>
+      )}
 
-              <div className="module-card">
-                <h4>Expenses</h4>
-                {expenseError ? (
-                  <div className="module-alert">{expenseError}</div>
-                ) : null}
-                {expenseStatus ? (
-                  <div className="module-alert">{expenseStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleExpenseSubmit}>
-                  <input
-                    className="input"
-                    placeholder="Category"
-                    value={expenseForm.category}
-                    onChange={(event) =>
-                      setExpenseForm((prev) => ({
-                        ...prev,
-                        category: event.target.value,
-                      }))
-                    }
-                  />
-                  <div className="form-grid">
+      {campaignSection === 'operations' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Execution, proof, and partners</h3>
+              <p className="muted">
+                Track milestones, spending, proof of work, and local partners.
+              </p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to manage execution.</p>
+          )}
+          {selectedCampaignId && (
+            <div className="stack">
+              <div className="module-grid">
+                <div className="module-card">
+                  <h4>Milestones</h4>
+                  {milestoneError ? (
+                    <div className="module-alert">{milestoneError}</div>
+                  ) : null}
+                  {milestoneStatus ? (
+                    <div className="module-alert">{milestoneStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handleMilestoneSubmit}>
                     <input
                       className="input"
-                      placeholder="Vendor"
-                      value={expenseForm.vendor}
+                      placeholder="Milestone title"
+                      value={milestoneForm.title}
                       onChange={(event) =>
-                        setExpenseForm((prev) => ({
+                        setMilestoneForm((prev) => ({
                           ...prev,
-                          vendor: event.target.value,
+                          title: event.target.value,
                         }))
                       }
                     />
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      placeholder="Amount"
-                      value={expenseForm.amount}
-                      onChange={(event) =>
-                        setExpenseForm((prev) => ({
-                          ...prev,
-                          amount: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={expenseForm.currency}
-                      onChange={(event) =>
-                        setExpenseForm((prev) => ({
-                          ...prev,
-                          currency: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="GEL">GEL</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
-                    <select
-                      className="select"
-                      value={expenseForm.milestoneId}
-                      onChange={(event) =>
-                        setExpenseForm((prev) => ({
-                          ...prev,
-                          milestoneId: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Link to milestone</option>
-                      {milestones.map((milestone) => (
-                        <option
-                          key={`expense-${milestone.milestoneId}`}
-                          value={milestone.milestoneId}
-                        >
-                          {milestone.title}
-                        </option>
+                    <div className="form-grid">
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        placeholder="Amount target"
+                        value={milestoneForm.amountTarget}
+                        onChange={(event) =>
+                          setMilestoneForm((prev) => ({
+                            ...prev,
+                            amountTarget: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        className="input"
+                        type="date"
+                        value={milestoneForm.dueDate}
+                        onChange={(event) =>
+                          setMilestoneForm((prev) => ({
+                            ...prev,
+                            dueDate: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="form-grid">
+                      <select
+                        className="select"
+                        value={milestoneForm.status}
+                        onChange={(event) =>
+                          setMilestoneForm((prev) => ({
+                            ...prev,
+                            status: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="Planned">Planned</option>
+                        <option value="Funding">Funding</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="Completion %"
+                        value={milestoneForm.completionPercent}
+                        onChange={(event) =>
+                          setMilestoneForm((prev) => ({
+                            ...prev,
+                            completionPercent: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <button className="button" type="submit">
+                      Add milestone
+                    </button>
+                  </form>
+                  {milestones.length === 0 ? (
+                    <p className="muted">No milestones yet.</p>
+                  ) : (
+                    <ul className="compact-list">
+                      {milestones.slice(0, 5).map((milestone) => (
+                        <li key={milestone.milestoneId}>
+                          {milestone.title} — {milestone.status}
+                        </li>
                       ))}
-                    </select>
-                  </div>
-                  <input
-                    className="input"
-                    placeholder="Receipt link"
-                    value={expenseForm.receiptLink}
-                    onChange={(event) =>
-                      setExpenseForm((prev) => ({
-                        ...prev,
-                        receiptLink: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    placeholder="Approved by"
-                    value={expenseForm.approvedBy}
-                    onChange={(event) =>
-                      setExpenseForm((prev) => ({
-                        ...prev,
-                        approvedBy: event.target.value,
-                      }))
-                    }
-                  />
-                  <button className="button" type="submit">
-                    Record expense
-                  </button>
-                </form>
-                {expenses.length === 0 ? (
-                  <p className="muted">No expenses yet.</p>
-                ) : (
-                  <ul className="compact-list">
-                    {expenses.slice(0, 5).map((expense) => (
-                      <li key={expense.expenseId}>
-                      {expense.category} — {expense.amount} {expense.currency}{' '}
-                      {expense.approvalStatus
-                        ? `(${expense.approvalStatus})`
-                        : ''}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
+                    </ul>
+                  )}
+                </div>
 
-            <div className="module-grid">
-              <div className="module-card">
-                <h4>Proof of work</h4>
-                {proofError ? <div className="module-alert">{proofError}</div> : null}
-                {proofStatus ? (
-                  <div className="module-alert">{proofStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleProofSubmit}>
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={proofForm.artifactType}
+                <div className="module-card">
+                  <h4>Expenses</h4>
+                  {expenseError ? (
+                    <div className="module-alert">{expenseError}</div>
+                  ) : null}
+                  {expenseStatus ? (
+                    <div className="module-alert">{expenseStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handleExpenseSubmit}>
+                    <input
+                      className="input"
+                      placeholder="Category"
+                      value={expenseForm.category}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          category: event.target.value,
+                        }))
+                      }
+                    />
+                    <div className="form-grid">
+                      <input
+                        className="input"
+                        placeholder="Vendor"
+                        value={expenseForm.vendor}
+                        onChange={(event) =>
+                          setExpenseForm((prev) => ({
+                            ...prev,
+                            vendor: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        placeholder="Amount"
+                        value={expenseForm.amount}
+                        onChange={(event) =>
+                          setExpenseForm((prev) => ({
+                            ...prev,
+                            amount: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="form-grid">
+                      <select
+                        className="select"
+                        value={expenseForm.currency}
+                        onChange={(event) =>
+                          setExpenseForm((prev) => ({
+                            ...prev,
+                            currency: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="GEL">GEL</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                      </select>
+                      <select
+                        className="select"
+                        value={expenseForm.milestoneId}
+                        onChange={(event) =>
+                          setExpenseForm((prev) => ({
+                            ...prev,
+                            milestoneId: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Link to milestone</option>
+                        {milestones.map((milestone) => (
+                          <option
+                            key={`expense-${milestone.milestoneId}`}
+                            value={milestone.milestoneId}
+                          >
+                            {milestone.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      className="input"
+                      placeholder="Receipt link"
+                      value={expenseForm.receiptLink}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          receiptLink: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Approved by"
+                      value={expenseForm.approvedBy}
+                      onChange={(event) =>
+                        setExpenseForm((prev) => ({
+                          ...prev,
+                          approvedBy: event.target.value,
+                        }))
+                      }
+                    />
+                    <button className="button" type="submit">
+                      Record expense
+                    </button>
+                  </form>
+                  {expenses.length === 0 ? (
+                    <p className="muted">No expenses yet.</p>
+                  ) : (
+                    <ul className="compact-list">
+                      {expenses.slice(0, 5).map((expense) => (
+                        <li key={expense.expenseId}>
+                          {expense.category} — {expense.amount} {expense.currency}{' '}
+                          {expense.approvalStatus
+                            ? `(${expense.approvalStatus})`
+                            : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="module-grid">
+                <div className="module-card">
+                  <h4>Proof of work</h4>
+                  {proofError ? (
+                    <div className="module-alert">{proofError}</div>
+                  ) : null}
+                  {proofStatus ? (
+                    <div className="module-alert">{proofStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handleProofSubmit}>
+                    <div className="form-grid">
+                      <select
+                        className="select"
+                        value={proofForm.artifactType}
+                        onChange={(event) =>
+                          setProofForm((prev) => ({
+                            ...prev,
+                            artifactType: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="image">Image</option>
+                        <option value="pdf">PDF</option>
+                        <option value="video">Video</option>
+                        <option value="link">Link</option>
+                        <option value="text">Text update</option>
+                      </select>
+                      <select
+                        className="select"
+                        value={proofForm.milestoneId}
+                        onChange={(event) =>
+                          setProofForm((prev) => ({
+                            ...prev,
+                            milestoneId: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Link to milestone</option>
+                        {milestones.map((milestone) => (
+                          <option
+                            key={`proof-${milestone.milestoneId}`}
+                            value={milestone.milestoneId}
+                          >
+                            {milestone.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      className="input"
+                      placeholder="Proof URL"
+                      value={proofForm.url}
                       onChange={(event) =>
                         setProofForm((prev) => ({
                           ...prev,
-                          artifactType: event.target.value,
+                          url: event.target.value,
                         }))
                       }
-                    >
-                      <option value="image">Image</option>
-                      <option value="pdf">PDF</option>
-                      <option value="video">Video</option>
-                      <option value="link">Link</option>
-                      <option value="text">Text update</option>
-                    </select>
-                    <select
-                      className="select"
-                      value={proofForm.milestoneId}
+                    />
+                    <input
+                      className="input"
+                      placeholder="Uploaded by"
+                      value={proofForm.uploadedBy}
                       onChange={(event) =>
                         setProofForm((prev) => ({
                           ...prev,
-                          milestoneId: event.target.value,
+                          uploadedBy: event.target.value,
+                        }))
+                      }
+                    />
+                    <textarea
+                      className="textarea"
+                      placeholder="Caption"
+                      value={proofForm.caption}
+                      onChange={(event) =>
+                        setProofForm((prev) => ({
+                          ...prev,
+                          caption: event.target.value,
+                        }))
+                      }
+                    />
+                    <select
+                      className="select"
+                      value={proofForm.verificationStatus}
+                      onChange={(event) =>
+                        setProofForm((prev) => ({
+                          ...prev,
+                          verificationStatus: event.target.value,
                         }))
                       }
                     >
-                      <option value="">Link to milestone</option>
-                      {milestones.map((milestone) => (
-                        <option
-                          key={`proof-${milestone.milestoneId}`}
-                          value={milestone.milestoneId}
-                        >
-                          {milestone.title}
-                        </option>
-                      ))}
+                      <option value="Pending">Pending</option>
+                      <option value="Verified">Verified</option>
+                      <option value="Rejected">Rejected</option>
                     </select>
-                  </div>
-                  <input
-                    className="input"
-                    placeholder="Proof URL"
-                    value={proofForm.url}
-                    onChange={(event) =>
-                      setProofForm((prev) => ({
-                        ...prev,
-                        url: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    placeholder="Uploaded by"
-                    value={proofForm.uploadedBy}
-                    onChange={(event) =>
-                      setProofForm((prev) => ({
-                        ...prev,
-                        uploadedBy: event.target.value,
-                      }))
-                    }
-                  />
-                  <textarea
-                    className="textarea"
-                    placeholder="Caption"
-                    value={proofForm.caption}
-                    onChange={(event) =>
-                      setProofForm((prev) => ({
-                        ...prev,
-                        caption: event.target.value,
-                      }))
-                    }
-                  />
-                  <select
-                    className="select"
-                    value={proofForm.verificationStatus}
-                    onChange={(event) =>
-                      setProofForm((prev) => ({
-                        ...prev,
-                        verificationStatus: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Verified">Verified</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-                  <button className="button" type="submit">
-                    Add proof
-                  </button>
-                </form>
-                {proofArtifacts.length === 0 ? (
-                  <p className="muted">No proof artifacts yet.</p>
-                ) : (
-                  <ul className="compact-list">
-                    {proofArtifacts.slice(0, 5).map((artifact) => (
-                      <li key={artifact.proofId}>
-                        {artifact.artifactType} — {artifact.caption || artifact.url}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                    <button className="button" type="submit">
+                      Add proof
+                    </button>
+                  </form>
+                  {proofArtifacts.length === 0 ? (
+                    <p className="muted">No proof artifacts yet.</p>
+                  ) : (
+                    <ul className="compact-list">
+                      {proofArtifacts.slice(0, 5).map((artifact) => (
+                        <li key={artifact.proofId}>
+                          {artifact.artifactType} — {artifact.caption || artifact.url}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-              <div className="module-card">
-                <h4>Partners</h4>
-                {partnerError ? (
-                  <div className="module-alert">{partnerError}</div>
-                ) : null}
-                {partnerStatus ? (
-                  <div className="module-alert">{partnerStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handlePartnerSubmit}>
-                  <input
-                    className="input"
-                    placeholder="Partner name"
-                    value={partnerForm.name}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    placeholder="Role"
-                    value={partnerForm.role}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        role: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    placeholder="Contact"
-                    value={partnerForm.contact}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        contact: event.target.value,
-                      }))
-                    }
-                  />
-                  <textarea
-                    className="textarea"
-                    placeholder="Verification notes"
-                    value={partnerForm.verificationNotes}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        verificationNotes: event.target.value,
-                      }))
-                    }
-                  />
-                  <button className="button" type="submit">
-                    Add partner
-                  </button>
-                </form>
-                {partners.length === 0 ? (
-                  <p className="muted">No partners yet.</p>
-                ) : (
-                  <ul className="compact-list">
-                    {partners.slice(0, 5).map((partner) => (
-                      <li key={partner.partnerId}>
-                        {partner.name} — {partner.role || 'Partner'}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="module-card">
+                  <h4>Partners</h4>
+                  {partnerError ? (
+                    <div className="module-alert">{partnerError}</div>
+                  ) : null}
+                  {partnerStatus ? (
+                    <div className="module-alert">{partnerStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handlePartnerSubmit}>
+                    <input
+                      className="input"
+                      placeholder="Partner name"
+                      value={partnerForm.name}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Role"
+                      value={partnerForm.role}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          role: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Contact"
+                      value={partnerForm.contact}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          contact: event.target.value,
+                        }))
+                      }
+                    />
+                    <textarea
+                      className="textarea"
+                      placeholder="Verification notes"
+                      value={partnerForm.verificationNotes}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({
+                          ...prev,
+                          verificationNotes: event.target.value,
+                        }))
+                      }
+                    />
+                    <button className="button" type="submit">
+                      Add partner
+                    </button>
+                  </form>
+                  {partners.length === 0 ? (
+                    <p className="muted">No partners yet.</p>
+                  ) : (
+                    <ul className="compact-list">
+                      {partners.slice(0, 5).map((partner) => (
+                        <li key={partner.partnerId}>
+                          {partner.name} — {partner.role || 'Partner'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
+      {campaignSection === 'updates' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Updates and tasks</h3>
+              <p className="muted">
+                Keep stakeholders informed and track delivery tasks.
+              </p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to add updates.</p>
+          )}
+          {selectedCampaignId && (
             <div className="module-grid">
               <div className="module-card">
                 <h4>Campaign updates</h4>
@@ -5142,7 +5653,22 @@ function CRMCampaignsTab() {
                 )}
               </div>
             </div>
+          )}
+        </div>
+      )}
 
+      {campaignSection === 'people' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>People and planning</h3>
+              <p className="muted">Track volunteers and plan workdays.</p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to manage people.</p>
+          )}
+          {selectedCampaignId && (
             <div className="module-grid">
               <div className="module-card">
                 <h4>Volunteer roster</h4>
@@ -5233,113 +5759,119 @@ function CRMCampaignsTab() {
                 </p>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Consensus vs polarization</h3>
-            <p className="muted">Generated statements for survey.</p>
-          </div>
-        </div>
-        <div className="module-grid">
-          <div className="module-card">
-            <h4>Consensus</h4>
-            <ul className="compact-list">
-              {(campaignDetail?.consensusStatements || []).map((statement, idx) => (
-                <li key={`consensus-${idx}`}>{statement}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="module-card">
-            <h4>Polarization</h4>
-            <ul className="compact-list">
-              {(campaignDetail?.polarizationStatements || []).map((statement, idx) => (
-                <li key={`polar-${idx}`}>{statement}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Campaign final statements</h3>
-            <p className="muted">
-              Final statements, sub statements, and actions linked to tasks.
-            </p>
-          </div>
-        </div>
-        <div className="stack">
-          <input
-            className="input"
-            placeholder="Assignee email for tasks"
-            value={assigneeEmail}
-            onChange={(event) => setAssigneeEmail(event.target.value)}
-          />
-          {taskStatus ? <p className="muted">{taskStatus}</p> : null}
-        </div>
-        <div className="module-grid">
-          {finalStatements.map((statement, idx) => (
-            <div className="module-card" key={`final-${idx}`}>
-              <h4>{statement.statement}</h4>
-              <div className="card-divider">
-                <h5>Sub statements</h5>
+      {campaignSection === 'statements' && (
+        <>
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Consensus vs polarization</h3>
+                <p className="muted">Generated statements for the survey.</p>
               </div>
-              <ul className="compact-list">
-                {statement.subStatements.map((item, subIdx) => (
-                  <li key={`sub-${idx}-${subIdx}`}>{item}</li>
-                ))}
-              </ul>
-              <div className="card-divider">
-                <h5>Actions</h5>
+            </div>
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Consensus</h4>
+                <ul className="compact-list">
+                  {(campaignDetail?.consensusStatements || []).map((statement, idx) => (
+                    <li key={`consensus-${idx}`}>{statement}</li>
+                  ))}
+                </ul>
               </div>
-              <ul className="compact-list">
-                {statement.actions.map((action, actionIdx) => (
-                  <li key={`action-${idx}-${actionIdx}`}>{action}</li>
-                ))}
-              </ul>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => handleCreateTasks(statement)}
-              >
-                Create tasks
-              </button>
+              <div className="module-card">
+                <h4>Polarization</h4>
+                <ul className="compact-list">
+                  {(campaignDetail?.polarizationStatements || []).map((statement, idx) => (
+                    <li key={`polar-${idx}`}>{statement}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Survey insights</h3>
-            <p className="muted">Latest report from the survey module.</p>
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Campaign final statements</h3>
+                <p className="muted">
+                  Final statements, sub statements, and actions linked to tasks.
+                </p>
+              </div>
+            </div>
+            <div className="stack">
+              <input
+                className="input"
+                placeholder="Assignee email for tasks"
+                value={assigneeEmail}
+                onChange={(event) => setAssigneeEmail(event.target.value)}
+              />
+              {taskStatus ? <p className="muted">{taskStatus}</p> : null}
+            </div>
+            <div className="module-grid">
+              {finalStatements.map((statement, idx) => (
+                <div className="module-card" key={`final-${idx}`}>
+                  <h4>{statement.statement}</h4>
+                  <div className="card-divider">
+                    <h5>Sub statements</h5>
+                  </div>
+                  <ul className="compact-list">
+                    {statement.subStatements.map((item, subIdx) => (
+                      <li key={`sub-${idx}-${subIdx}`}>{item}</li>
+                    ))}
+                  </ul>
+                  <div className="card-divider">
+                    <h5>Actions</h5>
+                  </div>
+                  <ul className="compact-list">
+                    {statement.actions.map((action, actionIdx) => (
+                      <li key={`action-${idx}-${actionIdx}`}>{action}</li>
+                    ))}
+                  </ul>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleCreateTasks(statement)}
+                  >
+                    Create tasks
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
+        </>
+      )}
+
+      {campaignSection === 'insights' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Survey insights</h3>
+              <p className="muted">Latest report from the survey module.</p>
+            </div>
+          </div>
+          {reportError ? <div className="module-alert">{reportError}</div> : null}
+          {!report && <p className="muted">Run survey and refresh insights.</p>}
+          {report ? (
+            <div className="stack">
+              <div className="metric-row">
+                <span>Total votes</span>
+                <strong>{report?.metrics?.total_votes ?? '—'}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Participants</span>
+                <strong>{report?.metrics?.total_participants ?? '—'}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Clusters</span>
+                <strong>{report?.clusters?.length ?? '—'}</strong>
+              </div>
+            </div>
+          ) : null}
         </div>
-        {reportError ? <div className="module-alert">{reportError}</div> : null}
-        {!report && <p className="muted">Run survey and refresh insights.</p>}
-        {report ? (
-          <div className="stack">
-            <div className="metric-row">
-              <span>Total votes</span>
-              <strong>{report?.metrics?.total_votes ?? '—'}</strong>
-            </div>
-            <div className="metric-row">
-              <span>Participants</span>
-              <strong>{report?.metrics?.total_participants ?? '—'}</strong>
-            </div>
-            <div className="metric-row">
-              <span>Clusters</span>
-              <strong>{report?.clusters?.length ?? '—'}</strong>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      )}
     </div>
   )
 }

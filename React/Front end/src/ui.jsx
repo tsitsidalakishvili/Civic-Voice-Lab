@@ -1,4 +1,17 @@
 import { cloneElement, isValidElement, useId } from 'react'
+import {
+  ActionIcon,
+  Badge,
+  Card,
+  Group,
+  Progress,
+  Select,
+  SimpleGrid,
+  Text,
+  ThemeIcon,
+  Tooltip,
+} from '@mantine/core'
+import { IconInfoCircle } from '@tabler/icons-react'
 
 export function PageHeader({ title, description, eyebrow, actions, meta, children, className }) {
   return (
@@ -81,15 +94,16 @@ export function ModuleFlow({
 export function InfoHint({ text, label = 'More information' }) {
   if (!text) return null
   return (
-    <span
-      className="info-hint"
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      data-tooltip={text}
-    >
-      i
-    </span>
+    <Tooltip label={text} withArrow position="top">
+      <ActionIcon
+        className="info-hint"
+        variant="light"
+        size="sm"
+        aria-label={label}
+      >
+        <IconInfoCircle size={16} stroke={1.5} />
+      </ActionIcon>
+    </Tooltip>
   )
 }
 
@@ -163,29 +177,86 @@ export function LanguageSelect({
   hideLabel = false,
   className,
 }) {
-  const reactId = useId()
-  const selectId = `language-${reactId}`
+  const selectId = useId()
+  const options = (languages || []).map((lang) => ({
+    value: lang.id,
+    label: lang.label,
+  }))
   return (
-    <div className={`language-select ${className || ''}`.trim()}>
-      {!hideLabel ? (
-        <label className="label" htmlFor={selectId}>
-          {label}
-        </label>
-      ) : null}
-      <select
-        id={selectId}
-        className="select"
-        value={language}
-        onChange={(event) => onLanguageChange?.(event.target.value)}
-        aria-label={hideLabel ? label : undefined}
-      >
-        {(languages || []).map((lang) => (
-          <option key={lang.id} value={lang.id}>
-            {lang.label}
-          </option>
+    <Select
+      className={`language-select ${className || ''}`.trim()}
+      data={options}
+      value={language}
+      onChange={(value) => onLanguageChange?.(value || '')}
+      label={hideLabel ? undefined : label}
+      aria-label={hideLabel ? label : undefined}
+      placeholder={label}
+      comboboxProps={{ withinPortal: false }}
+    />
+  )
+}
+
+export function CivicStatGrid({ title, description, items = [], action, className }) {
+  if (!items.length) return null
+  return (
+    <Card className={`civic-stat-grid ${className || ''}`.trim()}>
+      {(title || description || action) && (
+        <Group justify="space-between" align="flex-start" mb="md" wrap="wrap">
+          <div>
+            {title ? (
+              <Text fw={600} size="lg">
+                {title}
+              </Text>
+            ) : null}
+            {description ? (
+              <Text c="dimmed" size="sm">
+                {description}
+              </Text>
+            ) : null}
+          </div>
+          {action}
+        </Group>
+      )}
+      <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+        {items.map((item, index) => (
+          <Card key={`${item.label}-${index}`} radius="lg" withBorder>
+            <Group justify="space-between" align="center">
+              <div>
+                <Text size="xs" c="dimmed">
+                  {item.label}
+                </Text>
+                <Text fw={600} size="xl">
+                  {item.value}
+                </Text>
+              </div>
+              {item.icon ? (
+                <ThemeIcon
+                  color={item.color || 'civic'}
+                  variant={item.variant || 'light'}
+                  size="lg"
+                  radius="md"
+                >
+                  {item.icon}
+                </ThemeIcon>
+              ) : null}
+            </Group>
+            {item.badge ? (
+              <Badge mt="sm" variant="light" color={item.badgeColor || 'civic'}>
+                {item.badge}
+              </Badge>
+            ) : null}
+            {item.note ? (
+              <Text c="dimmed" size="xs" mt="xs">
+                {item.note}
+              </Text>
+            ) : null}
+            {typeof item.progress === 'number' ? (
+              <Progress value={item.progress} mt="sm" radius="xl" />
+            ) : null}
+          </Card>
         ))}
-      </select>
-    </div>
+      </SimpleGrid>
+    </Card>
   )
 }
 

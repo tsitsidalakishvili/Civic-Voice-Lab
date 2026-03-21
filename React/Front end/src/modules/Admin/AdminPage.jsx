@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { IconChecklist, IconMessage2, IconUsers } from '@tabler/icons-react'
 import { getJson, requestJson } from '../../services/api'
+import { CivicStatGrid } from '../../ui'
 
 const csvEscape = (value) => {
   if (value === null || value === undefined) return ''
@@ -258,8 +260,43 @@ export function AdminPage({ t, showTabs = true }) {
     }
   }
 
+  const adminPulse = useMemo(
+    () => [
+      {
+        label: 'Feedback',
+        value: feedback.length,
+        icon: <IconMessage2 size={18} />,
+        badge: 'New',
+      },
+      {
+        label: 'Proof queue',
+        value: proofQueue.length,
+        icon: <IconChecklist size={18} />,
+        note: 'Pending',
+      },
+      {
+        label: 'Expense queue',
+        value: expenseQueue.length,
+        icon: <IconChecklist size={18} />,
+        note: 'Pending',
+      },
+      {
+        label: 'Network size',
+        value: summary?.total_people ?? '—',
+        icon: <IconUsers size={18} />,
+        badge: 'Live',
+      },
+    ],
+    [expenseQueue.length, feedback.length, proofQueue.length, summary?.total_people],
+  )
+
   return (
     <section className="module">
+      <CivicStatGrid
+        title="Operations pulse"
+        description="Admin queues and system readiness at a glance."
+        items={adminPulse}
+      />
       <details className="dashboard-detail">
         <summary>System status</summary>
         <div className="dashboard-detail__body">

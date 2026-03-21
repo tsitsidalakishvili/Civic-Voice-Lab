@@ -1,5 +1,46 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActionIcon,
+  Affix,
+  AppShell,
+  Badge,
+  Button,
+  Card,
+  Divider,
+  Group,
+  NavLink,
+  Paper,
+  Progress,
+  ScrollArea,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  ThemeIcon,
+  Tooltip,
+  Drawer,
+  TextInput,
+  Textarea,
+  useMantineColorScheme,
+} from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
+import { Spotlight, spotlight } from '@mantine/spotlight'
+import {
+  IconArrowRight,
+  IconBulb,
+  IconChartDots,
+  IconLayoutGrid,
+  IconMessage2,
+  IconMoon,
+  IconSearch,
+  IconSettings,
+  IconShieldCheck,
+  IconSpeakerphone,
+  IconSun,
+  IconTarget,
+  IconUsers,
+} from '@tabler/icons-react'
+import {
   AdminPage,
   AudienceDiscoveryPage,
   CRMPage,
@@ -11,16 +52,53 @@ import {
 } from './modules'
 import { API_BASE, getJson, requestJson } from './services/api'
 import { LANGUAGES, createTranslator } from './i18n'
-import {
-  Field,
-  FormSection,
-  InfoHint,
-  LanguageSelect,
-  MobileNavDrawer,
-  PageHeader,
-  StatusMessage,
-} from './ui'
+import { CivicStatGrid, FormSection, InfoHint, LanguageSelect, PageHeader, StatusMessage } from './ui'
 import './App.css'
+
+const normalizeLanguage = (value) => {
+  if (!value) return ''
+  const normalized = String(value).trim().toLowerCase()
+  if (!normalized) return ''
+  const exact = LANGUAGES.find((lang) => lang.id.toLowerCase() === normalized)
+  if (exact) return exact.id
+  const prefix = normalized.split('-')[0]
+  const match = LANGUAGES.find((lang) => lang.id.toLowerCase() === prefix)
+  return match ? match.id : ''
+}
+
+const detectBrowserLanguage = () => {
+  if (typeof navigator === 'undefined') return ''
+  const candidates = Array.isArray(navigator.languages)
+    ? navigator.languages
+    : [navigator.language]
+  for (const candidate of candidates) {
+    const normalized = normalizeLanguage(candidate)
+    if (normalized) return normalized
+  }
+  return ''
+}
+
+const getInitialLanguage = () => {
+  if (typeof window === 'undefined') return 'en'
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = normalizeLanguage(
+    params.get('lang') || params.get('language') || params.get('ui_lang'),
+  )
+  if (fromUrl) return fromUrl
+  const stored = normalizeLanguage(localStorage.getItem('fs_lang'))
+  if (stored) return stored
+  return detectBrowserLanguage() || 'en'
+}
+
+const parseStoredList = (value) => {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 const parseLocalArray = (value) => {
   if (!value) return []
@@ -102,9 +180,7 @@ const buildCommentDeck = (rawComments, votedIds = []) => {
 
 function App() {
   const params = new URLSearchParams(window.location.search)
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem('fs_lang') || 'en',
-  )
+  const [language, setLanguage] = useState(getInitialLanguage)
   const t = useMemo(() => createTranslator(language), [language])
   useEffect(() => {
     localStorage.setItem('fs_lang', language)
@@ -119,12 +195,14 @@ function App() {
   const eventId = params.get('event_id')
   const campaignPublic = params.get('campaign_public')
   const publicCampaignId = params.get('campaign_id')
+  const reportShare = params.get('report_share') || params.get('report')
   const isPublicEvent = eventRegistration === '1' && eventId
   const isPublicCampaign = campaignPublic === '1'
   const isQuestionnaire =
     (questionnaire && questionnaire.startsWith('deliberation')) ||
     (conversationId && params.get('view') === 'mobile')
-  const isPublicView = isPublicEvent || isQuestionnaire || isPublicCampaign
+  const isPublicReport = Boolean(reportShare)
+  const isPublicView = isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport
 
   const modules = useMemo(() => {
     const CampaignsModule = (props) => (
@@ -191,6 +269,14 @@ function App() {
   ]
   const hubModules = useMemo(
     () => modules.filter((module) => hubModuleIds.includes(module.id)),
+    [modules],
+  )
+  const landingQuickModuleIds = ['campaigns', 'deliberation', 'crm']
+  const landingQuickModules = useMemo(
+    () =>
+      landingQuickModuleIds
+        .map((moduleId) => modules.find((module) => module.id === moduleId))
+        .filter(Boolean),
     [modules],
   )
   const moduleSections = {
@@ -338,14 +424,25 @@ function App() {
     const search = new URLSearchParams(window.location.search)
     return search.get('module')
   }
+  const recentModulesStorageKey = 'fs_recent_modules'
   const [activeModuleId, setActiveModuleId] = useState(() => {
     const fromUrl = getModuleIdFromUrl()
     const match = modules.find((module) => module.id === fromUrl)
     return match?.id || null
   })
+  const [recentModuleIds, setRecentModuleIds] = useState(() => {
+    if (typeof window === 'undefined') return []
+    return parseStoredList(localStorage.getItem(recentModulesStorageKey))
+  })
   const activeModule = modules.find((module) => module.id === activeModuleId)
   const ActiveComponent = activeModule?.Component ?? CRMPage
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const recentModules = useMemo(
+    () =>
+      recentModuleIds
+        .map((moduleId) => modules.find((module) => module.id === moduleId))
+        .filter(Boolean),
+    [modules, recentModuleIds],
+  )
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackForm, setFeedbackForm] = useState({
     name: '',
@@ -358,6 +455,94 @@ function App() {
   const [feedbackSending, setFeedbackSending] = useState(false)
   const initialUrlSync = useRef(true)
   const [moduleTabs, setModuleTabs] = useState({})
+  const [navOpened, { toggle: toggleNav, close: closeNav }] = useDisclosure(false)
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme()
+
+  const moduleIconMap = {
+    'how-it-works': IconBulb,
+    crm: IconUsers,
+    campaigns: IconSpeakerphone,
+    deliberation: IconMessage2,
+    'due-diligence': IconShieldCheck,
+    'audience-discovery': IconTarget,
+    'data-hub': IconChartDots,
+    admin: IconSettings,
+  }
+
+  const renderModuleIcon = (moduleId, size = 18) => {
+    const Icon = moduleIconMap[moduleId] || IconLayoutGrid
+    return <Icon size={size} />
+  }
+
+  const activeModuleConfig = activeModuleId ? moduleSections[activeModuleId] : null
+
+  const spotlightActions = useMemo(
+    () =>
+      modules.map((module) => ({
+        id: module.id,
+        label: module.label,
+        description: module.description,
+        onClick: () => {
+          setActiveModuleId(module.id)
+          closeNav()
+        },
+        leftSection: (
+          <ThemeIcon color="civic" variant="light" size="sm">
+            {renderModuleIcon(module.id, 14)}
+          </ThemeIcon>
+        ),
+      })),
+    [modules, closeNav],
+  )
+
+  const hubStats = useMemo(() => {
+    const totalSections = Object.values(moduleSections).reduce(
+      (sum, entry) => sum + (entry.sections?.length || 0),
+      0,
+    )
+    const hubCoverage = modules.length
+      ? Math.round((hubModules.length / modules.length) * 100)
+      : 0
+    return [
+      {
+        label: 'Modules ready',
+        value: `${hubModules.length}/${modules.length}`,
+        icon: renderModuleIcon('crm'),
+        badge: 'Live',
+        progress: hubCoverage,
+      },
+      {
+        label: 'Navigation sections',
+        value: totalSections,
+        icon: renderModuleIcon('data-hub'),
+        badge: 'Mapped',
+      },
+      {
+        label: 'Workflows',
+        value: Object.keys(moduleSections).length,
+        icon: renderModuleIcon('how-it-works'),
+        note: 'Configured journeys',
+      },
+      {
+        label: 'Public views',
+        value: 3,
+        icon: renderModuleIcon('campaigns'),
+        note: 'Events, campaigns, surveys',
+      },
+    ]
+  }, [hubModules.length, modules.length, moduleSections])
+
+  useEffect(() => {
+    if (!activeModuleId) return
+    setRecentModuleIds((prev) => {
+      const next = [activeModuleId, ...prev.filter((id) => id !== activeModuleId)].slice(
+        0,
+        3,
+      )
+      localStorage.setItem(recentModulesStorageKey, JSON.stringify(next))
+      return next
+    })
+  }, [activeModuleId, recentModulesStorageKey])
 
   useEffect(() => {
     if (isPublicView) return
@@ -403,24 +588,6 @@ function App() {
     }
   }, [activeModuleId, moduleTabs, moduleSections])
 
-  useEffect(() => {
-    if (mobileNavOpen) {
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = ''
-      }
-    }
-    document.body.style.overflow = ''
-  }, [mobileNavOpen])
-
-  useEffect(() => {
-    if (!mobileNavOpen) return
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setMobileNavOpen(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [mobileNavOpen])
 
   const handleFeedbackSubmit = async (event) => {
     event.preventDefault()
@@ -512,6 +679,18 @@ function App() {
     )
   }
 
+  if (isPublicReport) {
+    return (
+      <DeliberationPublicReport
+        shareId={reportShare}
+        t={t}
+        language={language}
+        languages={LANGUAGES}
+        onLanguageChange={setLanguage}
+      />
+    )
+  }
+
   if (isQuestionnaire) {
     return (
       <DeliberationQuestionnaire
@@ -525,94 +704,97 @@ function App() {
   }
 
   return (
-    <div className="app-shell app-shell--sidebar">
-      <header className="app-shell__topbar">
-        <div className="brand">
-          <div className="brand__mark">FS</div>
-          <div>
-            <div className="brand__title">Freedom Square</div>
-            <div className="brand__subtitle">Civic Engagement Suite</div>
-          </div>
-        </div>
-        {activeModule ? (
-          <div className="topbar__current">
-            <span className="pill">{activeModule?.label}</span>
-            <span className="topbar__meta">Module view</span>
-          </div>
-        ) : (
-          <div className="topbar__current">
-            <span className="pill">Module hub</span>
-            <span className="topbar__meta">Pick a module to start</span>
-          </div>
-        )}
-        <div className="topbar__actions">
-          <LanguageSelect
-            className="language-select--topbar"
-            language={language}
-            onLanguageChange={(value) => setLanguage(value)}
-            languages={LANGUAGES}
-            label={t('language.label')}
-            hideLabel
-          />
+    <AppShell
+      padding="md"
+      header={{ height: { base: 120, md: 78 } }}
+      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !navOpened } }}
+      className="app-shell app-shell--sidebar"
+    >
+      <Spotlight
+        actions={spotlightActions}
+        searchProps={{ placeholder: 'Search modules and sections...' }}
+        nothingFoundMessage="No matches yet"
+        highlightQuery
+      />
+      <AppShell.Header className="app-shell__topbar">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap">
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={toggleNav}
+              aria-label="Toggle navigation"
+              hiddenFrom="md"
+            >
+              <IconLayoutGrid size={20} />
+            </ActionIcon>
+            <Group gap="sm" className="brand" wrap="nowrap">
+              <ThemeIcon size="lg" variant="light" color="civic">
+                <IconLayoutGrid size={18} />
+              </ThemeIcon>
+              <div>
+                <Text fw={700}>Freedom Square</Text>
+                <Text size="xs" c="dimmed">
+                  Civic Engagement Suite
+                </Text>
+              </div>
+            </Group>
+            <Badge variant="light" color="civic">
+              {activeModule ? activeModule.label : 'Module hub'}
+            </Badge>
+          </Group>
+          <Group gap="sm" wrap="nowrap">
+            <Tooltip label="Search modules">
+              <ActionIcon variant="light" size="lg" onClick={() => spotlight.open()}>
+                <IconSearch size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <LanguageSelect
+              className="language-select--topbar"
+              language={language}
+              onLanguageChange={(value) => setLanguage(value)}
+              languages={LANGUAGES}
+              label={t('language.label')}
+              hideLabel
+            />
+            {activeModule ? (
+              <Button variant="light" onClick={() => setActiveModuleId(null)}>
+                Back to Modules
+              </Button>
+            ) : null}
+          </Group>
+        </Group>
+      </AppShell.Header>
+      <AppShell.Navbar p="md" className="app-shell__navbar">
+        <AppShell.Section grow component={ScrollArea} offsetScrollbars>
           {activeModule ? (
-            <button className="pill pill--button" type="button" onClick={() => setActiveModuleId(null)}>
-              Back to Modules
-            </button>
-          ) : null}
-        </div>
-      </header>
-      {!activeModule ? (
-        <section className="module-hub">
-          <div className="module-hub__header">
-            <h1>Pick a module</h1>
-            <p className="muted">Choose where you want to work right now.</p>
-          </div>
-          <div className="module-tiles">
-            {hubModules.map((module) => (
-              <button
-                key={module.id}
-                className="module-tile"
-                type="button"
-                onClick={() => setActiveModuleId(module.id)}
-              >
-                <h3>{module.label}</h3>
-                <p className="muted">{module.description}</p>
-                <span className="module-tile__cta">Open</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <div className="module-view">
-          <aside className="module-view__sidebar">
-            <div className="module-view__card">
-              <span className="module-view__eyebrow">How it works</span>
-              <h3>
-                {moduleSections[activeModuleId]?.flowTitle ||
-                  moduleSections[activeModuleId]?.title ||
-                  activeModule?.label}
-              </h3>
-              <p className="muted">
-                {moduleSections[activeModuleId]?.flowSummary ||
-                  moduleSections[activeModuleId]?.description ||
-                  activeModule?.description}
-              </p>
-            </div>
-            <div className="module-view__card">
-              <span className="module-view__eyebrow">Sections</span>
-              <div className="module-view__sections">
-                {(moduleSections[activeModuleId]?.sections || []).map((item) => {
+            <Stack gap="md">
+              <Paper className="module-view__card">
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                  Flow
+                </Text>
+                <Text fw={600}>
+                  {activeModuleConfig?.flowTitle ||
+                    activeModuleConfig?.title ||
+                    activeModule?.label}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {activeModuleConfig?.flowSummary ||
+                    activeModuleConfig?.description ||
+                    activeModule?.description}
+                </Text>
+              </Paper>
+              <Divider label="Sections" />
+              <Stack gap="xs">
+                {(activeModuleConfig?.sections || []).map((item) => {
                   const isActive =
                     item.type === 'tab' && moduleTabs[activeModuleId] === item.value
                   return (
-                    <button
+                    <NavLink
                       key={`${item.label}-${item.value}`}
-                      type="button"
-                      className={
-                        isActive
-                          ? 'module-view__section module-view__section--active'
-                          : 'module-view__section'
-                      }
+                      active={isActive}
+                      label={item.label}
+                      description={item.hint}
                       onClick={() => {
                         if (item.type === 'tab') {
                           handleModuleTabChange(activeModuleId, item.value)
@@ -621,16 +803,134 @@ function App() {
                           scrollToAnchor(item.value)
                         }
                       }}
-                    >
-                      <span>{item.label}</span>
-                      {item.hint ? <InfoHint text={item.hint} /> : null}
-                    </button>
+                      leftSection={
+                        <ThemeIcon variant="light" color="civic" size="sm">
+                          <IconArrowRight size={14} />
+                        </ThemeIcon>
+                      }
+                      rightSection={item.hint ? <InfoHint text={item.hint} /> : null}
+                    />
                   )
                 })}
+              </Stack>
+            </Stack>
+          ) : (
+            <Stack gap="md">
+              {recentModules.length ? (
+                <Paper className="module-view__card">
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                    Recent
+                  </Text>
+                  <Text fw={600}>Continue where you left off</Text>
+                  <Stack gap="xs" mt="sm">
+                    {recentModules.map((module) => (
+                      <NavLink
+                        key={`recent-${module.id}`}
+                        label={module.label}
+                        description={module.description}
+                        onClick={() => {
+                          setActiveModuleId(module.id)
+                          closeNav()
+                        }}
+                        leftSection={
+                          <ThemeIcon variant="light" color="civic" size="sm">
+                            {renderModuleIcon(module.id, 14)}
+                          </ThemeIcon>
+                        }
+                        rightSection={<IconArrowRight size={14} />}
+                      />
+                    ))}
+                  </Stack>
+                </Paper>
+              ) : null}
+
+              <Paper className="module-view__card">
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                  Find anything
+                </Text>
+                <Text fw={600}>Search modules and actions</Text>
+                <Text size="sm" c="dimmed">
+                  Use Spotlight to jump to any workflow.
+                </Text>
+                <TextInput
+                  placeholder="Search (press / or Cmd+K)"
+                  leftSection={<IconSearch size={14} />}
+                  onFocus={() => spotlight.open()}
+                  readOnly
+                />
+                <Group gap="sm" mt="sm">
+                  <Button
+                    variant="light"
+                    size="xs"
+                    onClick={() => {
+                      setActiveModuleId('how-it-works')
+                      closeNav()
+                    }}
+                  >
+                    Open guide
+                  </Button>
+                  <Button variant="subtle" size="xs" onClick={() => spotlight.open()}>
+                    Open search
+                  </Button>
+                </Group>
+              </Paper>
+            </Stack>
+          )}
+        </AppShell.Section>
+      </AppShell.Navbar>
+      <AppShell.Main>
+        {!activeModule ? (
+          <Stack gap="lg">
+            <div className="module-hub">
+              <div className="module-hub__header">
+                <h1>Pick a module</h1>
+                <p className="muted">Choose where you want to work right now.</p>
               </div>
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                {hubModules.map((module) => (
+                  <Card
+                    key={module.id}
+                    className="module-tile"
+                    onClick={() => setActiveModuleId(module.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setActiveModuleId(module.id)
+                      }
+                    }}
+                  >
+                    <Group align="center" gap="sm">
+                      <ThemeIcon variant="light" color="civic" size="lg">
+                        {renderModuleIcon(module.id, 18)}
+                      </ThemeIcon>
+                      <div>
+                        <Text fw={600}>{module.label}</Text>
+                        <Text size="sm" c="dimmed">
+                          {module.description}
+                        </Text>
+                      </div>
+                    </Group>
+                    <Group justify="space-between" mt="md">
+                      <Badge variant="light" color="civic">
+                        Ready
+                      </Badge>
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        rightSection={<IconArrowRight size={14} />}
+                      >
+                        Open
+                      </Button>
+                    </Group>
+                  </Card>
+                ))}
+              </SimpleGrid>
             </div>
-          </aside>
-          <main className="module-panel">
+          </Stack>
+        ) : (
+          <div className="module-panel">
             <PageHeader
               className="page-header--hero"
               title={pageTitle}
@@ -646,99 +946,73 @@ function App() {
               onViewChange={(viewValue) => handleModuleTabChange(activeModuleId, viewValue)}
               showTabs={false}
             />
-          </main>
-        </div>
-      )}
-      <MobileNavDrawer
-        open={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        modules={hubModules}
-        activeModuleId={activeModuleId}
-        onSelect={(moduleId) => {
-          setActiveModuleId(moduleId)
-          setMobileNavOpen(false)
-        }}
-        language={language}
-        onLanguageChange={(value) => setLanguage(value)}
-        t={t}
-        languages={LANGUAGES}
-        currentModuleLabel={activeModule?.label || 'Module hub'}
-      />
-      <button
-        className="feedback-fab"
-        type="button"
-        onClick={() => setFeedbackOpen((prev) => !prev)}
+          </div>
+        )}
+      </AppShell.Main>
+      <Affix position={{ bottom: 24, right: 24 }}>
+        <ActionIcon
+          size="xl"
+          radius="xl"
+          variant="filled"
+          color="civic"
+          onClick={() => setFeedbackOpen((prev) => !prev)}
+          aria-label={t('feedback.button')}
+        >
+          <IconMessage2 size={20} />
+        </ActionIcon>
+      </Affix>
+      <Drawer
+        opened={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        position="right"
+        size="md"
+        title={t('feedback.title')}
       >
-        {t('feedback.button')}
-      </button>
-      {feedbackOpen && (
-        <aside className="feedback-panel" role="dialog" aria-label={t('feedback.title')}>
-          <FormSection
-            title={t('feedback.title')}
-            description="Share what you were trying to do, what happened, and what you expected."
-          >
-            <form
-              className="stack form-shell"
-              onSubmit={handleFeedbackSubmit}
-              aria-busy={feedbackSending}
-            >
-              <Field
-                id="feedback-name"
+        <FormSection
+          title={t('feedback.title')}
+          description="Share what you were trying to do, what happened, and what you expected."
+        >
+          <form className="stack form-shell" onSubmit={handleFeedbackSubmit} aria-busy={feedbackSending}>
+            <Stack>
+              <TextInput
                 label={t('feedback.name')}
-                helper="Optional, helps us follow up with the right context."
-              >
-                <input
-                  className="input"
-                  placeholder="Jane Doe"
-                  value={feedbackForm.name}
-                  onChange={(event) =>
-                    setFeedbackForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                />
-              </Field>
-              <Field
-                id="feedback-email"
+                placeholder="Jane Doe"
+                value={feedbackForm.name}
+                onChange={(event) =>
+                  setFeedbackForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+              />
+              <TextInput
                 label={t('feedback.email')}
-                helper="Optional, include if you want a reply."
-              >
-                <input
-                  className="input"
-                  type="email"
-                  placeholder="jane@email.com"
-                  value={feedbackForm.email}
-                  onChange={(event) =>
-                    setFeedbackForm((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                />
-              </Field>
-              <Field
-                id="feedback-message"
+                placeholder="jane@email.com"
+                type="email"
+                value={feedbackForm.email}
+                onChange={(event) =>
+                  setFeedbackForm((prev) => ({ ...prev, email: event.target.value }))
+                }
+              />
+              <Textarea
                 label={t('feedback.message')}
-                helper="Required. The more detail you share, the faster we can act."
+                placeholder="Tell us what happened..."
+                value={feedbackForm.message}
+                onChange={(event) =>
+                  setFeedbackForm((prev) => ({ ...prev, message: event.target.value }))
+                }
+                minRows={5}
                 required
-              >
-                <textarea
-                  className="textarea"
-                  placeholder="Tell us what happened..."
-                  value={feedbackForm.message}
-                  onChange={(event) =>
-                    setFeedbackForm((prev) => ({ ...prev, message: event.target.value }))
-                  }
-                  required
-                />
-              </Field>
-              <div className="form-actions">
-                <button className="button" type="submit" disabled={feedbackSending}>
+              />
+              <Group justify="flex-end">
+                <Button type="submit" loading={feedbackSending}>
                   {feedbackSending ? t('feedback.sending') : t('feedback.send')}
-                </button>
-              </div>
-              <StatusMessage tone="error" message={feedbackError} />
-              <StatusMessage tone={feedbackStatusTone} message={feedbackStatus} />
-            </form>
-          </FormSection>
-        </aside>
-      )}
-    </div>
+                </Button>
+              </Group>
+            </Stack>
+            <StatusMessage tone="error" message={feedbackError} />
+            <StatusMessage tone={feedbackStatusTone} message={feedbackStatus} />
+          </form>
+        </FormSection>
+      </Drawer>
+    </AppShell>
   )
 }
 
@@ -838,8 +1112,7 @@ function PublicEventRegistration({ eventId, t, language, languages, onLanguageCh
                 helper="Required. Enter first and last name."
                 required
               >
-                <input
-                  className="input"
+                <TextInput
                   placeholder="Aisha Khan"
                   value={form.fullName}
                   onChange={(evt) => setForm((prev) => ({ ...prev, fullName: evt.target.value }))}
@@ -852,8 +1125,7 @@ function PublicEventRegistration({ eventId, t, language, languages, onLanguageCh
                 helper="Required. We'll email a confirmation."
                 required
               >
-                <input
-                  className="input"
+                <TextInput
                   type="email"
                   placeholder="aisha@email.com"
                   value={form.email}
@@ -866,8 +1138,7 @@ function PublicEventRegistration({ eventId, t, language, languages, onLanguageCh
                 label={translate('event.phone')}
                 helper="Optional. Include for reminders."
               >
-                <input
-                  className="input"
+                <TextInput
                   placeholder="+995 555 123 456"
                   value={form.phone}
                   onChange={(evt) => setForm((prev) => ({ ...prev, phone: evt.target.value }))}
@@ -881,29 +1152,29 @@ function PublicEventRegistration({ eventId, t, language, languages, onLanguageCh
           >
             <div className="form-grid">
               <Field id="event-group" label="Group" helper="Select the attendee type.">
-                <select
-                  className="select"
+                <Select
                   value={form.group}
-                  onChange={(evt) => setForm((prev) => ({ ...prev, group: evt.target.value }))}
-                >
-                  <option value="Supporter">{translate('event.groupSupporter')}</option>
-                  <option value="Member">{translate('event.groupMember')}</option>
-                </select>
+                  onChange={(value) => setForm((prev) => ({ ...prev, group: value || '' }))}
+                  data={[
+                    { value: 'Supporter', label: translate('event.groupSupporter') },
+                    { value: 'Member', label: translate('event.groupMember') },
+                  ]}
+                />
               </Field>
               <Field id="event-notes" label={translate('event.notes')} helper="Optional notes">
-                <textarea
-                  className="textarea"
+                <Textarea
                   placeholder="Accessibility needs, questions, or context..."
                   value={form.notes}
                   onChange={(evt) => setForm((prev) => ({ ...prev, notes: evt.target.value }))}
+                  minRows={4}
                 />
               </Field>
             </div>
           </FormSection>
           <div className="form-actions">
-            <button className="button" type="submit" disabled={submitting}>
+            <Button type="submit" loading={submitting}>
               {submitting ? 'Submitting...' : translate('event.register')}
-            </button>
+            </Button>
           </div>
           <StatusMessage tone={statusTone} message={status} />
         </form>
@@ -924,12 +1195,16 @@ function DeliberationQuestionnaire({
   const [comments, setComments] = useState([])
   const [commentText, setCommentText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [queueLoading, setQueueLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [pendingVote, setPendingVote] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [conversation, setConversation] = useState(null)
   const [votedIds, setVotedIds] = useState([])
+  const [seenIds, setSeenIds] = useState([])
+  const [importantFlag, setImportantFlag] = useState(false)
+  const [completedSent, setCompletedSent] = useState(false)
   const dragStartRef = useRef(null)
   const dragTypeRef = useRef(null)
   const dragPointerIdRef = useRef(null)
@@ -938,14 +1213,57 @@ function DeliberationQuestionnaire({
 
   const params = new URLSearchParams(window.location.search)
   const sid = params.get('sid') || ''
+  const inviteCode = params.get('invite') || ''
+  const xid = params.get('xid') || params.get('participant_id') || ''
+  const viewMode = params.get('view') || ''
+  const isEmbed = viewMode === 'embed'
   const participantStorageKey = `delib_anon_id_${conversationId || 'default'}_${sid || 'default'}`
   const participantRef = useRef(
-    localStorage.getItem(participantStorageKey) || `${Date.now()}_${Math.random()}`,
+    xid || localStorage.getItem(participantStorageKey) || `${Date.now()}_${Math.random()}`,
   )
   const participantId = participantRef.current
   const voteStorageKey = useMemo(
     () => `delib_votes_${conversationId || 'default'}_${participantId}`,
     [conversationId, participantId],
+  )
+  const requestHeaders = useMemo(
+    () => ({
+      'X-Participant-Id': participantId,
+      'X-Invite-Code': inviteCode,
+    }),
+    [inviteCode, participantId],
+  )
+
+  const loadQueue = useCallback(
+    async ({ reset = false, extraVotedIds = [] } = {}) => {
+      if (!conversationId) return
+      setQueueLoading(true)
+      setError('')
+      try {
+        const payload = {
+          seen_ids: reset ? [] : seenIds,
+          voted_ids: [...votedIds, ...extraVotedIds],
+          limit: 50,
+        }
+        const response = await requestJson(`/conversations/${conversationId}/queue`, {
+          method: 'POST',
+          payload,
+          headers: requestHeaders,
+        })
+        const items = Array.isArray(response?.items) ? response.items : []
+        setComments(items)
+        setCurrentIndex(0)
+        const nextSeen = items.map((item) => item.id)
+        setSeenIds((prev) =>
+          Array.from(new Set([...(reset ? [] : prev), ...nextSeen])),
+        )
+      } catch (err) {
+        setError(err.message || translate('questionnaire.loadingBody'))
+      } finally {
+        setQueueLoading(false)
+      }
+    },
+    [conversationId, requestHeaders, seenIds, translate, votedIds],
   )
 
   useEffect(() => {
@@ -955,23 +1273,32 @@ function DeliberationQuestionnaire({
     localStorage.setItem(participantStorageKey, participantId)
     const storedVotes = parseLocalArray(localStorage.getItem(voteStorageKey))
     setVotedIds(storedVotes)
-    Promise.all([
-      getJson(`/conversations/${conversationId}`),
-      getJson(`/conversations/${conversationId}/comments?status=approved`),
-    ])
-      .then(([convoPayload, commentsPayload]) => {
+    setSeenIds([])
+    Promise.all([getJson(`/conversations/${conversationId}`)])
+      .then(([convoPayload]) => {
         setConversation(convoPayload)
-        const approved = Array.isArray(commentsPayload) ? commentsPayload : []
-        setComments(buildCommentDeck(approved, storedVotes))
         setCurrentIndex(0)
         setDragOffset({ x: 0, y: 0 })
         setIsDragging(false)
+        setCompletedSent(false)
+        loadQueue({ reset: true })
+        requestJson(`/conversations/${conversationId}/view`, {
+          method: 'POST',
+          headers: requestHeaders,
+        }).catch(() => null)
       })
       .catch((err) =>
         setError(err.message || 'Unable to load conversation comments.'),
       )
       .finally(() => setLoading(false))
-  }, [conversationId, participantId, participantStorageKey, voteStorageKey])
+  }, [
+    conversationId,
+    participantId,
+    participantStorageKey,
+    voteStorageKey,
+    loadQueue,
+    requestHeaders,
+  ])
 
   useEffect(() => {
     if (!conversationId) return
@@ -981,9 +1308,13 @@ function DeliberationQuestionnaire({
   const currentComment = comments[currentIndex]
   const currentCommentId = currentComment?.id
   const currentText = currentComment?.text || ''
-  const totalComments = comments.length
+  const identityRequired = conversation?.identity_mode === 'xid_required' && !xid
+  const votingDisabled =
+    (conversation && conversation.allow_voting === false) || identityRequired
+  const totalComments = comments.length + votedIds.length
+  const progressCount = votedIds.length
   const progress = totalComments
-    ? Math.min(100, Math.round((Math.min(currentIndex, totalComments) / totalComments) * 100))
+    ? Math.min(100, Math.round((progressCount / totalComments) * 100))
     : 0
   const swipeHintThreshold = 40
   const swipeIntent =
@@ -996,26 +1327,48 @@ function DeliberationQuestionnaire({
           : ''
 
   const handleVote = useCallback(async (commentId, choice) => {
-    if (!commentId || pendingVote) return
+    if (!commentId || pendingVote || votingDisabled) return
     setPendingVote(true)
     setError('')
     try {
       await requestJson('/vote', {
         method: 'POST',
-        payload: { conversation_id: conversationId, comment_id: commentId, choice },
-        headers: { 'X-Participant-Id': participantId },
+        payload: {
+          conversation_id: conversationId,
+          comment_id: commentId,
+          choice,
+          important: importantFlag,
+        },
+        headers: requestHeaders,
       })
       setVotedIds((prev) => {
         if (prev.includes(commentId)) return prev
         return [...prev, commentId]
       })
-      setCurrentIndex((prev) => Math.min(prev + 1, comments.length))
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId))
+      setCurrentIndex(0)
+      setImportantFlag(false)
+      setSeenIds((prev) => Array.from(new Set([...prev, commentId])))
+      emitEmbedEvent('vote_cast', { comment_id: commentId, choice, important: importantFlag })
+      if (comments.length <= 3) {
+        loadQueue({ extraVotedIds: [commentId] })
+      }
     } catch (err) {
       setError(err.message || translate('questionnaire.voteFailed'))
     } finally {
       setPendingVote(false)
     }
-  }, [comments.length, conversationId, participantId, pendingVote, translate])
+  }, [
+    comments.length,
+    conversationId,
+    emitEmbedEvent,
+    importantFlag,
+    loadQueue,
+    pendingVote,
+    requestHeaders,
+    translate,
+    votingDisabled,
+  ])
 
   const handleSubmit = async () => {
     if (!commentText.trim()) {
@@ -1027,16 +1380,51 @@ function DeliberationQuestionnaire({
       return
     }
     try {
+      const text = commentText.trim()
       await requestJson(`/conversations/${conversationId}/comments`, {
         method: 'POST',
-        payload: { text: commentText.trim() },
-        headers: { 'X-Participant-Id': participantId },
+        payload: { text },
+        headers: requestHeaders,
       })
       setCommentText('')
+      emitEmbedEvent('comment_submitted', { text })
+      loadQueue()
     } catch (err) {
       setError(err.message || 'Comment failed.')
     }
   }
+
+  const emitEmbedEvent = useCallback(
+    (event, payload = {}) => {
+      if (typeof window === 'undefined') return
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(
+          {
+            type: 'fs_survey_event',
+            event,
+            conversation_id: conversationId,
+            participant_id: participantId,
+            ...payload,
+          },
+          '*',
+        )
+      }
+    },
+    [conversationId, participantId],
+  )
+
+  useEffect(() => {
+    if (!conversationId) return
+    emitEmbedEvent('view', { invite: inviteCode || null })
+  }, [conversationId, emitEmbedEvent, inviteCode])
+
+  useEffect(() => {
+    if (completedSent) return
+    if (!currentCommentId && !loading && !queueLoading) {
+      emitEmbedEvent('completed_all')
+      setCompletedSent(true)
+    }
+  }, [completedSent, currentCommentId, emitEmbedEvent, loading, queueLoading])
 
   const resetDrag = () => {
     setDragOffset({ x: 0, y: 0 })
@@ -1114,6 +1502,7 @@ function DeliberationQuestionnaire({
   )
 
   const handlePointerDown = (event) => {
+    if (votingDisabled) return
     if (event.button !== undefined && event.button !== 0) return
     beginDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
     try {
@@ -1133,6 +1522,7 @@ function DeliberationQuestionnaire({
 
   const handleTouchStart = (event) => {
     if (supportsPointerEvents) return
+    if (votingDisabled) return
     const touch = event.touches?.[0]
     if (!touch) return
     beginDrag(touch.clientX, touch.clientY, 'touch')
@@ -1153,6 +1543,7 @@ function DeliberationQuestionnaire({
 
   const handleMouseDown = (event) => {
     if (supportsPointerEvents) return
+    if (votingDisabled) return
     if (event.button !== 0) return
     beginDrag(event.clientX, event.clientY, 'mouse')
   }
@@ -1168,27 +1559,32 @@ function DeliberationQuestionnaire({
   }
 
   return (
-    <section className="delib-questionnaire">
-      <div className="page-language page-language--questionnaire">
-        <LanguageSelect
-          language={language}
-          languages={languages}
-          onLanguageChange={onLanguageChange}
-          label={translate('language.label')}
-        />
-      </div>
-      <header className="delib-questionnaire__header">
-        <span className="pill">{translate('module.deliberation')}</span>
-        <h2>{translate('questionnaire.title')}</h2>
-        <p>{translate('questionnaire.subtitle')}</p>
-      </header>
+    <section className={`delib-questionnaire ${isEmbed ? 'delib-questionnaire--embed' : ''}`}>
+      {!isEmbed ? (
+        <div className="page-language page-language--questionnaire">
+          <LanguageSelect
+            language={language}
+            languages={languages}
+            onLanguageChange={onLanguageChange}
+            label={translate('language.label')}
+          />
+        </div>
+      ) : null}
+      {!isEmbed ? (
+        <header className="delib-questionnaire__header">
+          <span className="pill">{translate('module.deliberation')}</span>
+          <h2>{translate('questionnaire.title')}</h2>
+          <p>{translate('questionnaire.subtitle')}</p>
+        </header>
+      ) : null}
+      <Progress value={progress} size="lg" radius="xl" color="civic" mb="md" />
       {error ? <div className="module-alert">{error}</div> : null}
       <div className="questionnaire-progress">
         <div className="questionnaire-progress__track">
           <div className="questionnaire-progress__bar" style={{ width: `${progress}%` }} />
         </div>
         <span className="questionnaire-progress__label">
-          {Math.min(currentIndex + 1, totalComments)}/{totalComments || 0}
+          {progressCount}/{totalComments || 0}
         </span>
       </div>
       <div className="questionnaire-deck">
@@ -1196,7 +1592,7 @@ function DeliberationQuestionnaire({
           {currentIndex + 1 < totalComments && (
             <div className="questionnaire-card questionnaire-card--back" aria-hidden="true" />
           )}
-          {loading ? (
+          {loading || queueLoading ? (
             <div className="questionnaire-card questionnaire-card--empty">
                     <h3>{translate('questionnaire.loadingTitle')}</h3>
                     <p className="muted">{translate('questionnaire.loadingBody')}</p>
@@ -1224,7 +1620,7 @@ function DeliberationQuestionnaire({
             >
                     <div className="questionnaire-card__title">
                       {translate('questionnaire.questionLabel', {
-                        current: currentIndex + 1,
+                        current: progressCount + 1,
                         total: totalComments,
                       })}
                     </div>
@@ -1250,12 +1646,26 @@ function DeliberationQuestionnaire({
           )}
         </div>
       </div>
+      {identityRequired ? (
+        <p className="muted">Login is required to vote in this conversation.</p>
+      ) : null}
+      <div className="questionnaire-importance">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={importantFlag}
+            onChange={(event) => setImportantFlag(event.target.checked)}
+            disabled={!currentCommentId || pendingVote || votingDisabled}
+          />
+          This is important to me
+        </label>
+      </div>
       <div className="questionnaire-controls">
         <button
           className="swipe-button swipe-button--disagree"
           type="button"
           onClick={() => handleVote(currentCommentId, -1)}
-          disabled={!currentCommentId || pendingVote}
+          disabled={!currentCommentId || pendingVote || votingDisabled}
         >
                   {translate('questionnaire.disagree')}
         </button>
@@ -1263,7 +1673,7 @@ function DeliberationQuestionnaire({
           className="swipe-button swipe-button--pass"
           type="button"
           onClick={() => handleVote(currentCommentId, 0)}
-          disabled={!currentCommentId || pendingVote}
+          disabled={!currentCommentId || pendingVote || votingDisabled}
         >
                   {translate('questionnaire.pass')}
         </button>
@@ -1271,12 +1681,14 @@ function DeliberationQuestionnaire({
           className="swipe-button swipe-button--agree"
           type="button"
           onClick={() => handleVote(currentCommentId, 1)}
-          disabled={!currentCommentId || pendingVote}
+          disabled={!currentCommentId || pendingVote || votingDisabled}
         >
                   {translate('questionnaire.agree')}
         </button>
       </div>
-      {conversation?.allow_comment_submission ? (
+      {identityRequired ? (
+        <p className="muted">Login is required to submit comments.</p>
+      ) : conversation?.allow_comment_submission ? (
         <div className="questionnaire-add">
           <div className="card-divider">
                     <h4>{translate('questionnaire.addComment')}</h4>
@@ -1293,6 +1705,106 @@ function DeliberationQuestionnaire({
       ) : (
                 <p className="muted">{translate('questionnaire.commentDisabled')}</p>
       )}
+    </section>
+  )
+}
+
+
+function DeliberationPublicReport({ shareId, t, language, languages, onLanguageChange }) {
+  const translate = t || ((key) => key)
+  const [report, setReport] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!shareId) return
+    setLoading(true)
+    setError('')
+    getJson(`/reports/public/${shareId}`)
+      .then((payload) => {
+        setReport(payload?.payload || null)
+      })
+      .catch((err) => setError(err.message || 'Unable to load report.'))
+      .finally(() => setLoading(false))
+  }, [shareId])
+
+  const consensus = report?.metrics?.consensus || []
+  const polarizing = report?.metrics?.polarizing || []
+
+  return (
+    <section className="public-report">
+      <div className="page-language page-language--questionnaire">
+        <LanguageSelect
+          language={language}
+          languages={languages}
+          onLanguageChange={onLanguageChange}
+          label={translate('language.label')}
+        />
+      </div>
+      <header className="public-report__header">
+        <span className="pill">Public report</span>
+        <h2>{report?.name || 'Survey summary'}</h2>
+        <p>{report?.generated_at ? `Generated on ${report.generated_at}` : null}</p>
+      </header>
+      {loading ? (
+        <div className="questionnaire-card questionnaire-card--empty">
+          <h3>{translate('questionnaire.loadingTitle')}</h3>
+          <p className="muted">{translate('questionnaire.loadingBody')}</p>
+        </div>
+      ) : null}
+      {error ? <div className="module-alert">{error}</div> : null}
+      {report ? (
+        <div className="stack report-stack">
+          <div className="report-metrics">
+            <div className="report-metric">
+              <span>Views</span>
+              <strong>{report?.stats?.views ?? 0}</strong>
+              <span className="muted">Survey page visits</span>
+            </div>
+            <div className="report-metric">
+              <span>Voters</span>
+              <strong>{report?.stats?.voters ?? 0}</strong>
+              <span className="muted">Participants who voted</span>
+            </div>
+            <div className="report-metric">
+              <span>Commenters</span>
+              <strong>{report?.stats?.commenters ?? 0}</strong>
+              <span className="muted">Unique comment authors</span>
+            </div>
+            <div className="report-metric">
+              <span>Votes per voter</span>
+              <strong>{report?.stats?.votes_per_participant ?? 0}</strong>
+              <span className="muted">Average depth</span>
+            </div>
+          </div>
+          <div className="report-grid">
+            <div className="module-card report-card">
+              <h4>Consensus statements</h4>
+              {consensus.length ? (
+                <ul className="report-list">
+                  {consensus.slice(0, 5).map((item) => (
+                    <li key={item.id}>{item.text}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No consensus statements yet.</p>
+              )}
+            </div>
+            <div className="module-card report-card">
+              <h4>Polarizing statements</h4>
+              {polarizing.length ? (
+                <ul className="report-list">
+                  {polarizing.slice(0, 5).map((item) => (
+                    <li key={item.id}>{item.text}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No polarizing statements yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Badge, Group } from '@mantine/core'
+import { IconBolt, IconChartDots, IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, BarElement, CategoryScale, Legend, LinearScale, Tooltip } from 'chart.js'
 import { API_BASE, requestForm, requestJson } from '../../services/api'
-import { Field, FormSection, InfoBox, InfoHint, StatusMessage } from '../../ui'
+import { CivicStatGrid, Field, FormSection, InfoBox, InfoHint, StatusMessage } from '../../ui'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
@@ -198,6 +200,36 @@ export function AudienceDiscoveryPage({
     if (Number.isNaN(numeric)) return '—'
     return `${Math.round(numeric * 100)}%`
   }
+
+  const discoveryPulse = useMemo(
+    () => [
+      {
+        label: 'Coverage',
+        value: formatPercent(analysis?.summary?.coverage),
+        icon: <IconTarget size={18} />,
+        progress: Math.round(Number(analysis?.summary?.coverage || 0) * 100),
+      },
+      {
+        label: 'Segments',
+        value: analysis?.summary?.segmentsGenerated ?? segments.length,
+        icon: <IconUsers size={18} />,
+        badge: 'Draft',
+      },
+      {
+        label: 'Clusters',
+        value: analysis?.summary?.clustersCreated ?? clusters.length,
+        icon: <IconChartDots size={18} />,
+        note: 'Topic families',
+      },
+      {
+        label: 'Pages crawled',
+        value: analysis?.summary?.pagesCrawled ?? pages.length,
+        icon: <IconBolt size={18} />,
+        note: 'Source depth',
+      },
+    ],
+    [analysis?.summary, clusters.length, pages.length, segments.length],
+  )
 
   const runSnapshot = useMemo(() => {
     if (!analysis?.summary) return []
@@ -585,6 +617,22 @@ export function AudienceDiscoveryPage({
 
   return (
     <section className="module">
+      <CivicStatGrid
+        title="Discovery pulse"
+        description="Quality, coverage, and scale of the latest audience run."
+        items={discoveryPulse}
+      />
+      <Group gap="xs" mb="md">
+        <Badge variant="light" color="civic">
+          Evidence-first
+        </Badge>
+        <Badge variant="light" color="civic">
+          Civic-safe messaging
+        </Badge>
+        <Badge variant="light" color="civic">
+          Segment ready
+        </Badge>
+      </Group>
       {showTabs ? (
         <div className="subtabs">
           {[

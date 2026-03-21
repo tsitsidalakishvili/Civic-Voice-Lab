@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { IconChartDots, IconSpeakerphone, IconTarget, IconUsers } from '@tabler/icons-react'
 import { getJson, requestJson } from '../../services/api'
-import { Field, FormSection, LanguageSelect, StatusMessage } from '../../ui'
+import { CivicStatGrid, Field, FormSection, LanguageSelect, StatusMessage } from '../../ui'
 
 export function PublicCampaignPage({
   campaignId,
@@ -427,6 +428,44 @@ export function PublicCampaignPage({
   const fundingProgress = targetAmount
     ? Math.min((raisedAmount / targetAmount) * 100, 100)
     : 0
+  const campaignPulse = useMemo(
+    () => [
+      {
+        label: isDetail ? 'Funding progress' : 'Public campaigns',
+        value: isDetail ? `${fundingProgress.toFixed(0)}%` : publicCampaigns.length,
+        icon: <IconSpeakerphone size={18} />,
+        progress: isDetail ? Math.round(fundingProgress) : undefined,
+      },
+      {
+        label: 'Raised',
+        value: isDetail ? `${raisedAmount.toLocaleString()} ${displayCurrency}` : '—',
+        icon: <IconChartDots size={18} />,
+        note: isDetail ? 'Verified contributions' : 'Select a campaign',
+      },
+      {
+        label: 'Contributors',
+        value: isDetail
+          ? fundingSummary?.contributorCount ?? settledContributions.length
+          : '—',
+        icon: <IconUsers size={18} />,
+      },
+      {
+        label: 'Target',
+        value: isDetail ? `${targetAmount.toLocaleString()} ${displayCurrency}` : '—',
+        icon: <IconTarget size={18} />,
+      },
+    ],
+    [
+      displayCurrency,
+      fundingProgress,
+      fundingSummary?.contributorCount,
+      isDetail,
+      publicCampaigns.length,
+      raisedAmount,
+      settledContributions.length,
+      targetAmount,
+    ],
+  )
   const timelineStart = campaign?.executionStartDate || campaign?.startDate || '—'
   const timelineEnd =
     campaign?.expectedCompletionDate || campaign?.endDate || '—'
@@ -472,6 +511,11 @@ export function PublicCampaignPage({
           label={t?.('language.label') || 'Language'}
         />
       </div>
+      <CivicStatGrid
+        title="Campaign pulse"
+        description="Public readiness, funding progress, and contributor momentum."
+        items={campaignPulse}
+      />
       {error ? <div className="module-alert">{error}</div> : null}
       {loading && !campaign ? <p className="muted">Loading campaign…</p> : null}
       {campaign && (

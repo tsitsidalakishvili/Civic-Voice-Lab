@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bar, Doughnut } from 'react-chartjs-2'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import {
   ArcElement,
   BarElement,
@@ -7,11 +7,25 @@ import {
   Chart as ChartJS,
   Legend,
   LinearScale,
+  LineElement,
+  PointElement,
   Tooltip,
 } from 'chart.js'
-import { getJson, requestJson } from '../../services/api'
+import { Stepper } from '@mantine/core'
+import { IconChartDots, IconMessage2, IconUsers } from '@tabler/icons-react'
+import { API_BASE, getJson, requestJson } from '../../services/api'
+import { CivicStatGrid } from '../../ui'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
+ChartJS.register(
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+  Legend,
+)
 
 const normalizeColumn = (value) =>
   String(value || '')
@@ -159,6 +173,7 @@ const intersectSets = (setA, setB) => {
 
 export function DeliberationPage({
   t,
+  language,
   activeTabOverride,
   onTabChange,
   showTabs = true,
@@ -182,11 +197,22 @@ export function DeliberationPage({
     description: '',
     allowCommentSubmission: true,
     allowViz: true,
+    moderationProfile: 'lazy',
     moderationRequired: false,
+    allowVoting: true,
+    minVotesForInclusion: 3,
+    profanityFilterEnabled: false,
+    rateLimitPerMinute: 0,
+    identityMode: 'anonymous',
+    inviteOnly: false,
     isOpen: true,
   })
   const [updateForm, setUpdateForm] = useState(null)
   const [seedText, setSeedText] = useState('')
+  const [seedEditId, setSeedEditId] = useState('')
+  const [seedEditText, setSeedEditText] = useState('')
+  const [seedStatus, setSeedStatus] = useState('')
+  const [moderationNotes, setModerationNotes] = useState({})
   const [simulateForm, setSimulateForm] = useState({
     participants: 120,
     votesPerParticipant: 20,
@@ -194,6 +220,49 @@ export function DeliberationPage({
   })
   const [report, setReport] = useState(null)
   const [reportError, setReportError] = useState('')
+  const [statementMode, setStatementMode] = useState('consensus')
+  const [clusterStatementIndex, setClusterStatementIndex] = useState({})
+  const [moderationLog, setModerationLog] = useState([])
+  const [moderationLogError, setModerationLogError] = useState('')
+  const [inviteForm, setInviteForm] = useState({
+    name: 'Wave 1',
+    count: 50,
+    parentCode: '',
+  })
+  const [inviteWaves, setInviteWaves] = useState([])
+  const [inviteError, setInviteError] = useState('')
+  const [ingestText, setIngestText] = useState('')
+  const [ingestItems, setIngestItems] = useState([])
+  const [ingestSelection, setIngestSelection] = useState({})
+  const [ingestStatus, setIngestStatus] = useState('')
+  const [ingestStrategy, setIngestStrategy] = useState('auto')
+  const [themes, setThemes] = useState([])
+  const [themeSummary, setThemeSummary] = useState(null)
+  const [themeForm, setThemeForm] = useState({ name: '', description: '' })
+  const [themeAssign, setThemeAssign] = useState({ commentId: '', themeIds: [] })
+  const [themeError, setThemeError] = useState('')
+  const [reportBuilder, setReportBuilder] = useState({
+    name: '',
+    themeIds: [],
+    includeUnassigned: true,
+  })
+  const [reportLinks, setReportLinks] = useState([])
+  const [exportJob, setExportJob] = useState(null)
+  const [budgetTotal, setBudgetTotal] = useState(5000)
+  const [budgetInput, setBudgetInput] = useState(
+    'Community training,1200,5\nTown hall series,2000,4\nMobile outreach,800,3',
+  )
+  const [criteriaInput, setCriteriaInput] = useState(
+    'Impact,0.5\nFeasibility,0.3\nEquity,0.2',
+  )
+  const [optionsInput, setOptionsInput] = useState(
+    'Option A,4,3,5\nOption B,3,5,2\nOption C,5,2,4',
+  )
+  const [stats, setStats] = useState(null)
+  const [statsError, setStatsError] = useState('')
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [exportStatus, setExportStatus] = useState('')
+  const [exporting, setExporting] = useState(false)
   const [csvColumns, setCsvColumns] = useState([])
   const [csvRows, setCsvRows] = useState([])
   const [csvMap, setCsvMap] = useState({})
@@ -286,11 +355,25 @@ export function DeliberationPage({
       .map((row) => ({ ...row, text: sanitizeStatement(row.text) }))
       .sort((a, b) => Number(b?.polarity_score || 0) - Number(a?.polarity_score || 0))
       .slice(0, 6)
+    const majorityTop = [...allRows]
+      .map((row) => ({ ...row, text: sanitizeStatement(row.text) }))
+      .sort((a, b) => {
+        const ratioDiff = Number(b?.agreement_ratio || 0) - Number(a?.agreement_ratio || 0)
+        if (ratioDiff !== 0) return ratioDiff
+        return Number(b?.participation || 0) - Number(a?.participation || 0)
+      })
+      .slice(0, 6)
+    const importantTop = [...allRows]
+      .map((row) => ({ ...row, text: sanitizeStatement(row.text) }))
+      .sort((a, b) => Number(b?.important_count || 0) - Number(a?.important_count || 0))
+      .slice(0, 6)
     const clusterSummaries = report.cluster_summaries || []
     return {
       voteTotals,
       consensusTop,
       polarizingTop,
+      majorityTop,
+      importantTop,
       clusterLabels: clusterSummaries.map((row) => row.cluster_id),
       clusterSizes: clusterSummaries.map((row) => Number(row?.size || 0)),
     }
@@ -409,6 +492,10 @@ export function DeliberationPage({
           .map((item) => sanitizeStatement(item))
           .filter(Boolean)
           .slice(0, 3)
+        const statements = [
+          ...agreeTopics.map((topic) => ({ text: topic, sentiment: 'agree' })),
+          ...disagreeTopics.map((topic) => ({ text: topic, sentiment: 'disagree' })),
+        ]
         let summary = `${sizeLabel} cluster with ${formatPercent(share)} of participants.`
         if (agreeTopics.length) {
           summary += ` Strong agreement on ${agreeTopics.join(', ')}.`
@@ -422,11 +509,17 @@ export function DeliberationPage({
           share,
           agreeTopics,
           disagreeTopics,
+          statements,
           summary,
         }
       })
       .sort((a, b) => b.size - a.size)
   }, [report])
+
+  const seedComments = useMemo(
+    () => approvedComments.filter((comment) => comment.is_seed),
+    [approvedComments],
+  )
 
   const reportSummary = useMemo(() => {
     if (!report?.metrics) return null
@@ -440,6 +533,80 @@ export function DeliberationPage({
       agreementTopics: report.potential_agreements?.length || 0,
     }
   }, [clusterCards, report, reportCharts])
+
+  const statsSeries = useMemo(() => {
+    if (!stats) return null
+    const buildSeries = (items = []) => {
+      const labels = items.map((item) => item.date)
+      const data = items.map((item) => Number(item.count || 0))
+      return { labels, data }
+    }
+    return {
+      views: buildSeries(stats.views_over_time),
+      comments: buildSeries(stats.comments_over_time),
+      votes: buildSeries(stats.votes_over_time),
+    }
+  }, [stats])
+
+  const budgetPlan = useMemo(() => {
+    const rows = budgetInput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, cost, impact] = line.split(',').map((part) => part.trim())
+        return {
+          name,
+          cost: Number(cost || 0),
+          impact: Number(impact || 0),
+        }
+      })
+      .filter((row) => row.name)
+    const ranked = [...rows].sort((a, b) => {
+      const scoreA = a.cost ? a.impact / a.cost : 0
+      const scoreB = b.cost ? b.impact / b.cost : 0
+      return scoreB - scoreA
+    })
+    let remaining = Number(budgetTotal) || 0
+    const selected = []
+    ranked.forEach((row) => {
+      if (row.cost <= remaining) {
+        selected.push(row)
+        remaining -= row.cost
+      }
+    })
+    return { ranked, selected, remaining }
+  }, [budgetInput, budgetTotal])
+
+  const decisionScores = useMemo(() => {
+    const criteria = criteriaInput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, weight] = line.split(',').map((part) => part.trim())
+        return { name, weight: Number(weight || 0) }
+      })
+    const options = optionsInput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, ...scores] = line.split(',').map((part) => part.trim())
+        return {
+          name,
+          scores: scores.map((score) => Number(score || 0)),
+        }
+      })
+    const totals = options.map((option) => {
+      const weighted = criteria.reduce((sum, criterion, index) => {
+        const score = option.scores[index] ?? 0
+        return sum + score * (criterion.weight || 0)
+      }, 0)
+      return { ...option, weighted }
+    })
+    return { criteria, options: totals }
+  }, [criteriaInput, optionsInput])
 
   const horizontalBarOptions = useMemo(
     () => ({
@@ -495,6 +662,29 @@ export function DeliberationPage({
       plugins: {
         legend: { position: 'bottom', labels: { boxWidth: 12 } },
         tooltip: { enabled: true },
+      },
+    }),
+    [],
+  )
+
+  const lineOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: true },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#64748b' },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#64748b' },
+          grid: { color: 'rgba(148, 163, 184, 0.2)' },
+        },
       },
     }),
     [],
@@ -562,6 +752,30 @@ export function DeliberationPage({
   }, [activeTab])
 
   useEffect(() => {
+    if (activeTab !== 'setup' || !activeId) return
+    handleLoadInviteWaves()
+    getJson(`/conversations/${activeId}/comments?status=approved`)
+      .then((approved) => {
+        setApprovedComments(Array.isArray(approved) ? approved : [])
+      })
+      .catch(() => null)
+  }, [activeTab, activeId])
+
+  useEffect(() => {
+    if (activeTab !== 'moderation' || !activeId) return
+    handleStartModeration()
+    handleLoadModerationLog()
+  }, [activeTab, activeId])
+
+  useEffect(() => {
+    if (activeTab !== 'insights' || !activeId) return
+    handleLoadStats()
+    handleLoadThemes()
+    handleLoadThemeSummary()
+  }, [activeTab, activeId])
+
+
+  useEffect(() => {
     if (!activeId) {
       setActiveConvo(null)
       setApprovedComments([])
@@ -582,7 +796,14 @@ export function DeliberationPage({
           description: convo.description || '',
           allowCommentSubmission: convo.allow_comment_submission,
           allowViz: convo.allow_viz,
+          moderationProfile: convo.moderation_profile || (convo.moderation_required ? 'strict' : 'lazy'),
           moderationRequired: convo.moderation_required,
+          allowVoting: convo.allow_voting ?? true,
+          minVotesForInclusion: convo.min_votes_for_inclusion ?? 3,
+          profanityFilterEnabled: convo.profanity_filter_enabled ?? false,
+          rateLimitPerMinute: convo.rate_limit_per_minute ?? 0,
+          identityMode: convo.identity_mode || 'anonymous',
+          inviteOnly: convo.invite_only ?? false,
           isOpen: convo.is_open,
         })
       })
@@ -598,17 +819,18 @@ export function DeliberationPage({
     url.searchParams.set('questionnaire', questionnaireType)
     url.searchParams.set('conversation_id', activeId)
     if (view) url.searchParams.set('view', view)
+    if (language) url.searchParams.set('lang', language)
     return url.toString()
   }
 
   const questionnaireLink = useMemo(
     () => buildQuestionnaireLink('deliberation', 'participant'),
-    [activeId],
+    [activeId, language],
   )
 
   const adminQuestionnaireLink = useMemo(
     () => buildQuestionnaireLink('deliberation_admin', 'admin'),
-    [activeId],
+    [activeId, language],
   )
 
   const pageEmbedCode = useMemo(
@@ -624,6 +846,12 @@ export function DeliberationPage({
 <script async src="https://pol.is/embed.js"></script>`,
     [polisConversationId],
   )
+
+  const questionnaireEmbedCode = useMemo(() => {
+    const embedLink = buildQuestionnaireLink('deliberation', 'embed')
+    if (!embedLink) return ''
+    return `<iframe src="${embedLink}&xid=YOUR_USER_ID" style="width:100%;min-height:720px;border:0;" title="Survey & Consensus widget"></iframe>`
+  }, [activeId, language])
 
   useEffect(() => {
     if (!activeId || !questionnaireLink) {
@@ -732,7 +960,14 @@ export function DeliberationPage({
           description: createForm.description.trim(),
           allow_comment_submission: createForm.allowCommentSubmission,
           allow_viz: createForm.allowViz,
-          moderation_required: createForm.moderationRequired,
+          moderation_required: createForm.moderationProfile === 'strict',
+          moderation_profile: createForm.moderationProfile,
+          allow_voting: createForm.allowVoting,
+          min_votes_for_inclusion: Number(createForm.minVotesForInclusion) || 0,
+          profanity_filter_enabled: createForm.profanityFilterEnabled,
+          rate_limit_per_minute: Number(createForm.rateLimitPerMinute) || 0,
+          identity_mode: createForm.identityMode,
+          invite_only: createForm.inviteOnly,
           is_open: createForm.isOpen,
         },
       })
@@ -741,7 +976,14 @@ export function DeliberationPage({
         description: '',
         allowCommentSubmission: true,
         allowViz: true,
+        moderationProfile: 'lazy',
         moderationRequired: false,
+        allowVoting: true,
+        minVotesForInclusion: 3,
+        profanityFilterEnabled: false,
+        rateLimitPerMinute: 0,
+        identityMode: 'anonymous',
+        inviteOnly: false,
         isOpen: true,
       })
       if (created?.id) {
@@ -780,7 +1022,14 @@ export function DeliberationPage({
           description: updateForm.description,
           allow_comment_submission: updateForm.allowCommentSubmission,
           allow_viz: updateForm.allowViz,
-          moderation_required: updateForm.moderationRequired,
+          moderation_required: updateForm.moderationProfile === 'strict',
+          moderation_profile: updateForm.moderationProfile,
+          allow_voting: updateForm.allowVoting,
+          min_votes_for_inclusion: Number(updateForm.minVotesForInclusion) || 0,
+          profanity_filter_enabled: updateForm.profanityFilterEnabled,
+          rate_limit_per_minute: Number(updateForm.rateLimitPerMinute) || 0,
+          identity_mode: updateForm.identityMode,
+          invite_only: updateForm.inviteOnly,
           is_open: updateForm.isOpen,
         },
       })
@@ -828,18 +1077,78 @@ export function DeliberationPage({
     }
   }
 
-  const handleApprove = async (commentId, status) => {
+  const handleApprove = async (commentId, status, options = {}) => {
     try {
       await requestJson(`/comments/${commentId}`, {
         method: 'PATCH',
-        payload: { status },
+        payload: {
+          status,
+          rejection_reason: options.rejectionReason,
+          copy_to_seed: options.copyToSeed,
+        },
       })
       const pending = await getJson(
         `/conversations/${activeId}/comments?status=pending`,
       )
       setPendingComments(Array.isArray(pending) ? pending : [])
+      const approved = await getJson(
+        `/conversations/${activeId}/comments?status=approved`,
+      )
+      setApprovedComments(Array.isArray(approved) ? approved : [])
     } catch (err) {
       setConvoError(err.message || 'Unable to update comment.')
+    }
+  }
+
+  const handleUpdateSeedComment = async (commentId, text) => {
+    if (!commentId || !text.trim()) {
+      setSeedStatus('Seed comment cannot be empty.')
+      return
+    }
+    setSeedStatus('')
+    try {
+      await requestJson(`/comments/${commentId}/edit`, {
+        method: 'PATCH',
+        payload: { text: text.trim() },
+      })
+      const approved = await getJson(
+        `/conversations/${activeId}/comments?status=approved`,
+      )
+      setApprovedComments(Array.isArray(approved) ? approved : [])
+      setSeedEditId('')
+      setSeedEditText('')
+      setSeedStatus('Seed comment updated.')
+    } catch (err) {
+      setSeedStatus(err.message || 'Unable to update seed comment.')
+    }
+  }
+
+  const handleDeleteComment = async (commentId) => {
+    if (!commentId) return
+    try {
+      await requestJson(`/comments/${commentId}`, { method: 'DELETE' })
+      const approved = await getJson(
+        `/conversations/${activeId}/comments?status=approved`,
+      )
+      setApprovedComments(Array.isArray(approved) ? approved : [])
+    } catch (err) {
+      setConvoError(err.message || 'Unable to delete comment.')
+    }
+  }
+
+  const handleToggleSeed = async (commentId, nextIsSeed) => {
+    if (!commentId) return
+    try {
+      await requestJson(`/comments/${commentId}/edit`, {
+        method: 'PATCH',
+        payload: { is_seed: nextIsSeed },
+      })
+      const approved = await getJson(
+        `/conversations/${activeId}/comments?status=approved`,
+      )
+      setApprovedComments(Array.isArray(approved) ? approved : [])
+    } catch (err) {
+      setConvoError(err.message || 'Unable to update seed status.')
     }
   }
 
@@ -903,6 +1212,277 @@ export function DeliberationPage({
       setReport(reportPayload)
     } catch (err) {
       setReportError(err.message || 'Unable to load report.')
+    }
+  }
+
+  const handleLoadStats = async () => {
+    if (!activeId) return
+    setStatsError('')
+    setLoadingStats(true)
+    try {
+      const payload = await getJson(`/conversations/${activeId}/stats`)
+      setStats(payload)
+    } catch (err) {
+      setStatsError(err.message || 'Unable to load monitoring stats.')
+    } finally {
+      setLoadingStats(false)
+    }
+  }
+
+  const handleDownloadExport = async () => {
+    if (!activeId) return
+    setExportStatus('')
+    setExporting(true)
+    try {
+      const response = await fetch(`${API_BASE}/conversations/${activeId}/export`)
+      if (!response.ok) {
+        throw new Error('Export failed.')
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `conversation_${activeId}_export.zip`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setExportStatus('Export downloaded.')
+    } catch (err) {
+      setExportStatus(err.message || 'Unable to download export.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleLoadModerationLog = async () => {
+    if (!activeId) return
+    setModerationLogError('')
+    try {
+      const payload = await getJson(`/conversations/${activeId}/moderation-log`)
+      setModerationLog(Array.isArray(payload?.entries) ? payload.entries : [])
+    } catch (err) {
+      setModerationLogError(err.message || 'Unable to load moderation log.')
+    }
+  }
+
+  const handleLoadInviteWaves = async () => {
+    if (!activeId) return
+    setInviteError('')
+    try {
+      const payload = await getJson(`/conversations/${activeId}/invite-waves`)
+      setInviteWaves(Array.isArray(payload?.waves) ? payload.waves : [])
+    } catch (err) {
+      setInviteError(err.message || 'Unable to load invite waves.')
+    }
+  }
+
+  const handleCreateInviteWave = async () => {
+    if (!activeId) return
+    setInviteError('')
+    try {
+      await requestJson(`/conversations/${activeId}/invite-waves`, {
+        method: 'POST',
+        payload: {
+          name: inviteForm.name.trim(),
+          count: Number(inviteForm.count) || 0,
+          parent_code: inviteForm.parentCode.trim() || null,
+        },
+      })
+      handleLoadInviteWaves()
+      setInviteForm((prev) => ({ ...prev, parentCode: '' }))
+    } catch (err) {
+      setInviteError(err.message || 'Unable to create invite wave.')
+    }
+  }
+
+  const handleRevokeInvite = async (inviteId, cascade = false) => {
+    if (!inviteId) return
+    try {
+      await requestJson(`/invites/${inviteId}/revoke?cascade=${cascade ? 'true' : 'false'}`)
+      handleLoadInviteWaves()
+    } catch (err) {
+      setInviteError(err.message || 'Unable to revoke invite.')
+    }
+  }
+
+  const handleIngestText = async () => {
+    if (!activeId || !ingestText.trim()) return
+    setIngestStatus('')
+    try {
+      const payload = await requestJson(`/conversations/${activeId}/ingest`, {
+        method: 'POST',
+        payload: { text: ingestText.trim(), strategy: ingestStrategy, max_items: 200 },
+      })
+      const items = Array.isArray(payload?.items) ? payload.items : []
+      setIngestItems(items)
+      const nextSelection = {}
+      items.forEach((item) => {
+        nextSelection[item] = true
+      })
+      setIngestSelection(nextSelection)
+      setIngestStatus(`Prepared ${items.length} statements.`)
+    } catch (err) {
+      setIngestStatus(err.message || 'Unable to ingest text.')
+    }
+  }
+
+  const handleSeedFromIngest = async () => {
+    if (!activeId) return
+    const selected = ingestItems.filter((item) => ingestSelection[item])
+    if (!selected.length) {
+      setIngestStatus('Select at least one statement to seed.')
+      return
+    }
+    try {
+      await requestJson(`/conversations/${activeId}/seed-comments:bulk`, {
+        method: 'POST',
+        payload: { comments: selected },
+      })
+      setIngestStatus('Seed comments added.')
+      setSeedStatus('Seed comments added.')
+      const approved = await getJson(
+        `/conversations/${activeId}/comments?status=approved`,
+      )
+      setApprovedComments(Array.isArray(approved) ? approved : [])
+    } catch (err) {
+      setIngestStatus(err.message || 'Unable to seed statements.')
+    }
+  }
+
+  const handleLoadThemes = async () => {
+    if (!activeId) return
+    setThemeError('')
+    try {
+      const payload = await getJson(`/conversations/${activeId}/themes`)
+      setThemes(Array.isArray(payload?.themes) ? payload.themes : [])
+    } catch (err) {
+      setThemeError(err.message || 'Unable to load themes.')
+    }
+  }
+
+  const handleLoadThemeSummary = async () => {
+    if (!activeId) return
+    try {
+      const payload = await getJson(`/conversations/${activeId}/themes/summary`)
+      setThemeSummary(payload)
+    } catch (err) {
+      setThemeSummary(null)
+    }
+  }
+
+  const handleCreateTheme = async () => {
+    if (!activeId || !themeForm.name.trim()) return
+    setThemeError('')
+    try {
+      await requestJson(`/conversations/${activeId}/themes`, {
+        method: 'POST',
+        payload: {
+          name: themeForm.name.trim(),
+          description: themeForm.description.trim() || null,
+        },
+      })
+      setThemeForm({ name: '', description: '' })
+      handleLoadThemes()
+      handleLoadThemeSummary()
+    } catch (err) {
+      setThemeError(err.message || 'Unable to create theme.')
+    }
+  }
+
+  const handleDeleteTheme = async (themeId) => {
+    if (!themeId) return
+    try {
+      await requestJson(`/themes/${themeId}`, { method: 'DELETE' })
+      handleLoadThemes()
+      handleLoadThemeSummary()
+    } catch (err) {
+      setThemeError(err.message || 'Unable to delete theme.')
+    }
+  }
+
+  const handleAssignThemes = async () => {
+    if (!themeAssign.commentId) return
+    try {
+      await requestJson(`/comments/${themeAssign.commentId}/themes`, {
+        method: 'POST',
+        payload: { theme_ids: themeAssign.themeIds },
+      })
+      handleLoadThemeSummary()
+    } catch (err) {
+      setThemeError(err.message || 'Unable to assign themes.')
+    }
+  }
+
+  const handleCreateReport = async () => {
+    if (!activeId || !reportBuilder.name.trim()) return
+    try {
+      const payload = await requestJson(`/conversations/${activeId}/reports`, {
+        method: 'POST',
+        payload: {
+          name: reportBuilder.name.trim(),
+          theme_ids: reportBuilder.themeIds,
+          include_unassigned: reportBuilder.includeUnassigned,
+        },
+      })
+      const shareId = payload?.share_id
+      if (shareId) {
+        const link = `${window.location.origin}/?report_share=${shareId}`
+        setReportLinks((prev) => [{ name: reportBuilder.name.trim(), link }, ...prev])
+      }
+      setReportBuilder((prev) => ({ ...prev, name: '' }))
+    } catch (err) {
+      setThemeError(err.message || 'Unable to generate report.')
+    }
+  }
+
+  const pollExportJob = async (jobId, attempt = 0) => {
+    if (!jobId || attempt > 20) return
+    try {
+      const payload = await getJson(`/exports/${jobId}`)
+      setExportJob(payload)
+      if (payload?.status === 'pending') {
+        setTimeout(() => pollExportJob(jobId, attempt + 1), 2000)
+      }
+    } catch (err) {
+      setExportStatus(err.message || 'Unable to fetch export job status.')
+    }
+  }
+
+  const handleCreateExportJob = async () => {
+    if (!activeId) return
+    setExportStatus('')
+    try {
+      const payload = await requestJson(`/conversations/${activeId}/exports`, {
+        method: 'POST',
+      })
+      if (payload?.job_id) {
+        setExportJob({ id: payload.job_id, status: payload.status })
+        pollExportJob(payload.job_id)
+      }
+    } catch (err) {
+      setExportStatus(err.message || 'Unable to start export job.')
+    }
+  }
+
+  const handleDownloadExportJob = async () => {
+    if (!exportJob?.id) return
+    try {
+      const response = await fetch(`${API_BASE}/exports/${exportJob.id}/download`)
+      if (!response.ok) {
+        throw new Error('Export not ready.')
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `conversation_${activeId}_export.zip`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportStatus(err.message || 'Unable to download export.')
     }
   }
 
@@ -1029,6 +1609,46 @@ export function DeliberationPage({
   const vennABOnly = new Set([...vennAB].filter((item) => !vennC.has(item)))
   const vennACOnly = new Set([...vennAC].filter((item) => !vennB.has(item)))
   const vennBCOnly = new Set([...vennBC].filter((item) => !vennA.has(item)))
+  const useMajority = statementMode === 'majority'
+  const statementItems = useMajority
+    ? reportCharts?.majorityTop || []
+    : reportCharts?.consensusTop || []
+  const statementScoreLabel = useMajority ? 'Agreement ratio' : 'Consensus score'
+  const flowStepIndex = useMemo(() => {
+    if (activeTab === 'setup') return 0
+    if (activeTab === 'distribute') return 1
+    if (activeTab === 'insights') return 2
+    return 0
+  }, [activeTab])
+  const deliberationPulse = useMemo(
+    () => [
+      {
+        label: 'Conversations',
+        value: conversations.length,
+        icon: <IconMessage2 size={18} />,
+        badge: 'Live',
+      },
+      {
+        label: 'Approved comments',
+        value: approvedComments.length,
+        icon: <IconUsers size={18} />,
+        note: 'Ready for review',
+      },
+      {
+        label: 'Pending moderation',
+        value: pendingComments.length,
+        icon: <IconChartDots size={18} />,
+        badge: 'Review',
+      },
+      {
+        label: 'Voting',
+        value: activeConvo?.allow_voting === false ? 'Off' : 'On',
+        icon: <IconChartDots size={18} />,
+        note: 'Live reactions',
+      },
+    ],
+    [activeConvo?.allow_voting, approvedComments.length, conversations.length, pendingComments.length],
+  )
   return (
     <section className="module">
       <details className="dashboard-detail">
@@ -1050,6 +1670,24 @@ export function DeliberationPage({
           </div>
         </div>
       </details>
+
+      <CivicStatGrid
+        title="Deliberation pulse"
+        description="Track active conversations, moderation load, and participation signals."
+        items={deliberationPulse}
+      />
+
+      <Stepper
+        active={flowStepIndex}
+        color="civic"
+        size="sm"
+        mb="md"
+        orientation="horizontal"
+      >
+        <Stepper.Step label="Set up" description="Define the topic" />
+        <Stepper.Step label="Share" description="Distribute links" />
+        <Stepper.Step label="Insights" description="Review outcomes" />
+      </Stepper>
 
       {convoError ? <div className="module-alert">{convoError}</div> : null}
       {copyStatus ? (
@@ -1254,6 +1892,20 @@ export function DeliberationPage({
                   }))
                 }
               />
+              <label className="label">Moderation profile</label>
+              <select
+                className="select"
+                value={createForm.moderationProfile}
+                onChange={(event) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    moderationProfile: event.target.value,
+                  }))
+                }
+              >
+                <option value="lazy">Lazy (auto-approve)</option>
+                <option value="strict">Strict (requires approval)</option>
+              </select>
               <label className="checkbox">
                 <input
                   type="checkbox"
@@ -1270,6 +1922,19 @@ export function DeliberationPage({
               <label className="checkbox">
                 <input
                   type="checkbox"
+                  checked={createForm.allowVoting}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      allowVoting: event.target.checked,
+                    }))
+                  }
+                />
+                Allow voting
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
                   checked={createForm.allowViz}
                   onChange={(event) =>
                     setCreateForm((prev) => ({ ...prev, allowViz: event.target.checked }))
@@ -1280,15 +1945,71 @@ export function DeliberationPage({
               <label className="checkbox">
                 <input
                   type="checkbox"
-                  checked={createForm.moderationRequired}
+                  checked={createForm.profanityFilterEnabled}
                   onChange={(event) =>
                     setCreateForm((prev) => ({
                       ...prev,
-                      moderationRequired: event.target.checked,
+                      profanityFilterEnabled: event.target.checked,
                     }))
                   }
                 />
-                Moderation required
+                Profanity filter (baseline)
+              </label>
+              <label className="label">Rate limit (per minute)</label>
+              <input
+                className="input"
+                type="number"
+                min="0"
+                max="120"
+                value={createForm.rateLimitPerMinute}
+                onChange={(event) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    rateLimitPerMinute: event.target.value,
+                  }))
+                }
+              />
+              <label className="label">Min votes for inclusion</label>
+              <input
+                className="input"
+                type="number"
+                min="0"
+                max="1000"
+                value={createForm.minVotesForInclusion}
+                onChange={(event) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    minVotesForInclusion: event.target.value,
+                  }))
+                }
+              />
+              <label className="label">Identity mode</label>
+              <select
+                className="select"
+                value={createForm.identityMode}
+                onChange={(event) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    identityMode: event.target.value,
+                  }))
+                }
+              >
+                <option value="anonymous">Anonymous</option>
+                <option value="xid_optional">Anonymous but verified</option>
+                <option value="xid_required">Login required</option>
+              </select>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={createForm.inviteOnly}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      inviteOnly: event.target.checked,
+                    }))
+                  }
+                />
+                Invite-only participation
               </label>
               <label className="checkbox">
                 <input
@@ -1329,6 +2050,20 @@ export function DeliberationPage({
                           }))
                         }
                       />
+                  <label className="label">Moderation profile</label>
+                  <select
+                    className="select"
+                    value={updateForm.moderationProfile}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        moderationProfile: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="lazy">Lazy (auto-approve)</option>
+                    <option value="strict">Strict (requires approval)</option>
+                  </select>
                       <label className="checkbox">
                         <input
                           type="checkbox"
@@ -1342,6 +2077,19 @@ export function DeliberationPage({
                         />
                         Allow comments
                       </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.allowVoting}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          allowVoting: event.target.checked,
+                        }))
+                      }
+                    />
+                    Allow voting
+                  </label>
                       <label className="checkbox">
                         <input
                           type="checkbox"
@@ -1358,16 +2106,72 @@ export function DeliberationPage({
                       <label className="checkbox">
                         <input
                           type="checkbox"
-                          checked={updateForm.moderationRequired}
+                      checked={updateForm.profanityFilterEnabled}
                           onChange={(event) =>
                             setUpdateForm((prev) => ({
                               ...prev,
-                              moderationRequired: event.target.checked,
+                          profanityFilterEnabled: event.target.checked,
                             }))
                           }
                         />
-                        Moderation required
+                    Profanity filter (baseline)
                       </label>
+                  <label className="label">Rate limit (per minute)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={updateForm.rateLimitPerMinute}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        rateLimitPerMinute: event.target.value,
+                      }))
+                    }
+                  />
+                  <label className="label">Min votes for inclusion</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    max="1000"
+                    value={updateForm.minVotesForInclusion}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        minVotesForInclusion: event.target.value,
+                      }))
+                    }
+                  />
+                  <label className="label">Identity mode</label>
+                  <select
+                    className="select"
+                    value={updateForm.identityMode}
+                    onChange={(event) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        identityMode: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="anonymous">Anonymous</option>
+                    <option value="xid_optional">Anonymous but verified</option>
+                    <option value="xid_required">Login required</option>
+                  </select>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={updateForm.inviteOnly}
+                      onChange={(event) =>
+                        setUpdateForm((prev) => ({
+                          ...prev,
+                          inviteOnly: event.target.checked,
+                        }))
+                      }
+                    />
+                    Invite-only participation
+                  </label>
                       <label className="checkbox">
                         <input
                           type="checkbox"
@@ -1402,6 +2206,195 @@ export function DeliberationPage({
                   <button className="button" type="button" onClick={handleSeedComments}>
                     Add seed comments
                   </button>
+                {seedStatus ? <p className="muted">{seedStatus}</p> : null}
+                {seedComments.length ? (
+                  <div className="card-divider">
+                    <h4>Seed library</h4>
+                  </div>
+                ) : null}
+                {seedComments.map((comment) => (
+                  <div key={comment.id} className="comment-row">
+                    {seedEditId === comment.id ? (
+                      <div className="stack">
+                        <textarea
+                          className="textarea"
+                          value={seedEditText}
+                          onChange={(event) => setSeedEditText(event.target.value)}
+                        />
+                        <div className="filter-row">
+                          <button
+                            className="button"
+                            type="button"
+                            onClick={() => handleUpdateSeedComment(comment.id, seedEditText)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => {
+                              setSeedEditId('')
+                              setSeedEditText('')
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p>{comment.text}</p>
+                        <div className="table-actions">
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => {
+                              setSeedEditId(comment.id)
+                              setSeedEditText(comment.text)
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => handleToggleSeed(comment.id, false)}
+                          >
+                            Unseed
+                          </button>
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => handleDeleteComment(comment.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+                </div>
+
+                <div className="module-card">
+                  <h3>Ingestion pipeline</h3>
+                  <p className="muted">
+                    Paste a corpus, split into candidate statements, and seed the ones you want.
+                  </p>
+                  <label className="label">Split strategy</label>
+                  <select
+                    className="select"
+                    value={ingestStrategy}
+                    onChange={(event) => setIngestStrategy(event.target.value)}
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="lines">Lines</option>
+                    <option value="sentences">Sentences</option>
+                  </select>
+                  <textarea
+                    className="textarea"
+                    placeholder="Paste text or paste a CSV column here"
+                    value={ingestText}
+                    onChange={(event) => setIngestText(event.target.value)}
+                  />
+                  <button className="button-secondary" type="button" onClick={handleIngestText}>
+                    Generate statements
+                  </button>
+                  {ingestStatus ? <p className="muted">{ingestStatus}</p> : null}
+                  {ingestItems.length ? (
+                    <div className="ingest-list">
+                      {ingestItems.map((item) => (
+                        <label className="checkbox" key={item}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(ingestSelection[item])}
+                            onChange={(event) =>
+                              setIngestSelection((prev) => ({
+                                ...prev,
+                                [item]: event.target.checked,
+                              }))
+                            }
+                          />
+                          {item}
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                  {ingestItems.length ? (
+                    <button className="button" type="button" onClick={handleSeedFromIngest}>
+                      Seed selected statements
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="module-card">
+                  <h3>Invite tree & waves</h3>
+                  <p className="muted">
+                    Issue invites in waves. When invite-only is enabled, participation requires a
+                    valid code.
+                  </p>
+                  <label className="label">Wave name</label>
+                  <input
+                    className="input"
+                    value={inviteForm.name}
+                    onChange={(event) =>
+                      setInviteForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                  />
+                  <label className="label">Invite count</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={inviteForm.count}
+                    onChange={(event) =>
+                      setInviteForm((prev) => ({ ...prev, count: event.target.value }))
+                    }
+                  />
+                  <label className="label">Parent invite (optional)</label>
+                  <input
+                    className="input"
+                    placeholder="Invite code for referral tree"
+                    value={inviteForm.parentCode}
+                    onChange={(event) =>
+                      setInviteForm((prev) => ({ ...prev, parentCode: event.target.value }))
+                    }
+                  />
+                  <button className="button" type="button" onClick={handleCreateInviteWave}>
+                    Create invite wave
+                  </button>
+                  {inviteError ? <p className="muted">{inviteError}</p> : null}
+                  {inviteWaves.length ? (
+                    <div className="stack">
+                      {inviteWaves.map((wave) => (
+                        <div className="card-divider" key={wave.id}>
+                          <div className="split-row">
+                            <div>
+                              <strong>{wave.name}</strong>
+                              <p className="muted">
+                                {wave.count} invites • {wave.created_at}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="invite-grid">
+                            {wave.invites.map((invite) => (
+                              <div key={invite.id} className="invite-pill">
+                                <span>{invite.code}</span>
+                                <button
+                                  className="button-secondary button-secondary--small"
+                                  type="button"
+                                  onClick={() => handleRevokeInvite(invite.id, true)}
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : (
@@ -1871,6 +2864,22 @@ export function DeliberationPage({
                     >
                       Copy embed code
                     </button>
+                    <div className="card-divider">
+                      <h4>Survey & Consensus widget</h4>
+                    </div>
+                    <pre className="code-block">{questionnaireEmbedCode}</pre>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleCopy(questionnaireEmbedCode, 'Embed code')}
+                    >
+                      Copy widget embed
+                    </button>
+                    <p className="muted">
+                      The iframe sends <code>postMessage</code> events: <code>view</code>,{' '}
+                      <code>vote_cast</code>, <code>comment_submitted</code>,{' '}
+                      <code>completed_all</code>.
+                    </p>
                   </div>
                 </div>
               </details>
@@ -1915,21 +2924,52 @@ export function DeliberationPage({
                 pendingComments.map((comment) => (
                   <div key={comment.id} className="comment-row">
                     <p>{comment.text}</p>
+                  <textarea
+                    className="textarea"
+                    placeholder="Moderation note (optional)"
+                    value={moderationNotes[comment.id] || ''}
+                    onChange={(event) =>
+                      setModerationNotes((prev) => ({
+                        ...prev,
+                        [comment.id]: event.target.value,
+                      }))
+                    }
+                  />
                     <div className="table-actions">
                       <button
                         className="button-secondary"
                         type="button"
-                        onClick={() => handleApprove(comment.id, 'approved')}
+                      onClick={() =>
+                        handleApprove(comment.id, 'approved', {
+                          rejectionReason: moderationNotes[comment.id],
+                        })
+                      }
                       >
                         Approve
                       </button>
                       <button
                         className="button-secondary"
                         type="button"
-                        onClick={() => handleApprove(comment.id, 'rejected')}
+                      onClick={() =>
+                        handleApprove(comment.id, 'rejected', {
+                          rejectionReason: moderationNotes[comment.id],
+                        })
+                      }
                       >
                         Reject
                       </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        handleApprove(comment.id, 'rejected', {
+                          rejectionReason: moderationNotes[comment.id],
+                          copyToSeed: true,
+                        })
+                      }
+                    >
+                      Reject + seed
+                    </button>
                     </div>
                   </div>
                 ))
@@ -1962,8 +3002,125 @@ export function DeliberationPage({
                 <button className="button-secondary" type="button" onClick={handleLoadReport}>
                   Load report
                 </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={handleLoadStats}
+                disabled={loadingStats}
+              >
+                {loadingStats ? 'Refreshing stats…' : 'Refresh stats'}
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={handleDownloadExport}
+                disabled={exporting}
+              >
+                {exporting ? 'Preparing export…' : 'Download export'}
+              </button>
               </div>
               {reportError ? <div className="module-alert">{reportError}</div> : null}
+            {statsError ? <div className="module-alert">{statsError}</div> : null}
+            {exportStatus ? (
+              <div className="module-alert module-alert--success">{exportStatus}</div>
+            ) : null}
+            {stats ? (
+              <div className="stack report-stack">
+                <div className="report-header">
+                  <div>
+                    <h4>Monitoring</h4>
+                    <p className="muted">Live participation and activity signals.</p>
+                  </div>
+                  <span className="pill">Live</span>
+                </div>
+                <div className="report-metrics">
+                  <div className="report-metric">
+                    <span>Views</span>
+                    <strong>{stats.views}</strong>
+                    <span className="muted">Survey page visits</span>
+                  </div>
+                  <div className="report-metric">
+                    <span>Voters</span>
+                    <strong>{stats.voters}</strong>
+                    <span className="muted">Participants who voted</span>
+                  </div>
+                  <div className="report-metric">
+                    <span>Commenters</span>
+                    <strong>{stats.commenters}</strong>
+                    <span className="muted">Unique comment authors</span>
+                  </div>
+                  <div className="report-metric">
+                    <span>Votes per voter</span>
+                    <strong>{stats.votes_per_participant}</strong>
+                    <span className="muted">Average depth</span>
+                  </div>
+                </div>
+                {statsSeries ? (
+                  <div className="report-chart-row">
+                    <div className="module-card report-card">
+                      <h4>Votes over time</h4>
+                      <div className="chart-frame chart-frame--short report-chart">
+                        <Line
+                          data={{
+                            labels: statsSeries.votes.labels,
+                            datasets: [
+                              {
+                                label: 'Votes',
+                                data: statsSeries.votes.data,
+                                borderColor: '#2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                                tension: 0.3,
+                              },
+                            ],
+                          }}
+                          options={lineOptions}
+                        />
+                      </div>
+                    </div>
+                    <div className="module-card report-card">
+                      <h4>Comments over time</h4>
+                      <div className="chart-frame chart-frame--short report-chart">
+                        <Line
+                          data={{
+                            labels: statsSeries.comments.labels,
+                            datasets: [
+                              {
+                                label: 'Comments',
+                                data: statsSeries.comments.data,
+                                borderColor: '#16a34a',
+                                backgroundColor: 'rgba(22, 163, 74, 0.2)',
+                                tension: 0.3,
+                              },
+                            ],
+                          }}
+                          options={lineOptions}
+                        />
+                      </div>
+                    </div>
+                    <div className="module-card report-card">
+                      <h4>Views over time</h4>
+                      <div className="chart-frame chart-frame--short report-chart">
+                        <Line
+                          data={{
+                            labels: statsSeries.views.labels,
+                            datasets: [
+                              {
+                                label: 'Views',
+                                data: statsSeries.views.data,
+                                borderColor: '#f97316',
+                                backgroundColor: 'rgba(249, 115, 22, 0.2)',
+                                tension: 0.3,
+                              },
+                            ],
+                          }}
+                          options={lineOptions}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
               {report ? (
                 <div className="stack report-stack">
                   <div className="report-header">
@@ -1972,6 +3129,12 @@ export function DeliberationPage({
                       <p className="muted">
                         A plain-language summary of participation, clusters, and top statements.
                       </p>
+                    {activeConvo?.min_votes_for_inclusion ? (
+                      <p className="muted">
+                        Inclusion threshold: {activeConvo.min_votes_for_inclusion} votes per
+                        statement.
+                      </p>
+                    ) : null}
                     </div>
                     <span className="pill">Report loaded</span>
                   </div>
@@ -2113,31 +3276,52 @@ export function DeliberationPage({
                 </div>
 
                 <div className="module-card report-card">
-                  <h4>Top consensus statements</h4>
+                  <div className="card-header">
+                    <div>
+                      <h4>{useMajority ? 'Majority statements' : 'Top consensus statements'}</h4>
+                      <p className="muted">
+                        {useMajority
+                          ? 'Statements with strong majority agreement.'
+                          : 'Statements with the strongest consensus.'}
+                      </p>
+                    </div>
+                    <div className="filter-row">
+                      <button
+                        className={useMajority ? 'button-secondary' : 'button'}
+                        type="button"
+                        onClick={() => setStatementMode('consensus')}
+                      >
+                        Consensus
+                      </button>
+                      <button
+                        className={useMajority ? 'button' : 'button-secondary'}
+                        type="button"
+                        onClick={() => setStatementMode('majority')}
+                      >
+                        Majority
+                      </button>
+                    </div>
+                  </div>
                   <div className="chart-frame chart-frame--tall report-chart">
                     <Bar
                       data={{
-                        labels: (reportCharts?.consensusTop || []).map((row) =>
-                          truncateText(row.text, 56),
-                        ),
+                        labels: statementItems.map((row) => truncateText(row.text, 56)),
                         datasets: [
                           {
-                            label: 'Consensus score',
-                            data: (reportCharts?.consensusTop || []).map((row) =>
-                              Number(row?.consensus_score || 0),
+                            label: statementScoreLabel,
+                            data: statementItems.map((row) =>
+                              useMajority
+                                ? Number(row?.agreement_ratio || 0)
+                                : Number(row?.consensus_score || 0),
                             ),
-                            backgroundColor: '#34d399',
+                            backgroundColor: useMajority ? '#38bdf8' : '#34d399',
                             borderRadius: 6,
                           },
                         ],
                       }}
-                      options={buildStatementChartOptions(
-                        reportCharts?.consensusTop || [],
-                        'Consensus score',
-                      )}
+                      options={buildStatementChartOptions(statementItems, statementScoreLabel)}
                     />
                   </div>
-                  <p className="muted">Statements with the strongest agreement.</p>
                 </div>
 
                 <div className="module-card report-card">
@@ -2166,6 +3350,34 @@ export function DeliberationPage({
                     />
                   </div>
                   <p className="muted">Statements that split opinion the most.</p>
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Most important statements</h4>
+                  <div className="chart-frame chart-frame--tall report-chart">
+                    <Bar
+                      data={{
+                        labels: (reportCharts?.importantTop || []).map((row) =>
+                          truncateText(row.text, 56),
+                        ),
+                        datasets: [
+                          {
+                            label: 'Importance votes',
+                            data: (reportCharts?.importantTop || []).map((row) =>
+                              Number(row?.important_count || 0),
+                            ),
+                            backgroundColor: '#a855f7',
+                            borderRadius: 6,
+                          },
+                        ],
+                      }}
+                      options={buildStatementChartOptions(
+                        reportCharts?.importantTop || [],
+                        'Importance votes',
+                      )}
+                    />
+                  </div>
+                  <p className="muted">Statements marked as most important.</p>
                 </div>
               </div>
 
@@ -2327,6 +3539,30 @@ export function DeliberationPage({
                 </details>
               ) : null}
 
+              <details className="dashboard-detail">
+                <summary>How to read the visualization</summary>
+                <div className="dashboard-detail__body">
+                  <ul className="compact-list">
+                    <li>
+                      <span>Clusters</span>
+                      <strong>Groups of participants who vote similarly.</strong>
+                    </li>
+                    <li>
+                      <span>Consensus</span>
+                      <strong>Statements with broad agreement across clusters.</strong>
+                    </li>
+                    <li>
+                      <span>Polarizing</span>
+                      <strong>Statements where clusters disagree the most.</strong>
+                    </li>
+                    <li>
+                      <span>Early-stage caution</span>
+                      <strong>Low vote counts can make clusters unstable.</strong>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+
               {clusterCards.length || report.potential_agreements?.length || vennData ? (
                 <details className="dashboard-detail">
                   <summary>Deep dive insights</summary>
@@ -2360,6 +3596,70 @@ export function DeliberationPage({
                                   </span>
                                 ))}
                               </div>
+                              {card.statements?.length ? (
+                                <div className="cluster-carousel">
+                                  <span className="label">Representative statements</span>
+                                  <div className="cluster-carousel__card">
+                                    <span
+                                      className={`pill ${
+                                        card.statements[
+                                          clusterStatementIndex[card.id] || 0
+                                        ]?.sentiment === 'agree'
+                                          ? 'pill--success'
+                                          : 'pill--warning'
+                                      }`}
+                                    >
+                                      {card.statements[
+                                        clusterStatementIndex[card.id] || 0
+                                      ]?.sentiment === 'agree'
+                                        ? 'Agree'
+                                        : 'Disagree'}
+                                    </span>
+                                    <p>
+                                      {truncateText(
+                                        card.statements[
+                                          clusterStatementIndex[card.id] || 0
+                                        ]?.text,
+                                        140,
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="filter-row">
+                                    <button
+                                      className="button-secondary button-secondary--small"
+                                      type="button"
+                                      onClick={() =>
+                                        setClusterStatementIndex((prev) => {
+                                          const total = card.statements.length
+                                          const current = prev[card.id] || 0
+                                          return {
+                                            ...prev,
+                                            [card.id]: (current - 1 + total) % total,
+                                          }
+                                        })
+                                      }
+                                    >
+                                      Prev
+                                    </button>
+                                    <button
+                                      className="button-secondary button-secondary--small"
+                                      type="button"
+                                      onClick={() =>
+                                        setClusterStatementIndex((prev) => {
+                                          const total = card.statements.length
+                                          const current = prev[card.id] || 0
+                                          return {
+                                            ...prev,
+                                            [card.id]: (current + 1) % total,
+                                          }
+                                        })
+                                      }
+                                    >
+                                      Next
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -2527,6 +3827,294 @@ export function DeliberationPage({
               ) : (
                 <p className="muted">Run analysis or load a report to view insights.</p>
               )}
+              <div className="report-admin-grid">
+                <div className="module-card report-card">
+                  <h4>Async exports</h4>
+                  <p className="muted">
+                    Kick off an export job for large surveys. Download when ready.
+                  </p>
+                  <div className="filter-row">
+                    <button className="button" type="button" onClick={handleCreateExportJob}>
+                      Start export job
+                    </button>
+                    {exportJob?.status === 'completed' ? (
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={handleDownloadExportJob}
+                      >
+                        Download export
+                      </button>
+                    ) : null}
+                  </div>
+                  {exportJob ? (
+                    <p className="muted">
+                      Job {exportJob.id}: {exportJob.status}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Theme manager</h4>
+                  <p className="muted">Tag statements into themes and review summaries.</p>
+                  <label className="label">Theme name</label>
+                  <input
+                    className="input"
+                    value={themeForm.name}
+                    onChange={(event) =>
+                      setThemeForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                  />
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    value={themeForm.description}
+                    onChange={(event) =>
+                      setThemeForm((prev) => ({ ...prev, description: event.target.value }))
+                    }
+                  />
+                  <button className="button" type="button" onClick={handleCreateTheme}>
+                    Create theme
+                  </button>
+                  {themeError ? <p className="muted">{themeError}</p> : null}
+                  <div className="stack">
+                    {themes.map((theme) => (
+                      <div key={theme.id} className="split-row">
+                        <div>
+                          <strong>{theme.name}</strong>
+                          <p className="muted">
+                            {theme.comment_count} statements • {theme.description || '—'}
+                          </p>
+                        </div>
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() => handleDeleteTheme(theme.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {approvedComments.length && themes.length ? (
+                    <div className="card-divider">
+                      <h5>Assign themes to a statement</h5>
+                      <select
+                        className="select"
+                        value={themeAssign.commentId}
+                        onChange={(event) =>
+                          setThemeAssign((prev) => ({
+                            ...prev,
+                            commentId: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select statement</option>
+                        {approvedComments.map((comment) => (
+                          <option key={comment.id} value={comment.id}>
+                            {truncateText(comment.text, 60)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="theme-checkboxes">
+                        {themes.map((theme) => (
+                          <label className="checkbox" key={theme.id}>
+                            <input
+                              type="checkbox"
+                              checked={themeAssign.themeIds.includes(theme.id)}
+                              onChange={(event) =>
+                                setThemeAssign((prev) => ({
+                                  ...prev,
+                                  themeIds: event.target.checked
+                                    ? [...prev.themeIds, theme.id]
+                                    : prev.themeIds.filter((id) => id !== theme.id),
+                                }))
+                              }
+                            />
+                            {theme.name}
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={handleAssignThemes}
+                      >
+                        Save theme tags
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Theme summaries</h4>
+                  {themeSummary?.themes?.length ? (
+                    <div className="stack">
+                      {themeSummary.themes.map((theme) => (
+                        <div key={theme.id} className="card-divider">
+                          <strong>{theme.name}</strong>
+                          <p className="muted">{theme.comment_count} statements</p>
+                          <ul className="compact-list">
+                            <li>
+                              <span>Top consensus</span>
+                              <strong>
+                                {theme.top_consensus?.[0]?.text
+                                  ? truncateText(theme.top_consensus[0].text, 70)
+                                  : '—'}
+                              </strong>
+                            </li>
+                            <li>
+                              <span>Top important</span>
+                              <strong>
+                                {theme.top_important?.[0]?.text
+                                  ? truncateText(theme.top_important[0].text, 70)
+                                  : '—'}
+                              </strong>
+                            </li>
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">Add themes to see summaries.</p>
+                  )}
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Public report builder</h4>
+                  <label className="label">Report name</label>
+                  <input
+                    className="input"
+                    value={reportBuilder.name}
+                    onChange={(event) =>
+                      setReportBuilder((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                  />
+                  <div className="theme-checkboxes">
+                    {themes.map((theme) => (
+                      <label className="checkbox" key={`report-${theme.id}`}>
+                        <input
+                          type="checkbox"
+                          checked={reportBuilder.themeIds.includes(theme.id)}
+                          onChange={(event) =>
+                            setReportBuilder((prev) => ({
+                              ...prev,
+                              themeIds: event.target.checked
+                                ? [...prev.themeIds, theme.id]
+                                : prev.themeIds.filter((id) => id !== theme.id),
+                            }))
+                          }
+                        />
+                        {theme.name}
+                      </label>
+                    ))}
+                  </div>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={reportBuilder.includeUnassigned}
+                      onChange={(event) =>
+                        setReportBuilder((prev) => ({
+                          ...prev,
+                          includeUnassigned: event.target.checked,
+                        }))
+                      }
+                    />
+                    Include unassigned statements
+                  </label>
+                  <button className="button" type="button" onClick={handleCreateReport}>
+                    Generate public report
+                  </button>
+                  {reportLinks.length ? (
+                    <div className="stack">
+                      {reportLinks.map((item) => (
+                        <div className="split-row" key={item.link}>
+                          <span>{item.name}</span>
+                          <button
+                            className="button-secondary button-secondary--small"
+                            type="button"
+                            onClick={() => handleCopy(item.link, 'Report link')}
+                          >
+                            Copy link
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Decision support tools</h4>
+                  <p className="muted">
+                    Use simple tradeoff and multi-criteria calculators to inform decisions.
+                  </p>
+                  <div className="card-divider">
+                    <h5>Budget tradeoff</h5>
+                    <label className="label">Total budget</label>
+                    <input
+                      className="input"
+                      type="number"
+                      value={budgetTotal}
+                      onChange={(event) => setBudgetTotal(event.target.value)}
+                    />
+                    <label className="label">Items (name,cost,impact)</label>
+                    <textarea
+                      className="textarea"
+                      value={budgetInput}
+                      onChange={(event) => setBudgetInput(event.target.value)}
+                    />
+                    <p className="muted">
+                      Selected: {budgetPlan.selected.length} • Remaining:{' '}
+                      {budgetPlan.remaining}
+                    </p>
+                  </div>
+                  <div className="card-divider">
+                    <h5>Multi-criteria scoring</h5>
+                    <label className="label">Criteria (name,weight)</label>
+                    <textarea
+                      className="textarea"
+                      value={criteriaInput}
+                      onChange={(event) => setCriteriaInput(event.target.value)}
+                    />
+                    <label className="label">Options (name,score,score,...)</label>
+                    <textarea
+                      className="textarea"
+                      value={optionsInput}
+                      onChange={(event) => setOptionsInput(event.target.value)}
+                    />
+                    <div className="stack">
+                      {decisionScores.options.map((option) => (
+                        <div key={option.name} className="split-row">
+                          <span>{option.name}</span>
+                          <strong>{option.weighted.toFixed(2)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="module-card report-card">
+                  <h4>Moderation audit log</h4>
+                  {moderationLogError ? <p className="muted">{moderationLogError}</p> : null}
+                  {moderationLog.length ? (
+                    <div className="stack">
+                      {moderationLog.slice(0, 10).map((entry) => (
+                        <div key={entry.id} className="split-row">
+                          <div>
+                            <strong>{entry.action}</strong>
+                            <p className="muted">
+                              {entry.status} • {entry.comment_id || '—'}
+                            </p>
+                          </div>
+                          <span className="muted">{entry.created_at}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No moderation actions yet.</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Accordion, Timeline } from '@mantine/core'
+import { IconChartDots, IconTarget, IconUsers } from '@tabler/icons-react'
+import { CivicStatGrid } from '../../ui'
 
 export function HowItWorksPage({ t }) {
   const translate = t || ((key) => key)
@@ -722,8 +725,54 @@ export function HowItWorksPage({ t }) {
     </>
   )
 
+  const howPulse = useMemo(
+    () => [
+      {
+        label: 'Modules',
+        value: tiles.length,
+        icon: <IconTarget size={18} />,
+        badge: 'Civic',
+      },
+      {
+        label: 'Decision tracks',
+        value: 4,
+        icon: <IconChartDots size={18} />,
+        note: 'Network, Campaigns, Surveys, Data',
+      },
+      {
+        label: 'Community',
+        value: 'Always-on',
+        icon: <IconUsers size={18} />,
+        note: 'Participation loop',
+      },
+      {
+        label: 'Insights',
+        value: 'Real-time',
+        icon: <IconChartDots size={18} />,
+        note: 'Consensus signals',
+      },
+    ],
+    [tiles.length],
+  )
+
   return (
     <section className="module">
+      <CivicStatGrid
+        title="Platform pulse"
+        description="A civic operating system built for trust, speed, and transparency."
+        items={howPulse}
+      />
+      <Timeline active={1} color="civic" bulletSize={26} lineWidth={2} mb="md">
+        <Timeline.Item title="Listen">
+          Capture community input and surface lived experience signals.
+        </Timeline.Item>
+        <Timeline.Item title="Align">
+          Build consensus and prioritize the actions that matter.
+        </Timeline.Item>
+        <Timeline.Item title="Mobilize">
+          Activate supporters with clear tasks, events, and campaigns.
+        </Timeline.Item>
+      </Timeline>
       <div className="module-grid">
         <div className="module-card module-card__wide how-hero">
           <h3>What this platform does</h3>
@@ -752,6 +801,26 @@ export function HowItWorksPage({ t }) {
           </div>
         </div>
       </div>
+      <Accordion variant="separated" radius="lg">
+        <Accordion.Item value="trust">
+          <Accordion.Control>How does this build trust?</Accordion.Control>
+          <Accordion.Panel>
+            Every action is tied to evidence, visible progress, and clear accountability.
+          </Accordion.Panel>
+        </Accordion.Item>
+        <Accordion.Item value="speed">
+          <Accordion.Control>How do teams move faster?</Accordion.Control>
+          <Accordion.Panel>
+            Shared dashboards remove context switching and turn insights into tasks quickly.
+          </Accordion.Panel>
+        </Accordion.Item>
+        <Accordion.Item value="public">
+          <Accordion.Control>What is public vs internal?</Accordion.Control>
+          <Accordion.Panel>
+            Public views are tailored for campaigns and events, while internal views manage operations.
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
       {expandedTile ? (
         <div
           className="how-tile-modal"

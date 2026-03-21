@@ -53,13 +53,15 @@ def _vote_counts(votes: List[Dict]) -> Dict[str, Dict[str, int]]:
     counts: Dict[str, Dict[str, int]] = {}
     for vote in votes:
         comment_id = vote["comment_id"]
-        counts.setdefault(comment_id, {"agree": 0, "disagree": 0, "pass": 0})
+        counts.setdefault(comment_id, {"agree": 0, "disagree": 0, "pass": 0, "important": 0})
         if vote["choice"] == 1:
             counts[comment_id]["agree"] += 1
         elif vote["choice"] == -1:
             counts[comment_id]["disagree"] += 1
         else:
             counts[comment_id]["pass"] += 1
+        if vote.get("important"):
+            counts[comment_id]["important"] += 1
     return counts
 
 
@@ -86,6 +88,7 @@ def compute_cluster_insights(
     comments: List[Dict],
     votes: List[Dict],
     label_map: Dict[str, str],
+    min_votes_for_inclusion: int = 3,
 ) -> Tuple[List[Dict], List[Dict]]:
     matrix, _, comment_ids = build_vote_matrix(votes)
     if matrix.empty or not label_map:
@@ -110,7 +113,7 @@ def compute_cluster_insights(
             disagree = int((col == -1).sum())
             passed = int((col == 0).sum())
             participation = agree + disagree + passed
-            if participation < 3:
+            if participation < max(1, min_votes_for_inclusion):
                 continue
             ratio = agree / (agree + disagree) if (agree + disagree) > 0 else 0.0
             stats.append((comment_id, ratio, participation))
@@ -156,6 +159,7 @@ def compute_metrics(
     comments: List[Dict],
     votes: List[Dict],
     label_map: Dict[str, str],
+    min_votes_for_inclusion: int = 3,
 ) -> Tuple[List[Dict], List[Dict]]:
     vote_counts = _vote_counts(votes)
     matrix, _, _ = build_vote_matrix(votes)
@@ -166,16 +170,25 @@ def compute_metrics(
         comment_id = comment["id"]
         is_seed = bool(comment.get("isSeed", False))
         comment_bonus = 0 if is_seed else 1
-        counts = vote_counts.get(comment_id, {"agree": 0, "disagree": 0, "pass": 0})
+        counts = vote_counts.get(
+            comment_id, {"agree": 0, "disagree": 0, "pass": 0, "important": 0}
+        )
         agree = counts["agree"] + comment_bonus
         disagree = counts["disagree"]
         passed = counts["pass"]
+        important_count = counts["important"]
         participation = agree + disagree + passed
         agreement_ratio = agree / (agree + disagree) if (agree + disagree) > 0 else 0.0
         variance = cluster_variance.get(comment_id, 0.0)
         participation_factor = min(participation / 10.0, 1.0)
-        consensus_score = agreement_ratio * (1.0 - variance) * participation_factor
-        polarity_score = (1.0 - abs(agreement_ratio - 0.5) * 2.0) * variance * participation_factor
+        importance_weight = 1.0 + min(important_count / 10.0, 1.0) * 0.3
+        consensus_score = agreement_ratio * (1.0 - variance) * participation_factor * importance_weight
+        polarity_score = (
+            (1.0 - abs(agreement_ratio - 0.5) * 2.0)
+            * variance
+            * participation_factor
+            * importance_weight
+        )
         metrics.append(
             {
                 "id": comment_id,
@@ -188,14 +201,21 @@ def compute_metrics(
                 "agree_count": agree,
                 "disagree_count": disagree,
                 "pass_count": passed,
+                "important_count": important_count,
             }
         )
 
     consensus = [
-        m for m in metrics if m["participation"] >= 3 and m["consensus_score"] >= 0.35
+        m
+        for m in metrics
+        if m["participation"] >= max(1, min_votes_for_inclusion)
+        and m["consensus_score"] >= 0.35
     ]
     polarizing = [
-        m for m in metrics if m["participation"] >= 3 and m["polarity_score"] >= 0.15
+        m
+        for m in metrics
+        if m["participation"] >= max(1, min_votes_for_inclusion)
+        and m["polarity_score"] >= 0.15
     ]
     consensus = sorted(consensus, key=lambda m: (-m["consensus_score"], -m["participation"]))[:20]
     polarizing = sorted(polarizing, key=lambda m: (-m["polarity_score"], -m["participation"]))[:20]

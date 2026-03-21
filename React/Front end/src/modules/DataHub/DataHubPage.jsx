@@ -6,8 +6,9 @@ import {
   forceManyBody,
   forceSimulation,
 } from 'd3-force'
+import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/icons-react'
 import { API_BASE, requestJson } from '../../services/api'
-import { Field, FormSection, InfoHint, StatusMessage } from '../../ui'
+import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
 const VIEWS = ['overview', 'explorer', 'nodes', 'relationships']
 const DEFAULT_LIMIT = 80
@@ -412,8 +413,43 @@ export function DataHubPage({
     </div>
   )
 
+  const dataHubPulse = useMemo(
+    () => [
+      {
+        label: 'Total nodes',
+        value: formatNumber(summary.nodeCount),
+        icon: <IconDatabase size={18} />,
+        badge: 'Live',
+      },
+      {
+        label: 'Relationships',
+        value: formatNumber(summary.relationshipCount),
+        icon: <IconLink size={18} />,
+        note: 'Graph edges',
+      },
+      {
+        label: 'Snapshot nodes',
+        value: formatNumber(nodes.length),
+        icon: <IconChartDots size={18} />,
+        note: 'Explorer view',
+      },
+      {
+        label: 'Snapshot edges',
+        value: formatNumber(edges.length),
+        icon: <IconGitBranch size={18} />,
+        note: 'In memory',
+      },
+    ],
+    [edges.length, nodes.length, summary.nodeCount, summary.relationshipCount],
+  )
+
   return (
     <section className="module">
+      <CivicStatGrid
+        title="Graph intelligence pulse"
+        description="Snapshot of Neo4j size, relationships, and explorer readiness."
+        items={dataHubPulse}
+      />
       {showTabs ? (
         <div className="subtabs">
           {[

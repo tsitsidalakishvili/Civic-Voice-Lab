@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Card, Group, RingProgress, Text } from '@mantine/core'
+import { IconAlertTriangle, IconFileSearch, IconShieldCheck, IconUsers } from '@tabler/icons-react'
 import { API_BASE, getJson, requestJson } from '../../services/api'
-import { InfoBox } from '../../ui'
+import { CivicStatGrid, InfoBox } from '../../ui'
 
 export function DueDiligencePage({
   t,
@@ -616,6 +618,36 @@ export function DueDiligencePage({
     }
   }
 
+  const duePulseStats = useMemo(
+    () => [
+      {
+        label: 'Competitors',
+        value: summary?.competitors ?? '—',
+        icon: <IconShieldCheck size={18} />,
+        badge: 'Tracked',
+      },
+      {
+        label: 'Network matches',
+        value: crmMatches.length,
+        icon: <IconUsers size={18} />,
+        note: 'Internal signals',
+      },
+      {
+        label: 'Reports run',
+        value: reportHistory.length,
+        icon: <IconFileSearch size={18} />,
+        note: 'DD history',
+      },
+      {
+        label: 'Watchlist hits',
+        value: competitorMatches.length,
+        icon: <IconAlertTriangle size={18} />,
+        badge: 'Review',
+      },
+    ],
+    [competitorMatches.length, crmMatches.length, reportHistory.length, summary?.competitors],
+  )
+
   return (
     <section className="module">
       <details className="dashboard-detail">
@@ -637,6 +669,34 @@ export function DueDiligencePage({
           </div>
         </div>
       </details>
+
+      <CivicStatGrid
+        title="Risk intelligence pulse"
+        description="Signals across competitors, watchlists, and internal matches."
+        items={duePulseStats}
+      />
+
+      <Card className="module-card module-card__wide">
+        <Group justify="space-between" align="center" wrap="wrap">
+          <div>
+            <Text fw={600}>Analysis pipeline</Text>
+            <Text size="sm" c="dimmed">
+              Progress across internal checks and external sources.
+            </Text>
+          </div>
+          <RingProgress
+            size={86}
+            thickness={8}
+            roundCaps
+            sections={[{ value: analysisProgress, color: 'civic' }]}
+            label={
+              <Text size="sm" fw={600} ta="center">
+                {analysisProgress}%
+              </Text>
+            }
+          />
+        </Group>
+      </Card>
 
       {error ? <div className="module-alert">{error}</div> : null}
 
