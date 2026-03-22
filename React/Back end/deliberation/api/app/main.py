@@ -37,18 +37,20 @@ cors_origins = [
     "http://127.0.0.1:5176",
 ]
 custom_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+custom_origin_regex = str(os.getenv("CORS_ORIGIN_REGEX", "")).strip()
+cors_origin_regex = (
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|"
+    r"10\.\d+\.\d+\.\d+|"
+    r"192\.168\.\d+\.\d+|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|"
+    r"[a-z0-9-]+\.vercel\.app"
+    r")(:\d+)?$"
+)
 if custom_origins:
     cors_origins = custom_origins
-    cors_origin_regex = None
-else:
-    cors_origin_regex = (
-        r"^http://("
-        r"localhost|127\.0\.0\.1|"
-        r"10\.\d+\.\d+\.\d+|"
-        r"192\.168\.\d+\.\d+|"
-        r"172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+"
-        r"):\d+$"
-    )
+if custom_origin_regex:
+    cors_origin_regex = custom_origin_regex
 
 app.add_middleware(
     CORSMiddleware,
