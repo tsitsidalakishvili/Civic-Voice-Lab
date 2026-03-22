@@ -10,7 +10,6 @@ import {
   Group,
   Menu,
   Paper,
-  Progress,
   Select,
   SimpleGrid,
   Stack,
@@ -1151,9 +1150,9 @@ function DeliberationQuestionnaire({
   const [isDragging, setIsDragging] = useState(false)
   const [conversation, setConversation] = useState(null)
   const [votedIds, setVotedIds] = useState([])
-  const [seenIds, setSeenIds] = useState([])
   const [importantFlag, setImportantFlag] = useState(false)
   const [completedSent, setCompletedSent] = useState(false)
+  const votedIdsRef = useRef([])
   const dragStartRef = useRef(null)
   const dragTypeRef = useRef(null)
   const dragPointerIdRef = useRef(null)
@@ -1171,9 +1170,18 @@ function DeliberationQuestionnaire({
     xid || localStorage.getItem(participantStorageKey) || `${Date.now()}_${Math.random()}`,
   )
   const participantId = participantRef.current
+  const emitEmbedEventRef = useRef(null)
   const voteStorageKey = useMemo(
     () => `delib_votes_${conversationId || 'default'}_${participantId}`,
     [conversationId, participantId],
+  )
+  const votedSet = useMemo(
+    () => new Set(votedIds.map((id) => String(id))),
+    [votedIds],
+  )
+  const availableComments = useMemo(
+    () => comments.filter((comment) => !votedSet.has(String(comment.id))),
+    [comments, votedSet],
   )
   const requestHeaders = useMemo(
     () => ({
@@ -1182,6 +1190,10 @@ function DeliberationQuestionnaire({
     }),
     [inviteCode, participantId],
   )
+  useEffect(() => {
+    votedIdsRef.current = votedIds
+  }, [votedIds])
+  const missingConversationId = !conversationId
 
   const emitEmbedEvent = useCallback(
     (event, payload = {}) => {
@@ -1202,15 +1214,20 @@ function DeliberationQuestionnaire({
     [conversationId, participantId],
   )
 
+  useEffect(() => {
+    emitEmbedEventRef.current = emitEmbedEvent
+  }, [emitEmbedEvent])
+
   const loadQueue = useCallback(
     async ({ reset = false, extraVotedIds = [] } = {}) => {
       if (!conversationId) return
       setQueueLoading(true)
       setError('')
       try {
+        const currentVoted = votedIdsRef.current
         const payload = {
-          seen_ids: reset ? [] : seenIds,
-          voted_ids: [...votedIds, ...extraVotedIds],
+          seen_ids: [],
+          voted_ids: [...currentVoted, ...extraVotedIds],
           limit: 50,
         }
         const response = await requestJson(`/conversations/${conversationId}/queue`, {
@@ -1219,19 +1236,27 @@ function DeliberationQuestionnaire({
           headers: requestHeaders,
         })
         const items = Array.isArray(response?.items) ? response.items : []
-        setComments(items)
-        setCurrentIndex(0)
-        const nextSeen = items.map((item) => item.id)
-        setSeenIds((prev) =>
-          Array.from(new Set([...(reset ? [] : prev), ...nextSeen])),
-        )
+        const votedSetSnapshot = new Set(votedIdsRef.current.map((id) => String(id)))
+        const freshItems = items.filter((item) => !votedSetSnapshot.has(String(item.id)))
+        setComments((prev) => {
+          if (reset) return items
+          const existing = new Set(prev.map((comment) => comment.id))
+          const merged = [...prev]
+          freshItems.forEach((item) => {
+            if (!existing.has(item.id)) merged.push(item)
+          })
+          return merged
+        })
+        if (reset) {
+          setCurrentIndex(0)
+        }
       } catch (err) {
         setError(err.message || translate('questionnaire.loadingBody'))
       } finally {
         setQueueLoading(false)
       }
     },
-    [conversationId, requestHeaders, seenIds, translate, votedIds],
+    [conversationId, requestHeaders, translate],
   )
 
   useEffect(() => {
@@ -1241,7 +1266,6 @@ function DeliberationQuestionnaire({
     localStorage.setItem(participantStorageKey, participantId)
     const storedVotes = parseLocalArray(localStorage.getItem(voteStorageKey))
     setVotedIds(storedVotes)
-    setSeenIds([])
     Promise.all([getJson(`/conversations/${conversationId}`)])
       .then(([convoPayload]) => {
         setConversation(convoPayload)
@@ -1273,13 +1297,13 @@ function DeliberationQuestionnaire({
     localStorage.setItem(voteStorageKey, JSON.stringify(votedIds))
   }, [conversationId, voteStorageKey, votedIds])
 
-  const currentComment = comments[currentIndex]
+  const currentComment = availableComments[currentIndex]
   const currentCommentId = currentComment?.id
   const currentText = currentComment?.text || ''
   const identityRequired = conversation?.identity_mode === 'xid_required' && !xid
   const votingDisabled =
     (conversation && conversation.allow_voting === false) || identityRequired
-  const totalComments = comments.length + votedIds.length
+  const totalComments = availableComments.length + votedIds.length
   const progressCount = votedIds.length
   const progress = totalComments
     ? Math.min(100, Math.round((progressCount / totalComments) * 100))
@@ -1313,12 +1337,15 @@ function DeliberationQuestionnaire({
         if (prev.includes(commentId)) return prev
         return [...prev, commentId]
       })
-      setComments((prev) => prev.filter((comment) => comment.id !== commentId))
-      setCurrentIndex(0)
+      setCurrentIndex((prev) => prev)
       setImportantFlag(false)
-      setSeenIds((prev) => Array.from(new Set([...prev, commentId])))
-      emitEmbedEvent('vote_cast', { comment_id: commentId, choice, important: importantFlag })
-      if (comments.length <= 3) {
+      emitEmbedEventRef.current?.('vote_cast', {
+        comment_id: commentId,
+        choice,
+        important: importantFlag,
+      })
+      const remainingAfterVote = Math.max(0, availableComments.length - 1)
+      if (remainingAfterVote <= 3) {
         loadQueue({ extraVotedIds: [commentId] })
       }
     } catch (err) {
@@ -1327,9 +1354,8 @@ function DeliberationQuestionnaire({
       setPendingVote(false)
     }
   }, [
-    comments.length,
+    availableComments.length,
     conversationId,
-    emitEmbedEvent,
     importantFlag,
     loadQueue,
     pendingVote,
@@ -1355,7 +1381,7 @@ function DeliberationQuestionnaire({
         headers: requestHeaders,
       })
       setCommentText('')
-      emitEmbedEvent('comment_submitted', { text })
+      emitEmbedEventRef.current?.('comment_submitted', { text })
       loadQueue()
     } catch (err) {
       setError(err.message || 'Comment failed.')
@@ -1364,16 +1390,23 @@ function DeliberationQuestionnaire({
 
   useEffect(() => {
     if (!conversationId) return
-    emitEmbedEvent('view', { invite: inviteCode || null })
-  }, [conversationId, emitEmbedEvent, inviteCode])
+    emitEmbedEventRef.current?.('view', { invite: inviteCode || null })
+  }, [conversationId, inviteCode])
+
+  useEffect(() => {
+    if (!availableComments.length) return
+    if (currentIndex >= availableComments.length) {
+      setCurrentIndex(Math.max(availableComments.length - 1, 0))
+    }
+  }, [availableComments.length, currentIndex])
 
   useEffect(() => {
     if (completedSent) return
     if (!currentCommentId && !loading && !queueLoading) {
-      emitEmbedEvent('completed_all')
+      emitEmbedEventRef.current?.('completed_all')
       setCompletedSent(true)
     }
-  }, [completedSent, currentCommentId, emitEmbedEvent, loading, queueLoading])
+  }, [completedSent, currentCommentId, loading, queueLoading])
 
   const resetDrag = () => {
     setDragOffset({ x: 0, y: 0 })
@@ -1581,133 +1614,140 @@ function DeliberationQuestionnaire({
           <p>{translate('questionnaire.subtitle')}</p>
         </header>
       ) : null}
-      <Progress value={progress} size="lg" radius="xl" color="civic" mb="md" />
-      {error ? <div className="module-alert">{error}</div> : null}
-      <div className="questionnaire-progress">
-        <div className="questionnaire-progress__track">
-          <div className="questionnaire-progress__bar" style={{ width: `${progress}%` }} />
-        </div>
-        <span className="questionnaire-progress__label">
-          {progressCount}/{totalComments || 0}
-        </span>
-      </div>
-      <div className="questionnaire-deck">
-        <div className="questionnaire-card-stack">
-          {currentIndex + 1 < totalComments && (
-            <div className="questionnaire-card questionnaire-card--back" aria-hidden="true" />
-          )}
-          {loading || queueLoading ? (
-            <div className="questionnaire-card questionnaire-card--empty">
-                    <h3>{translate('questionnaire.loadingTitle')}</h3>
-                    <p className="muted">{translate('questionnaire.loadingBody')}</p>
-            </div>
-          ) : currentComment ? (
-            <div
-              className={`questionnaire-card ${isDragging ? 'is-dragging' : ''}`}
-              style={{
-                transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${
-                  dragOffset.x / 18
-                }deg)`,
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerEnd}
-              onPointerCancel={handlePointerEnd}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onTouchCancel={handleTouchEnd}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            >
-                    <div className="questionnaire-card__title">
-                      {translate('questionnaire.questionLabel', {
-                        current: progressCount + 1,
-                        total: totalComments,
-                      })}
-                    </div>
-              <div className="questionnaire-card__text">{currentText}</div>
-              <div className="questionnaire-card__footer">
-                      {translate('questionnaire.footer')}
-              </div>
-              {swipeIntent ? (
-                <div className={`questionnaire-swipe-hint questionnaire-swipe-hint--${swipeIntent}`}>
-                  {swipeIntent === 'agree'
-                          ? `✅ ${translate('questionnaire.agree')}`
-                    : swipeIntent === 'disagree'
-                            ? `❌ ${translate('questionnaire.disagree')}`
-                            : translate('questionnaire.pass')}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="questionnaire-card questionnaire-card--empty">
-                    <h3>{translate('questionnaire.doneTitle')}</h3>
-                    <p className="muted">{translate('questionnaire.doneBody')}</p>
-            </div>
-          )}
-        </div>
-      </div>
-      {identityRequired ? (
-        <p className="muted">Login is required to vote in this conversation.</p>
-      ) : null}
-      <div className="questionnaire-importance">
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={importantFlag}
-            onChange={(event) => setImportantFlag(event.target.checked)}
-            disabled={!currentCommentId || pendingVote || votingDisabled}
-          />
-          This is important to me
-        </label>
-      </div>
-      <div className="questionnaire-controls">
-        <button
-          className="swipe-button swipe-button--disagree"
-          type="button"
-          onClick={() => handleVote(currentCommentId, -1)}
-          disabled={!currentCommentId || pendingVote || votingDisabled}
-        >
-                  {translate('questionnaire.disagree')}
-        </button>
-        <button
-          className="swipe-button swipe-button--pass"
-          type="button"
-          onClick={() => handleVote(currentCommentId, 0)}
-          disabled={!currentCommentId || pendingVote || votingDisabled}
-        >
-                  {translate('questionnaire.pass')}
-        </button>
-        <button
-          className="swipe-button swipe-button--agree"
-          type="button"
-          onClick={() => handleVote(currentCommentId, 1)}
-          disabled={!currentCommentId || pendingVote || votingDisabled}
-        >
-                  {translate('questionnaire.agree')}
-        </button>
-      </div>
-      {identityRequired ? (
-        <p className="muted">Login is required to submit comments.</p>
-      ) : conversation?.allow_comment_submission ? (
-        <div className="questionnaire-add">
-          <div className="card-divider">
-                    <h4>{translate('questionnaire.addComment')}</h4>
-          </div>
-          <textarea
-            className="textarea"
-            value={commentText}
-            onChange={(evt) => setCommentText(evt.target.value)}
-          />
-          <button className="button" type="button" onClick={handleSubmit}>
-                    {translate('questionnaire.submitComment')}
-          </button>
+      {missingConversationId ? (
+        <div className="module-alert">
+          Missing conversation id. Please open a valid participant link.
         </div>
       ) : (
-                <p className="muted">{translate('questionnaire.commentDisabled')}</p>
+        <>
+          {error ? <div className="module-alert">{error}</div> : null}
+          <div className="questionnaire-progress">
+            <div className="questionnaire-progress__track">
+              <div className="questionnaire-progress__bar" style={{ width: `${progress}%` }} />
+            </div>
+            <span className="questionnaire-progress__label">
+              {progressCount}/{totalComments || 0}
+            </span>
+          </div>
+          <div className="questionnaire-deck">
+            <div className="questionnaire-card-stack">
+              {currentIndex + 1 < totalComments && (
+                <div className="questionnaire-card questionnaire-card--back" aria-hidden="true" />
+              )}
+              {loading || queueLoading ? (
+                <div className="questionnaire-card questionnaire-card--empty">
+                  <h3>{translate('questionnaire.loadingTitle')}</h3>
+                  <p className="muted">{translate('questionnaire.loadingBody')}</p>
+                </div>
+              ) : currentComment ? (
+                <div
+                  className={`questionnaire-card ${isDragging ? 'is-dragging' : ''}`}
+                  style={{
+                    transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${
+                      dragOffset.x / 18
+                    }deg)`,
+                  }}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerEnd}
+                  onPointerCancel={handlePointerEnd}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchCancel={handleTouchEnd}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                >
+                  <div className="questionnaire-card__title">
+                    {translate('questionnaire.questionLabel', {
+                      current: progressCount + 1,
+                      total: totalComments,
+                    })}
+                  </div>
+                  <div className="questionnaire-card__text">{currentText}</div>
+                  <div className="questionnaire-card__footer">
+                    {translate('questionnaire.footer')}
+                  </div>
+                  {swipeIntent ? (
+                    <div className={`questionnaire-swipe-hint questionnaire-swipe-hint--${swipeIntent}`}>
+                      {swipeIntent === 'agree'
+                        ? `✅ ${translate('questionnaire.agree')}`
+                        : swipeIntent === 'disagree'
+                          ? `❌ ${translate('questionnaire.disagree')}`
+                          : translate('questionnaire.pass')}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="questionnaire-card questionnaire-card--empty">
+                  <h3>{translate('questionnaire.doneTitle')}</h3>
+                  <p className="muted">{translate('questionnaire.doneBody')}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          {identityRequired ? (
+            <p className="muted">Login is required to vote in this conversation.</p>
+          ) : null}
+          <div className="questionnaire-importance">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={importantFlag}
+                onChange={(event) => setImportantFlag(event.target.checked)}
+                disabled={!currentCommentId || pendingVote || votingDisabled}
+              />
+              This is important to me
+            </label>
+          </div>
+          <div className="questionnaire-controls">
+            <button
+              className="swipe-button swipe-button--disagree"
+              type="button"
+              onClick={() => handleVote(currentCommentId, -1)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.disagree')}
+            </button>
+            <button
+              className="swipe-button swipe-button--pass"
+              type="button"
+              onClick={() => handleVote(currentCommentId, 0)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.pass')}
+            </button>
+            <button
+              className="swipe-button swipe-button--agree"
+              type="button"
+              onClick={() => handleVote(currentCommentId, 1)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.agree')}
+            </button>
+          </div>
+          {identityRequired ? (
+            <p className="muted">Login is required to submit comments.</p>
+          ) : conversation?.allow_comment_submission ? (
+            <div className="questionnaire-add">
+              <div className="card-divider">
+                <h4>{translate('questionnaire.addComment')}</h4>
+              </div>
+              <textarea
+                className="textarea"
+                value={commentText}
+                onChange={(evt) => setCommentText(evt.target.value)}
+              />
+              <button className="button" type="button" onClick={handleSubmit}>
+                {translate('questionnaire.submitComment')}
+              </button>
+            </div>
+          ) : (
+            <p className="muted">{translate('questionnaire.commentDisabled')}</p>
+          )}
+        </>
       )}
     </section>
   )

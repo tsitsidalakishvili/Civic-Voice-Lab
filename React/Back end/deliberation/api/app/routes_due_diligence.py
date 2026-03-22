@@ -41,9 +41,77 @@ class DueDiligenceSummaryOut(BaseModel):
     competitors: int
 
 
+class DueDiligenceCaseCreate(BaseModel):
+    subject: str = Field(min_length=1)
+    subject_type: str = Field(default="Person", alias="subjectType")
+    status: Optional[str] = "Draft"
+    owner: Optional[str] = ""
+
+
+class DueDiligenceCaseUpdate(BaseModel):
+    subject: Optional[str] = None
+    subject_type: Optional[str] = Field(default=None, alias="subjectType")
+    status: Optional[str] = None
+    owner: Optional[str] = None
+
+
+class DueDiligenceCaseOut(BaseModel):
+    case_id: str = Field(alias="caseId")
+    subject: str
+    subject_type: str = Field(alias="subjectType")
+    status: str
+    owner: Optional[str] = ""
+    created_at: Optional[str] = Field(alias="createdAt", default=None)
+    updated_at: Optional[str] = Field(alias="updatedAt", default=None)
+    last_report_id: Optional[str] = Field(alias="lastReportId", default=None)
+    last_risk_level: Optional[str] = Field(alias="lastRiskLevel", default=None)
+    last_total_hits: Optional[int] = Field(alias="lastTotalHits", default=None)
+    last_report_at: Optional[str] = Field(alias="lastReportAt", default=None)
+    task_count: Optional[int] = Field(alias="taskCount", default=None)
+
+
+class DueDiligenceTaskCreate(BaseModel):
+    label: str = Field(min_length=1)
+    status: Optional[str] = "Open"
+    assignee: Optional[str] = ""
+    due_date: Optional[str] = Field(default=None, alias="dueDate")
+
+
+class DueDiligenceTaskUpdate(BaseModel):
+    label: Optional[str] = None
+    status: Optional[str] = None
+    assignee: Optional[str] = None
+    due_date: Optional[str] = Field(default=None, alias="dueDate")
+
+
+class DueDiligenceTaskOut(BaseModel):
+    task_id: str = Field(alias="taskId")
+    label: str
+    status: str
+    assignee: Optional[str] = ""
+    due_date: Optional[str] = Field(default=None, alias="dueDate")
+    created_at: Optional[str] = Field(alias="createdAt", default=None)
+    updated_at: Optional[str] = Field(alias="updatedAt", default=None)
+
+
+class DueDiligenceDecisionCreate(BaseModel):
+    outcome: str = Field(min_length=1)
+    rationale: Optional[str] = ""
+    decided_by: Optional[str] = Field(default="", alias="decidedBy")
+
+
+class DueDiligenceDecisionOut(BaseModel):
+    decision_id: str = Field(alias="decisionId")
+    outcome: str
+    rationale: Optional[str] = ""
+    decided_at: Optional[str] = Field(alias="decidedAt", default=None)
+    decided_by: Optional[str] = Field(alias="decidedBy", default=None)
+
+
 class DueDiligenceAnalysisRequest(BaseModel):
     subject: str = Field(min_length=1)
     subject_type: str = Field(default="Person", alias="subjectType")
+    case_id: Optional[str] = Field(default=None, alias="caseId")
     use_wikidata: bool = Field(default=True, alias="useWikidata")
     use_opensanctions: bool = Field(default=True, alias="useOpenSanctions")
     use_news: bool = Field(default=True, alias="useNews")
@@ -126,6 +194,7 @@ class DebatePrepOut(BaseModel):
 class DueDiligenceAnalysisOut(BaseModel):
     subject: str
     subject_type: str = Field(alias="subjectType")
+    case_id: Optional[str] = Field(default=None, alias="caseId")
     wikidata: List[WikidataResult]
     opensanctions: List[OpenSanctionsResult]
     news: List[NewsResult]
@@ -137,6 +206,7 @@ class DueDiligenceAnalysisOut(BaseModel):
 
 class DueDiligenceReportListOut(BaseModel):
     report_id: str = Field(alias="reportId")
+    case_id: Optional[str] = Field(alias="caseId", default=None)
     subject: str
     subject_type: str = Field(alias="subjectType")
     risk_level: Optional[str] = Field(default=None, alias="riskLevel")
@@ -147,6 +217,7 @@ class DueDiligenceReportListOut(BaseModel):
 
 class DueDiligenceReportOut(BaseModel):
     report_id: str = Field(alias="reportId")
+    case_id: Optional[str] = Field(alias="caseId", default=None)
     subject: str
     subject_type: str = Field(alias="subjectType")
     created_at: Optional[str] = Field(default=None, alias="createdAt")
@@ -189,6 +260,41 @@ def _strip_html(value: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return str(value or "").lower().strip()
+
+
+CASE_STATUSES = {"Draft", "Active", "Review", "Decided", "Closed"}
+TASK_STATUSES = {"Open", "In Progress", "Blocked", "Done"}
+
+
+def _normalize_subject_type(value: Optional[str]) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return "Person"
+    if cleaned.lower() == "company":
+        return "Organization"
+    if cleaned.lower().startswith("org"):
+        return "Organization"
+    return "Person" if cleaned.lower().startswith("person") else cleaned.title()
+
+
+def _normalize_case_status(value: Optional[str], default: str = "Draft") -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return default
+    normalized = cleaned.title()
+    if normalized not in CASE_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid case status")
+    return normalized
+
+
+def _normalize_task_status(value: Optional[str], default: str = "Open") -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return default
+    normalized = cleaned.title()
+    if normalized not in TASK_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid task status")
+    return normalized
 
 
 def _default_local_media_feeds() -> List[str]:
@@ -751,6 +857,7 @@ def _store_dd_report(
     summary: Dict[str, object],
     payload: Dict[str, object],
     sources: List[str],
+    case_id: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     driver = get_driver()
     query = """
@@ -770,6 +877,14 @@ def _store_dd_report(
     WITH r
     OPTIONAL MATCH (c:Competitor {nameKey: toLower($subject), competitorType: $subjectType})
     FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END | MERGE (c)-[:HAS_DD_REPORT]->(r))
+    WITH r
+    OPTIONAL MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    FOREACH (
+      _ IN CASE WHEN caseNode IS NULL THEN [] ELSE [1] END |
+      MERGE (caseNode)-[:HAS_DD_REPORT]->(r)
+      SET caseNode.updatedAt = datetime()
+    )
+    SET r.caseId = CASE WHEN $caseId IS NULL THEN r.caseId ELSE $caseId END
     RETURN r.reportId AS reportId, toString(r.createdAt) AS createdAt
     """
     params = {
@@ -783,6 +898,7 @@ def _store_dd_report(
         "sources": sources,
         "summaryJson": json.dumps(summary),
         "payloadJson": json.dumps(payload),
+        "caseId": case_id,
     }
     with _db_session(driver) as session:
         records = _execute_write(session, query, params)
@@ -1031,6 +1147,8 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     subject = payload.subject.strip()
     if not subject:
         raise HTTPException(status_code=400, detail="Subject is required")
+    case_id = payload.case_id.strip() if payload.case_id else None
+    subject_type = _normalize_subject_type(payload.subject_type)
     warnings: List[str] = []
     wikidata_results: List[WikidataResult] = []
     opensanctions_results: List[OpenSanctionsResult] = []
@@ -1042,7 +1160,7 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
             warnings.append(error)
 
     if payload.use_opensanctions:
-        opensanctions_results, error = _opensanctions_search(subject, payload.subject_type)
+        opensanctions_results, error = _opensanctions_search(subject, subject_type)
         if error:
             warnings.append(error)
 
@@ -1069,7 +1187,8 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
 
     payload_blob = {
         "subject": subject,
-        "subjectType": payload.subject_type,
+        "subjectType": subject_type,
+        "caseId": case_id,
         "wikidata": [row.dict(by_alias=True) for row in wikidata_results],
         "opensanctions": [row.dict(by_alias=True) for row in opensanctions_results],
         "news": [row.dict(by_alias=True) for row in news_results],
@@ -1079,15 +1198,17 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     }
     report_id, stored_at = _store_dd_report(
         subject=subject,
-        subject_type=payload.subject_type,
+        subject_type=subject_type,
         summary=summary,
         payload=payload_blob,
         sources=sources,
+        case_id=case_id,
     )
 
     return {
         "subject": subject,
-        "subjectType": payload.subject_type,
+        "subjectType": subject_type,
+        "caseId": case_id,
         "wikidata": wikidata_results,
         "opensanctions": opensanctions_results,
         "news": news_results,
@@ -1176,17 +1297,388 @@ def debate_prep(payload: DebatePrepRequest):
     }
 
 
-@router.get("/reports", response_model=List[DueDiligenceReportListOut])
-def list_due_diligence_reports(
+@router.get("/cases", response_model=List[DueDiligenceCaseOut])
+def list_due_diligence_cases(
+    status: Optional[str] = Query(None),
     subject: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ):
     driver = get_driver()
+    normalized_status = _normalize_case_status(status) if status else None
+    subject_filter = subject.strip() if subject else None
+    if subject_filter == "":
+        subject_filter = None
+    query = """
+    MATCH (c:DueDiligenceCase)
+    WHERE ($status IS NULL OR c.status = $status)
+      AND ($subject IS NULL OR toLower(c.subject) CONTAINS toLower($subject))
+    OPTIONAL MATCH (c)-[:HAS_DD_REPORT]->(r:DueDiligenceReport)
+    WITH c, r ORDER BY r.createdAt DESC
+    WITH c, collect(r)[0] AS latest
+    OPTIONAL MATCH (c)-[:HAS_TASK]->(t:DueDiligenceTask)
+    WITH c, latest, count(t) AS taskCount
+    ORDER BY c.updatedAt DESC
+    RETURN
+      c.caseId AS caseId,
+      c.subject AS subject,
+      c.subjectType AS subjectType,
+      c.status AS status,
+      coalesce(c.owner, '') AS owner,
+      toString(c.createdAt) AS createdAt,
+      toString(c.updatedAt) AS updatedAt,
+      latest.reportId AS lastReportId,
+      latest.riskLevel AS lastRiskLevel,
+      latest.totalHits AS lastTotalHits,
+      toString(latest.createdAt) AS lastReportAt,
+      taskCount AS taskCount
+    LIMIT $limit
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(
+            session,
+            query,
+            {
+                "status": normalized_status,
+                "subject": subject_filter,
+                "limit": int(limit),
+            },
+        )
+    return [record.data() for record in records]
+
+
+@router.post("/cases", response_model=DueDiligenceCaseOut)
+def create_due_diligence_case(payload: DueDiligenceCaseCreate):
+    subject = payload.subject.strip()
+    if not subject:
+        raise HTTPException(status_code=400, detail="Subject is required")
+    subject_type = _normalize_subject_type(payload.subject_type)
+    status = _normalize_case_status(payload.status)
+    owner = str(payload.owner or "").strip()
+    driver = get_driver()
+    query = """
+    CREATE (c:DueDiligenceCase)
+    SET c.caseId = randomUUID(),
+        c.subject = $subject,
+        c.subjectType = $subjectType,
+        c.status = $status,
+        c.owner = $owner,
+        c.createdAt = datetime(),
+        c.updatedAt = datetime()
+    RETURN
+      c.caseId AS caseId,
+      c.subject AS subject,
+      c.subjectType AS subjectType,
+      c.status AS status,
+      coalesce(c.owner, '') AS owner,
+      toString(c.createdAt) AS createdAt,
+      toString(c.updatedAt) AS updatedAt,
+      null AS lastReportId,
+      null AS lastRiskLevel,
+      null AS lastTotalHits,
+      null AS lastReportAt,
+      0 AS taskCount
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {"subject": subject, "subjectType": subject_type, "status": status, "owner": owner},
+        )
+    if not records:
+        raise HTTPException(status_code=500, detail="Case creation failed")
+    return records[0].data()
+
+
+@router.get("/cases/{case_id}", response_model=DueDiligenceCaseOut)
+def get_due_diligence_case(case_id: str):
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    OPTIONAL MATCH (c)-[:HAS_DD_REPORT]->(r:DueDiligenceReport)
+    WITH c, r ORDER BY r.createdAt DESC
+    WITH c, collect(r)[0] AS latest
+    OPTIONAL MATCH (c)-[:HAS_TASK]->(t:DueDiligenceTask)
+    RETURN
+      c.caseId AS caseId,
+      c.subject AS subject,
+      c.subjectType AS subjectType,
+      c.status AS status,
+      coalesce(c.owner, '') AS owner,
+      toString(c.createdAt) AS createdAt,
+      toString(c.updatedAt) AS updatedAt,
+      latest.reportId AS lastReportId,
+      latest.riskLevel AS lastRiskLevel,
+      latest.totalHits AS lastTotalHits,
+      toString(latest.createdAt) AS lastReportAt,
+      count(t) AS taskCount
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(session, query, {"caseId": case_id})
+    if not records:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return records[0].data()
+
+
+@router.patch("/cases/{case_id}", response_model=DueDiligenceCaseOut)
+def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
+    subject = payload.subject.strip() if payload.subject else None
+    subject_type = (
+        _normalize_subject_type(payload.subject_type) if payload.subject_type else None
+    )
+    status = _normalize_case_status(payload.status) if payload.status else None
+    owner = str(payload.owner).strip() if payload.owner is not None else None
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    SET c.subject = coalesce($subject, c.subject),
+        c.subjectType = coalesce($subjectType, c.subjectType),
+        c.status = coalesce($status, c.status),
+        c.owner = coalesce($owner, c.owner),
+        c.updatedAt = datetime()
+    WITH c
+    OPTIONAL MATCH (c)-[:HAS_DD_REPORT]->(r:DueDiligenceReport)
+    WITH c, r ORDER BY r.createdAt DESC
+    WITH c, collect(r)[0] AS latest
+    OPTIONAL MATCH (c)-[:HAS_TASK]->(t:DueDiligenceTask)
+    RETURN
+      c.caseId AS caseId,
+      c.subject AS subject,
+      c.subjectType AS subjectType,
+      c.status AS status,
+      coalesce(c.owner, '') AS owner,
+      toString(c.createdAt) AS createdAt,
+      toString(c.updatedAt) AS updatedAt,
+      latest.reportId AS lastReportId,
+      latest.riskLevel AS lastRiskLevel,
+      latest.totalHits AS lastTotalHits,
+      toString(latest.createdAt) AS lastReportAt,
+      count(t) AS taskCount
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {
+                "caseId": case_id,
+                "subject": subject,
+                "subjectType": subject_type,
+                "status": status,
+                "owner": owner,
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return records[0].data()
+
+
+@router.get("/cases/{case_id}/tasks", response_model=List[DueDiligenceTaskOut])
+def list_due_diligence_case_tasks(case_id: str):
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})-[:HAS_TASK]->(t:DueDiligenceTask)
+    RETURN
+      t.taskId AS taskId,
+      t.label AS label,
+      t.status AS status,
+      coalesce(t.assignee, '') AS assignee,
+      toString(t.dueDate) AS dueDate,
+      toString(t.createdAt) AS createdAt,
+      toString(t.updatedAt) AS updatedAt
+    ORDER BY t.createdAt DESC
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(session, query, {"caseId": case_id})
+        if records:
+            return [record.data() for record in records]
+        case_check = _execute_read(
+            session,
+            "MATCH (c:DueDiligenceCase {caseId: $caseId}) RETURN c.caseId AS caseId",
+            {"caseId": case_id},
+        )
+    if not case_check:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return []
+
+
+@router.post("/cases/{case_id}/tasks", response_model=DueDiligenceTaskOut)
+def create_due_diligence_case_task(case_id: str, payload: DueDiligenceTaskCreate):
+    label = payload.label.strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Task label is required")
+    status = _normalize_task_status(payload.status)
+    assignee = str(payload.assignee or "").strip()
+    due_date = str(payload.due_date or "").strip() or None
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    CREATE (t:DueDiligenceTask)
+    SET t.taskId = randomUUID(),
+        t.label = $label,
+        t.status = $status,
+        t.assignee = $assignee,
+        t.dueDate = $dueDate,
+        t.createdAt = datetime(),
+        t.updatedAt = datetime()
+    MERGE (c)-[:HAS_TASK]->(t)
+    SET c.updatedAt = datetime()
+    RETURN
+      t.taskId AS taskId,
+      t.label AS label,
+      t.status AS status,
+      coalesce(t.assignee, '') AS assignee,
+      toString(t.dueDate) AS dueDate,
+      toString(t.createdAt) AS createdAt,
+      toString(t.updatedAt) AS updatedAt
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {
+                "caseId": case_id,
+                "label": label,
+                "status": status,
+                "assignee": assignee,
+                "dueDate": due_date,
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return records[0].data()
+
+
+@router.patch("/cases/{case_id}/tasks/{task_id}", response_model=DueDiligenceTaskOut)
+def update_due_diligence_case_task(case_id: str, task_id: str, payload: DueDiligenceTaskUpdate):
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(
+        payload, "__fields_set__", set()
+    )
+    label_set = "label" in fields_set
+    status_set = "status" in fields_set
+    assignee_set = "assignee" in fields_set
+    due_date_set = "due_date" in fields_set
+    label = payload.label.strip() if label_set and payload.label is not None else None
+    if label_set and not label:
+        raise HTTPException(status_code=400, detail="Task label cannot be empty")
+    if status_set and not payload.status:
+        raise HTTPException(status_code=400, detail="Task status cannot be empty")
+    status = _normalize_task_status(payload.status) if status_set and payload.status else None
+    assignee = (
+        None
+        if not assignee_set
+        else (str(payload.assignee).strip() if payload.assignee is not None else None)
+    )
+    if assignee_set and assignee == "":
+        assignee = None
+    due_date = (
+        None
+        if not due_date_set
+        else (str(payload.due_date).strip() if payload.due_date is not None else None)
+    )
+    if due_date_set and due_date == "":
+        due_date = None
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})-[:HAS_TASK]->(t:DueDiligenceTask {taskId: $taskId})
+    SET t.label = CASE WHEN $labelSet THEN $label ELSE t.label END,
+        t.status = CASE WHEN $statusSet THEN $status ELSE t.status END,
+        t.assignee = CASE WHEN $assigneeSet THEN $assignee ELSE t.assignee END,
+        t.dueDate = CASE WHEN $dueDateSet THEN $dueDate ELSE t.dueDate END,
+        t.updatedAt = datetime(),
+        c.updatedAt = datetime()
+    RETURN
+      t.taskId AS taskId,
+      t.label AS label,
+      t.status AS status,
+      coalesce(t.assignee, '') AS assignee,
+      toString(t.dueDate) AS dueDate,
+      toString(t.createdAt) AS createdAt,
+      toString(t.updatedAt) AS updatedAt
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {
+                "caseId": case_id,
+                "taskId": task_id,
+                "label": label,
+                "status": status,
+                "assignee": assignee,
+                "dueDate": due_date,
+                "labelSet": bool(label_set),
+                "statusSet": bool(status_set),
+                "assigneeSet": bool(assignee_set),
+                "dueDateSet": bool(due_date_set),
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return records[0].data()
+
+
+@router.post("/cases/{case_id}/decision", response_model=DueDiligenceDecisionOut)
+def create_due_diligence_decision(case_id: str, payload: DueDiligenceDecisionCreate):
+    outcome = payload.outcome.strip()
+    if not outcome:
+        raise HTTPException(status_code=400, detail="Decision outcome is required")
+    rationale = str(payload.rationale or "").strip()
+    decided_by = str(payload.decided_by or "").strip()
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    CREATE (d:DueDiligenceDecision)
+    SET d.decisionId = randomUUID(),
+        d.outcome = $outcome,
+        d.rationale = $rationale,
+        d.decidedAt = datetime(),
+        d.decidedBy = $decidedBy
+    MERGE (c)-[:HAS_DECISION]->(d)
+    SET c.status = 'Decided',
+        c.updatedAt = datetime()
+    RETURN
+      d.decisionId AS decisionId,
+      d.outcome AS outcome,
+      d.rationale AS rationale,
+      toString(d.decidedAt) AS decidedAt,
+      d.decidedBy AS decidedBy
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {
+                "caseId": case_id,
+                "outcome": outcome,
+                "rationale": rationale,
+                "decidedBy": decided_by,
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return records[0].data()
+
+
+@router.get("/reports", response_model=List[DueDiligenceReportListOut])
+def list_due_diligence_reports(
+    subject: Optional[str] = Query(None),
+    case_id: Optional[str] = Query(None, alias="caseId"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    driver = get_driver()
+    subject_filter = subject.strip() if subject else None
+    if subject_filter == "":
+        subject_filter = None
+    case_filter = case_id.strip() if case_id else None
+    if case_filter == "":
+        case_filter = None
     query = """
     MATCH (r:DueDiligenceReport)
-    WHERE $subject IS NULL OR toLower(r.subject) CONTAINS toLower($subject)
+    OPTIONAL MATCH (c:DueDiligenceCase)-[:HAS_DD_REPORT]->(r)
+    WHERE ($subject IS NULL OR toLower(r.subject) CONTAINS toLower($subject))
+      AND ($caseId IS NULL OR c.caseId = $caseId OR r.caseId = $caseId)
     RETURN
       r.reportId AS reportId,
+      coalesce(c.caseId, r.caseId) AS caseId,
       r.subject AS subject,
       r.subjectType AS subjectType,
       r.riskLevel AS riskLevel,
@@ -1200,7 +1692,11 @@ def list_due_diligence_reports(
         records = _execute_read(
             session,
             query,
-            {"subject": subject.strip() if subject else None, "limit": int(limit)},
+            {
+                "subject": subject_filter,
+                "caseId": case_filter,
+                "limit": int(limit),
+            },
         )
     return [record.data() for record in records]
 
@@ -1209,8 +1705,10 @@ def _load_dd_report(report_id: str) -> Dict[str, object]:
     driver = get_driver()
     query = """
     MATCH (r:DueDiligenceReport {reportId: $rid})
+    OPTIONAL MATCH (c:DueDiligenceCase)-[:HAS_DD_REPORT]->(r)
     RETURN
       r.reportId AS reportId,
+      coalesce(c.caseId, r.caseId) AS caseId,
       r.subject AS subject,
       r.subjectType AS subjectType,
       toString(r.createdAt) AS createdAt,
@@ -1231,8 +1729,10 @@ def _load_dd_report(report_id: str) -> Dict[str, object]:
     payload["subjectType"] = row.get("subjectType")
     payload["createdAt"] = row.get("createdAt")
     payload["sources"] = row.get("sources") or []
+    payload["caseId"] = row.get("caseId")
     return {
         "reportId": row.get("reportId"),
+        "caseId": row.get("caseId"),
         "subject": row.get("subject"),
         "subjectType": row.get("subjectType"),
         "createdAt": row.get("createdAt"),

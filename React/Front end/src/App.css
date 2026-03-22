@@ -1966,6 +1966,7 @@ button.module-flow__step:hover {
   gap: 16px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   touch-action: none;
+  user-select: none;
 }
 
 .public-campaign {

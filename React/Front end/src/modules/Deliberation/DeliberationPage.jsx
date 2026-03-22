@@ -67,6 +67,7 @@ const sanitizeStatement = (value) => {
 
 const formatPercent = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 
+
 const buildStatementTooltipRows = (item) => {
   const agree = Number(item?.agree_count || 0)
   const disagree = Number(item?.disagree_count || 0)
@@ -814,13 +815,11 @@ export function DeliberationPage({
 
   const buildQuestionnaireLink = (questionnaireType, view) => {
     if (!activeId || typeof window === 'undefined') return ''
-    const url = new URL(window.location.href)
-    url.search = ''
-    url.hash = ''
-    const base = import.meta.env.BASE_URL || '/'
-    if (base !== '/' && !url.pathname.startsWith(base)) {
-      url.pathname = base
-    }
+    const origin = window.location.origin
+    const currentPath = window.location.pathname || '/'
+    const cleanPath = currentPath.replace(/\/index\.html$/, '/')
+    const basePath = cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`
+    const url = new URL(basePath, origin)
     url.searchParams.set('questionnaire', questionnaireType)
     url.searchParams.set('conversation_id', activeId)
     if (view) url.searchParams.set('view', view)
@@ -999,6 +998,7 @@ export function DeliberationPage({
       setConvoError(err.message || 'Unable to create conversation.')
     }
   }
+
 
   const handleToggleConversation = async (conversationId, nextOpen) => {
     if (!conversationId) return
@@ -1729,60 +1729,6 @@ export function DeliberationPage({
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
-                <h3>Active conversation</h3>
-                <p className="muted">This is the survey link you are sharing.</p>
-              </div>
-              {activeConvo ? (
-                <span className="pill">{activeConvo.is_open ? 'Open' : 'Closed'}</span>
-              ) : null}
-            </div>
-            {activeConvo ? (
-              <div className="stack">
-                <div>
-                  <strong>{activeConvo.topic}</strong>
-                  {activeConvo.description ? (
-                    <p className="muted">{activeConvo.description}</p>
-                  ) : (
-                    <p className="muted">Add a short description to guide participants.</p>
-                  )}
-                </div>
-                <div>
-                  <label className="label">Participant link</label>
-                  <input className="input" value={questionnaireLink} readOnly />
-                </div>
-                <div className="filter-row">
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => applyActiveTab('distribute')}
-                  >
-                    Share link
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleCopy(questionnaireLink, 'Participant link')}
-                  >
-                    Copy link
-                  </button>
-                  <a
-                    className="button-secondary"
-                    href={questionnaireLink}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open participant view
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <p className="muted">Select a conversation below to activate it.</p>
-            )}
-          </div>
-
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
                 <h3>Conversations</h3>
                 <p className="muted">Open, close, and select the active conversation.</p>
               </div>
@@ -1848,6 +1794,90 @@ export function DeliberationPage({
                 <div className="table-row empty">No conversations yet.</div>
               )}
             </div>
+          </div>
+
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Active conversation</h3>
+                <p className="muted">This is the survey link you are sharing.</p>
+              </div>
+              {activeConvo ? (
+                <span className="pill">{activeConvo.is_open ? 'Open' : 'Closed'}</span>
+              ) : null}
+            </div>
+            {activeConvo ? (
+              <div className="stack">
+                <div>
+                  <strong>{activeConvo.topic}</strong>
+                  {activeConvo.description ? (
+                    <p className="muted">{activeConvo.description}</p>
+                  ) : (
+                    <p className="muted">Add a short description to guide participants.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="label">Participant link</label>
+                  <input className="input" value={questionnaireLink} readOnly />
+                </div>
+                <div className="filter-row">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => applyActiveTab('distribute')}
+                  >
+                    Share link
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleCopy(questionnaireLink, 'Participant link')}
+                  >
+                    Copy link
+                  </button>
+                  <a
+                    className="button-secondary"
+                    href={questionnaireLink}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open participant view
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p className="muted">Select a conversation below to activate it.</p>
+            )}
+          </div>
+
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Statements</h3>
+                <p className="muted">Approved statements ready for voting.</p>
+              </div>
+              <span className="pill">{approvedComments.length}</span>
+            </div>
+            {approvedComments.length === 0 ? (
+              <p className="muted">No approved statements yet.</p>
+            ) : (
+              <div className="stack">
+                {approvedComments.slice(0, 8).map((comment) => (
+                  <div key={comment.id} className="split-row">
+                    <span>{comment.text}</span>
+                    <span className="muted">
+                      {comment.agree_count ?? 0}/{comment.disagree_count ?? 0}/
+                      {comment.pass_count ?? 0}
+                    </span>
+                  </div>
+                ))}
+                {approvedComments.length > 8 ? (
+                  <p className="muted">
+                    Showing 8 of {approvedComments.length} statements.
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -43,6 +43,33 @@ export function DueDiligencePage({
   const [analysisSteps, setAnalysisSteps] = useState([])
   const [analysisProgress, setAnalysisProgress] = useState(0)
   const progressTimerRef = useRef(null)
+  const autoPrefillRef = useRef(false)
+  const [cases, setCases] = useState([])
+  const [casesLoading, setCasesLoading] = useState(false)
+  const [casesError, setCasesError] = useState('')
+  const [activeCaseId, setActiveCaseId] = useState('')
+  const [activeCase, setActiveCase] = useState(null)
+  const [caseSubject, setCaseSubject] = useState('')
+  const [caseSubjectType, setCaseSubjectType] = useState('Person')
+  const [newCaseOwner, setNewCaseOwner] = useState('')
+  const [newCaseStatus, setNewCaseStatus] = useState('Draft')
+  const [caseOwner, setCaseOwner] = useState('')
+  const [caseStatus, setCaseStatus] = useState('Draft')
+  const [caseNotice, setCaseNotice] = useState('')
+  const [caseCreating, setCaseCreating] = useState(false)
+  const [caseSaving, setCaseSaving] = useState(false)
+  const [caseTasks, setCaseTasks] = useState([])
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [taskLabel, setTaskLabel] = useState('')
+  const [taskAssignee, setTaskAssignee] = useState('')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskError, setTaskError] = useState('')
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [decisionOutcome, setDecisionOutcome] = useState('Approve')
+  const [decisionRationale, setDecisionRationale] = useState('')
+  const [decisionSaving, setDecisionSaving] = useState(false)
+  const [decisionNotice, setDecisionNotice] = useState('')
+  const [decisionError, setDecisionError] = useState('')
   const [debateOpponent, setDebateOpponent] = useState('')
   const [debateTopic, setDebateTopic] = useState('education')
   const [debateYears, setDebateYears] = useState(2)
@@ -169,6 +196,10 @@ export function DueDiligencePage({
     }
   }, [])
 
+  useEffect(() => {
+    loadCases()
+  }, [])
+
   const loadCompetitors = () => {
     setError('')
     getJson('/due-diligence/competitors?limit=50')
@@ -180,10 +211,267 @@ export function DueDiligencePage({
       })
   }
 
+  const loadCases = () => {
+    setCasesError('')
+    setCasesLoading(true)
+    getJson('/due-diligence/cases?limit=50')
+      .then((payload) => {
+        setCases(Array.isArray(payload) ? payload : [])
+      })
+      .catch((err) => {
+        setCasesError(err.message || 'Unable to load cases.')
+      })
+      .finally(() => {
+        setCasesLoading(false)
+      })
+  }
+
+  const loadCaseTasks = (caseId) => {
+    if (!caseId) {
+      setCaseTasks([])
+      return
+    }
+    setTasksLoading(true)
+    setTaskError('')
+    getJson(`/due-diligence/cases/${caseId}/tasks`)
+      .then((payload) => {
+        setCaseTasks(Array.isArray(payload) ? payload : [])
+      })
+      .catch((err) => {
+        setTaskError(err.message || 'Unable to load case tasks.')
+      })
+      .finally(() => {
+        setTasksLoading(false)
+      })
+  }
+
+  const refreshActiveCase = (caseId, nextCases = cases) => {
+    if (!caseId) {
+      setActiveCase(null)
+      return
+    }
+    const found = nextCases.find((item) => item.caseId === caseId)
+    if (!found) {
+      setActiveCaseId('')
+      setActiveCase(null)
+      setSubjectName('')
+      setSubjectType('Person')
+      setCaseStatus('Draft')
+      setCaseOwner('')
+      return
+    }
+    setActiveCase(found)
+    setSubjectName(found.subject || '')
+    setSubjectType(found.subjectType || 'Person')
+    setStartMode('Analysis')
+    setCaseStatus(found.status || 'Draft')
+    setCaseOwner(found.owner || '')
+  }
+
   const setActiveSubject = (nameValue, typeValue, modeValue) => {
     setSubjectName(nameValue)
     setSubjectType(typeValue)
     setStartMode(modeValue)
+  }
+
+  const handleSelectCase = (caseId) => {
+    setActiveCaseId(caseId || '')
+    setCaseNotice('')
+    if (!caseId) {
+      setActiveCase(null)
+      return
+    }
+    refreshActiveCase(caseId)
+  }
+
+  const handleClearCase = () => {
+    setActiveCaseId('')
+    setActiveCase(null)
+    setCaseStatus('Draft')
+    setCaseOwner('')
+    setCaseNotice('Case selection cleared. You can start a new case.')
+    setCaseTasks([])
+  }
+
+  const handleCreateCase = async () => {
+    if (!caseSubject.trim()) {
+      setCaseNotice('Enter a subject to create a case.')
+      return
+    }
+    setCaseCreating(true)
+    setCaseNotice('')
+    try {
+      const payload = await requestJson('/due-diligence/cases', {
+        method: 'POST',
+        payload: {
+          subject: caseSubject.trim(),
+          subjectType: caseSubjectType,
+          owner: newCaseOwner.trim(),
+          status: newCaseStatus || 'Draft',
+        },
+      })
+      setCases((prev) => [payload, ...prev])
+      setActiveCaseId(payload.caseId)
+      setActiveCase(payload)
+      setSubjectName(payload.subject || '')
+      setSubjectType(payload.subjectType || 'Person')
+      setStartMode('Analysis')
+      setCaseStatus(payload.status || 'Draft')
+      setCaseOwner(payload.owner || '')
+      setCaseSubject('')
+      setCaseSubjectType('Person')
+      setNewCaseOwner('')
+      setNewCaseStatus('Draft')
+      setCaseNotice('Case created and selected.')
+      loadCaseTasks(payload.caseId)
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to create case.')
+    } finally {
+      setCaseCreating(false)
+    }
+  }
+
+  const handleUpdateCase = async () => {
+    if (!activeCaseId) return
+    setCaseSaving(true)
+    setCaseNotice('')
+    try {
+      const payload = await requestJson(`/due-diligence/cases/${activeCaseId}`, {
+        method: 'PATCH',
+        payload: {
+          status: caseStatus,
+          owner: caseOwner.trim(),
+        },
+      })
+      setCases((prev) =>
+        prev.map((item) => (item.caseId === activeCaseId ? payload : item)),
+      )
+      setActiveCase(payload)
+      setSubjectName(payload.subject || '')
+      setSubjectType(payload.subjectType || 'Person')
+      setStartMode('Analysis')
+      setCaseStatus(payload.status || 'Draft')
+      setCaseOwner(payload.owner || '')
+      setCaseNotice('Case updated.')
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to update case.')
+    } finally {
+      setCaseSaving(false)
+    }
+  }
+
+  const ensureActiveCase = async () => {
+    if (activeCaseId) return activeCaseId
+    if (!subjectName.trim()) return ''
+    setCaseCreating(true)
+    try {
+      const payload = await requestJson('/due-diligence/cases', {
+        method: 'POST',
+        payload: {
+          subject: subjectName.trim(),
+          subjectType,
+          status: 'Draft',
+        },
+      })
+      setCases((prev) => [payload, ...prev])
+      setActiveCaseId(payload.caseId)
+      setActiveCase(payload)
+      setSubjectName(payload.subject || '')
+      setSubjectType(payload.subjectType || 'Person')
+      setCaseStatus(payload.status || 'Draft')
+      setCaseOwner(payload.owner || '')
+      loadCaseTasks(payload.caseId)
+      return payload.caseId
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to auto-create case.')
+      return ''
+    } finally {
+      setCaseCreating(false)
+    }
+  }
+
+  const handleCreateTask = async () => {
+    if (!activeCaseId) {
+      setTaskError('Select a case first.')
+      return
+    }
+    if (!taskLabel.trim()) {
+      setTaskError('Task title is required.')
+      return
+    }
+    setTaskSaving(true)
+    setTaskError('')
+    try {
+      const payload = await requestJson(`/due-diligence/cases/${activeCaseId}/tasks`, {
+        method: 'POST',
+        payload: {
+          label: taskLabel.trim(),
+          assignee: taskAssignee.trim(),
+          dueDate: taskDueDate || null,
+          status: 'Open',
+        },
+      })
+      setCaseTasks((prev) => [payload, ...prev])
+      setTaskLabel('')
+      setTaskAssignee('')
+      setTaskDueDate('')
+      loadCases()
+    } catch (err) {
+      setTaskError(err.message || 'Unable to create task.')
+    } finally {
+      setTaskSaving(false)
+    }
+  }
+
+  const handleUpdateTaskStatus = async (taskId, nextStatus) => {
+    if (!activeCaseId || !taskId) return
+    try {
+      const payload = await requestJson(
+        `/due-diligence/cases/${activeCaseId}/tasks/${taskId}`,
+        {
+          method: 'PATCH',
+          payload: { status: nextStatus },
+        },
+      )
+      setCaseTasks((prev) =>
+        prev.map((item) => (item.taskId === taskId ? payload : item)),
+      )
+      loadCases()
+    } catch (err) {
+      setTaskError(err.message || 'Unable to update task.')
+    }
+  }
+
+  const handleCreateDecision = async () => {
+    setDecisionError('')
+    setDecisionNotice('')
+    if (!activeCaseId) {
+      setDecisionError('Select a case first.')
+      return
+    }
+    if (!decisionOutcome.trim()) {
+      setDecisionError('Decision outcome is required.')
+      return
+    }
+    setDecisionSaving(true)
+    try {
+      await requestJson(`/due-diligence/cases/${activeCaseId}/decision`, {
+        method: 'POST',
+        payload: {
+          outcome: decisionOutcome.trim(),
+          rationale: decisionRationale.trim(),
+        },
+      })
+      setDecisionRationale('')
+      setDecisionNotice('Decision saved. Case moved to Decided.')
+      setCaseStatus('Decided')
+      setCaseNotice('Case status updated to Decided.')
+      loadCases()
+    } catch (err) {
+      setDecisionError(err.message || 'Unable to save decision.')
+    } finally {
+      setDecisionSaving(false)
+    }
   }
 
   const runInternalChecks = async () => {
@@ -218,6 +506,7 @@ export function DueDiligencePage({
     setAnalysisError('')
     setAnalysisResult(null)
     setAnalysisProgress(5)
+    const caseId = await ensureActiveCase()
     const enabled = []
     if (useWikidata) enabled.push('Wikidata')
     if (useOpenSanctions) enabled.push('OpenSanctions')
@@ -253,6 +542,7 @@ export function DueDiligencePage({
         payload: {
           subject: subjectName.trim(),
           subjectType,
+          caseId: caseId || undefined,
           useWikidata,
           useOpenSanctions,
           useNews,
@@ -263,7 +553,11 @@ export function DueDiligencePage({
       setAnalysisResult(result)
       const warningsText = (result?.warnings || []).join(' ').toLowerCase()
       const hasWikidataWarning = warningsText.includes('wikidata request failed')
-      const hasOpenSanctionsWarning = warningsText.includes('opensanctions request failed')
+      const hasOpenSanctionsWarning =
+        warningsText.includes('opensanctions') &&
+        (warningsText.includes('failed') ||
+          warningsText.includes('not configured') ||
+          warningsText.includes('api key'))
       const hasNewsWarning = warningsText.includes('gdelt news request failed')
       setAnalysisSteps((prev) =>
         prev.map((step) => {
@@ -290,8 +584,9 @@ export function DueDiligencePage({
       )
       setAnalysisProgress(100)
       if (subjectName.trim()) {
-        loadReportHistory(subjectName.trim())
+        loadReportHistory(subjectName.trim(), caseId)
       }
+      loadCases()
       setAnalysisNotice(
         `Analysis complete for ${subjectName} (${subjectType}) using: ${
           enabled.length ? enabled.join(', ') : 'no sources'
@@ -317,16 +612,21 @@ export function DueDiligencePage({
     }
   }
 
-  const loadReportHistory = async (subject) => {
-    if (!subject) {
+  const loadReportHistory = async (subject, caseId) => {
+    if (!subject && !caseId) {
       setReportHistory([])
       return
     }
     setHistoryLoading(true)
     try {
-      const history = await getJson(
-        `/due-diligence/reports?subject=${encodeURIComponent(subject)}&limit=8`,
-      )
+      const params = new URLSearchParams()
+      params.set('limit', '8')
+      if (caseId) {
+        params.set('caseId', caseId)
+      } else if (subject) {
+        params.set('subject', subject)
+      }
+      const history = await getJson(`/due-diligence/reports?${params.toString()}`)
       setReportHistory(Array.isArray(history) ? history : [])
     } catch (err) {
       setReportHistory([])
@@ -336,12 +636,47 @@ export function DueDiligencePage({
   }
 
   useEffect(() => {
+    if (activeCaseId) {
+      loadReportHistory(subjectName.trim(), activeCaseId)
+      return
+    }
     if (!subjectName.trim()) {
       setReportHistory([])
       return
     }
-    loadReportHistory(subjectName.trim())
-  }, [subjectName])
+    loadReportHistory(subjectName.trim(), '')
+  }, [subjectName, activeCaseId])
+
+  useEffect(() => {
+    if (!cases.length) return
+    if (!activeCaseId && !subjectName.trim()) {
+      setActiveCaseId(cases[0].caseId)
+      return
+    }
+    if (!activeCaseId && subjectName.trim()) {
+      const match = cases.find((item) => item.subject === subjectName.trim())
+      if (match) {
+        setActiveCaseId(match.caseId)
+      }
+      return
+    }
+    if (!activeCaseId) return
+    const found = cases.find((item) => item.caseId === activeCaseId)
+    if (!found) return
+    setActiveCase(found)
+    setSubjectName(found.subject || '')
+    setSubjectType(found.subjectType || 'Person')
+    setCaseStatus(found.status || 'Draft')
+    setCaseOwner(found.owner || '')
+  }, [cases, activeCaseId, subjectName])
+
+  useEffect(() => {
+    if (activeCaseId) {
+      loadCaseTasks(activeCaseId)
+    } else {
+      setCaseTasks([])
+    }
+  }, [activeCaseId])
 
   useEffect(() => {
     setInternalChecksRan(false)
@@ -376,7 +711,7 @@ export function DueDiligencePage({
     const params = new URLSearchParams({
       subject: subjectName || '',
       subject_type: subjectType || '',
-      start_mode: startMode.replace(' ', '_').toLowerCase(),
+      start_mode: startMode.replace(/\s+/g, '_').toLowerCase(),
       use_wikidata: useWikidata ? '1' : '0',
       use_opensanctions: useOpenSanctions ? '1' : '0',
       use_news: useNews ? '1' : '0',
@@ -523,7 +858,12 @@ export function DueDiligencePage({
 
   const handleUseWatchlist = (item) => {
     if (!item) return
-    setActiveSubject(item.name || '', item.competitorType || 'Person', 'Watchlist')
+    if (activeCaseId) {
+      handleClearCase()
+    }
+    const normalizedType =
+      item.competitorType === 'Company' ? 'Organization' : item.competitorType || 'Person'
+    setActiveSubject(item.name || '', normalizedType, 'Watchlist')
   }
 
   const companyCandidate = useMemo(
@@ -536,13 +876,15 @@ export function DueDiligencePage({
   )
 
   useEffect(() => {
-    if (subjectName) return
+    if (subjectName || autoPrefillRef.current) return
     if (companyCandidate) {
-      setActiveSubject(companyCandidate.name, 'Company', 'Watchlist')
+      setActiveSubject(companyCandidate.name, 'Organization', 'Watchlist')
+      autoPrefillRef.current = true
       return
     }
     if (personCandidate) {
       setActiveSubject(personCandidate.name, 'Person', 'Watchlist')
+      autoPrefillRef.current = true
     }
   }, [companyCandidate, personCandidate, subjectName])
 
@@ -617,6 +959,9 @@ export function DueDiligencePage({
         return 'Pending'
     }
   }
+
+  const caseStatusOptions = ['Draft', 'Active', 'Review', 'Decided', 'Closed']
+  const taskStatusOptions = ['Open', 'In Progress', 'Blocked', 'Done']
 
   const duePulseStats = useMemo(
     () => [
@@ -736,65 +1081,203 @@ export function DueDiligencePage({
       )}
 
       {activeTab === 'analysis' && (
-        <div className="module-card module-card__wide section-intro">
-          <div className="card-header">
-            <div>
-              <h3>Start a due diligence check</h3>
-              <p className="muted">
-                Choose a subject, run internal checks, then run external analysis.
-              </p>
+        <div className="stack">
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Case workspace</h3>
+                <p className="muted">
+                  Create a case, run checks, and capture a decision.
+                </p>
+              </div>
+              <div className="pill">Case flow</div>
             </div>
+            <InfoBox
+              title="Workflow"
+              summary="Intake → Internal checks → External analysis → Decision"
+              hint="Use Watchlist for repeat subjects and Launch for the external DD app."
+            />
           </div>
-          <InfoBox
-            title="Quick steps"
-            summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
-            hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
-          />
-          {(companyCandidate || personCandidate) && (
-            <>
-              <div className="card-divider">
-                <h4>Suggested from watchlist</h4>
+
+          <div className="module-grid">
+            <div className="module-card">
+              <h3>Start a new case</h3>
+              <p className="muted">Capture the subject and assign ownership.</p>
+              <div className="filter-row">
+                <input
+                  className="input"
+                  placeholder="Subject name"
+                  value={caseSubject}
+                  onChange={(event) => setCaseSubject(event.target.value)}
+                />
+                <select
+                  className="select"
+                  value={caseSubjectType}
+                  onChange={(event) => setCaseSubjectType(event.target.value)}
+                >
+                  <option value="Person">Person</option>
+                  <option value="Organization">Organization</option>
+                </select>
+                <input
+                  className="input"
+                  placeholder="Owner (optional)"
+                  value={newCaseOwner}
+                  onChange={(event) => setNewCaseOwner(event.target.value)}
+                />
+                <select
+                  className="select"
+                  value={newCaseStatus}
+                  onChange={(event) => setNewCaseStatus(event.target.value)}
+                >
+                  {caseStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleCreateCase}
+                  disabled={caseCreating}
+                >
+                  {caseCreating ? 'Creating…' : 'Create case'}
+                </button>
+              </div>
+              {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+            </div>
+
+            <div className="module-card">
+              <div className="card-header">
+                <div>
+                  <h3>Cases</h3>
+                  <p className="muted">Select a case to run checks.</p>
+                </div>
+                <button className="button-secondary" type="button" onClick={loadCases}>
+                  Refresh
+                </button>
+              </div>
+              {casesError ? <div className="module-alert">{casesError}</div> : null}
+              <div className="table">
+                <div className="table-row table-head">
+                  <span>Subject</span>
+                  <span>Status</span>
+                  <span>Risk</span>
+                  <span>Updated</span>
+                </div>
+                {casesLoading ? (
+                  <div className="table-row empty">Loading cases…</div>
+                ) : cases.length === 0 ? (
+                  <div className="table-row empty">No cases yet.</div>
+                ) : (
+                  cases.map((row) => (
+                    <button
+                      className={`table-row table-row__button${
+                        activeCaseId === row.caseId ? ' is-active' : ''
+                      }`}
+                      type="button"
+                      key={row.caseId}
+                      onClick={() => handleSelectCase(row.caseId)}
+                    >
+                      <span>{row.subject || '—'}</span>
+                      <span>{row.status || 'Draft'}</span>
+                      <span>{row.lastRiskLevel || '—'}</span>
+                      <span>{row.updatedAt || row.createdAt || '—'}</span>
+                    </button>
+                  ))
+                )}
               </div>
               <div className="module-footer">
                 <span>
-                  <strong>Company</strong>{' '}
-                  {companyCandidate?.name ? companyCandidate.name : '—'}
+                  {activeCaseId
+                    ? `Active case: ${activeCase?.subject || '—'}`
+                    : 'No case selected.'}
                 </span>
-                <span>
-                  <strong>Person</strong> {personCandidate?.name ? personCandidate.name : '—'}
-                </span>
-                {companyCandidate ? (
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleUseWatchlist(companyCandidate)}
-                  >
-                    Use company
-                  </button>
-                ) : null}
-                {personCandidate ? (
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleUseWatchlist(personCandidate)}
-                  >
-                    Use person
-                  </button>
-                ) : null}
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={handleClearCase}
+                  disabled={!activeCaseId}
+                >
+                  Clear selection
+                </button>
               </div>
-            </>
-          )}
+            </div>
+          </div>
+
+          <div className="module-card module-card__wide section-intro">
+            <div className="card-header">
+              <div>
+                <h3>Start a due diligence check</h3>
+                <p className="muted">
+                  Choose a subject, run internal checks, then run external analysis.
+                </p>
+              </div>
+            </div>
+            {!activeCaseId ? (
+              <div className="module-alert">
+                No case selected yet. Create a case above or run analysis to auto-create
+                a draft case.
+              </div>
+            ) : null}
+            {activeCaseId ? (
+              <div className="module-alert module-alert--success">
+                Active case: {activeCase?.subject || '—'} · {caseStatus}
+              </div>
+            ) : null}
+            <InfoBox
+              title="Quick steps"
+              summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
+              hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
+            />
+            {(companyCandidate || personCandidate) && (
+              <>
+                <div className="card-divider">
+                  <h4>Suggested from watchlist</h4>
+                </div>
+                <div className="module-footer">
+                  <span>
+                    <strong>Company</strong>{' '}
+                    {companyCandidate?.name ? companyCandidate.name : '—'}
+                  </span>
+                  <span>
+                    <strong>Person</strong>{' '}
+                    {personCandidate?.name ? personCandidate.name : '—'}
+                  </span>
+                  {companyCandidate ? (
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleUseWatchlist(companyCandidate)}
+                    >
+                      Use company
+                    </button>
+                  ) : null}
+                  {personCandidate ? (
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleUseWatchlist(personCandidate)}
+                    >
+                      Use person
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )}
           <div className="filter-row">
             <input
               className="input"
               placeholder="Enter person or organization"
               value={subjectName}
               onChange={(event) => setSubjectName(event.target.value)}
+              disabled={Boolean(activeCaseId)}
             />
             <select
               className="select"
               value={subjectType}
               onChange={(event) => setSubjectType(event.target.value)}
+              disabled={Boolean(activeCaseId)}
             >
               <option value="Person">Person</option>
               <option value="Organization">Organization</option>
@@ -806,6 +1289,15 @@ export function DueDiligencePage({
             >
               Check internal records
             </button>
+            {activeCaseId ? (
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={handleClearCase}
+              >
+                Change subject
+              </button>
+            ) : null}
           </div>
           <p className="muted">Internal checks look at Network + watchlist for matches.</p>
 
@@ -819,6 +1311,12 @@ export function DueDiligencePage({
             <span>Subject status</span>
             <strong>{subjectStatus}</strong>
           </div>
+          {activeCaseId ? (
+            <div className="metric-row">
+              <span>Case status</span>
+              <strong>{caseStatus}</strong>
+            </div>
+          ) : null}
 
           <div className="card-divider">
             <h4>Internal checks</h4>
@@ -840,8 +1338,8 @@ export function DueDiligencePage({
                 ) : crmMatches.length === 0 ? (
                   <div className="table-row empty">No Network matches.</div>
                 ) : (
-                  crmMatches.slice(0, 12).map((row) => (
-                    <div className="table-row" key={row.email}>
+                  crmMatches.slice(0, 12).map((row, idx) => (
+                    <div className="table-row" key={`${row.email || 'match'}-${idx}`}>
                       <span>{row.fullName || row.email}</span>
                       <span>{row.email}</span>
                       <span>{row.group || '—'}</span>
@@ -967,15 +1465,15 @@ export function DueDiligencePage({
               ) : null}
               {analysisResult.summary?.risk_rationale?.length ? (
                 <ul className="compact-list">
-                  {analysisResult.summary.risk_rationale.map((item) => (
-                    <li key={item}>{item}</li>
+                  {analysisResult.summary.risk_rationale.map((item, idx) => (
+                    <li key={`${item}-${idx}`}>{item}</li>
                   ))}
                 </ul>
               ) : null}
               {analysisResult.warnings?.length ? (
                 <div className="module-alert">
-                  {analysisResult.warnings.map((warning) => (
-                    <div key={warning}>{warning}</div>
+                  {analysisResult.warnings.map((warning, idx) => (
+                    <div key={`${warning}-${idx}`}>{warning}</div>
                   ))}
                 </div>
               ) : null}
@@ -1140,6 +1638,177 @@ export function DueDiligencePage({
             </details>
           ) : null}
         </div>
+        {activeCaseId ? (
+          <div className="module-grid">
+            <div className="module-card">
+              <h3>Case overview</h3>
+              <div className="metric-row">
+                <span>Case ID</span>
+                <strong>{activeCaseId}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Status</span>
+                <strong>{caseStatus}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Owner</span>
+                <strong>{caseOwner || '—'}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Last risk</span>
+                <strong>{activeCase?.lastRiskLevel || '—'}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Last report</span>
+                <strong>{activeCase?.lastReportAt || '—'}</strong>
+              </div>
+              <div className="filter-row">
+                <select
+                  className="select"
+                  value={caseStatus}
+                  onChange={(event) => setCaseStatus(event.target.value)}
+                >
+                  {caseStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="input"
+                  placeholder="Owner"
+                  value={caseOwner}
+                  onChange={(event) => setCaseOwner(event.target.value)}
+                />
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={handleUpdateCase}
+                  disabled={caseSaving}
+                >
+                  {caseSaving ? 'Saving…' : 'Update case'}
+                </button>
+              </div>
+              {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+            </div>
+
+            <div className="module-card">
+              <h3>Tasks</h3>
+              <p className="muted">Track actions before final decision.</p>
+              <div className="filter-row">
+                <input
+                  className="input"
+                  placeholder="Task title"
+                  value={taskLabel}
+                  onChange={(event) => setTaskLabel(event.target.value)}
+                />
+                <input
+                  className="input"
+                  placeholder="Assignee"
+                  value={taskAssignee}
+                  onChange={(event) => setTaskAssignee(event.target.value)}
+                />
+                <input
+                  className="input"
+                  type="date"
+                  value={taskDueDate}
+                  onChange={(event) => setTaskDueDate(event.target.value)}
+                />
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleCreateTask}
+                  disabled={taskSaving}
+                >
+                  {taskSaving ? 'Adding…' : 'Add task'}
+                </button>
+              </div>
+              {taskError ? <div className="module-alert">{taskError}</div> : null}
+              <div className="table">
+                <div className="table-row table-head table-row--tasks">
+                  <span>Task</span>
+                  <span>Status</span>
+                  <span>Assignee</span>
+                  <span>Due</span>
+                  <span>Action</span>
+                </div>
+                {tasksLoading ? (
+                  <div className="table-row table-row--tasks empty">Loading tasks…</div>
+                ) : caseTasks.length === 0 ? (
+                  <div className="table-row table-row--tasks empty">No tasks yet.</div>
+                ) : (
+                  caseTasks.map((task) => (
+                    <div className="table-row table-row--tasks" key={task.taskId}>
+                      <span>{task.label}</span>
+                      <select
+                        className="select"
+                        value={task.status || 'Open'}
+                        onChange={(event) =>
+                          handleUpdateTaskStatus(task.taskId, event.target.value)
+                        }
+                      >
+                        {taskStatusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                      <span>{task.assignee || '—'}</span>
+                      <span>{task.dueDate || '—'}</span>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleUpdateTaskStatus(task.taskId, 'Done')}
+                      >
+                        Mark done
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="module-card">
+              <h3>Decision</h3>
+              <p className="muted">Record the final due diligence outcome.</p>
+              <div className="filter-row">
+                <select
+                  className="select"
+                  value={decisionOutcome}
+                  onChange={(event) => setDecisionOutcome(event.target.value)}
+                >
+                  <option value="Approve">Approve</option>
+                  <option value="Monitor">Monitor</option>
+                  <option value="Escalate">Escalate</option>
+                  <option value="Reject">Reject</option>
+                </select>
+                <input
+                  className="input"
+                  placeholder="Rationale (optional)"
+                  value={decisionRationale}
+                  onChange={(event) => setDecisionRationale(event.target.value)}
+                />
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleCreateDecision}
+                  disabled={decisionSaving}
+                >
+                  {decisionSaving ? 'Saving…' : 'Save decision'}
+                </button>
+              </div>
+              {decisionError ? <div className="module-alert">{decisionError}</div> : null}
+              {decisionNotice ? (
+                <div className="module-alert module-alert--success">{decisionNotice}</div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="module-alert">
+            Select a case to view tasks and record a decision.
+          </div>
+        )}
+      </div>
       )}
 
       {activeTab === 'debate-prep' && (
@@ -1241,8 +1910,8 @@ export function DueDiligencePage({
                 ) : null}
                 {debateResult.warnings?.length ? (
                   <div className="module-alert">
-                    {debateResult.warnings.map((warning) => (
-                      <div key={warning}>{warning}</div>
+                    {debateResult.warnings.map((warning, idx) => (
+                      <div key={`${warning}-${idx}`}>{warning}</div>
                     ))}
                   </div>
                 ) : null}
@@ -1259,8 +1928,8 @@ export function DueDiligencePage({
                           <span className="pill">Set the frame</span>
                         </div>
                         <ul className="compact-list">
-                          {debatePrepPlan.opening.map((line) => (
-                            <li key={line}>{line}</li>
+                          {debatePrepPlan.opening.map((line, idx) => (
+                            <li key={`${line}-${idx}`}>{line}</li>
                           ))}
                         </ul>
                       </div>
@@ -1270,8 +1939,8 @@ export function DueDiligencePage({
                           <span className="pill">Pressure test</span>
                         </div>
                         <ul className="compact-list">
-                          {debatePrepPlan.crossExam.map((line) => (
-                            <li key={line}>{line}</li>
+                          {debatePrepPlan.crossExam.map((line, idx) => (
+                            <li key={`${line}-${idx}`}>{line}</li>
                           ))}
                         </ul>
                       </div>
@@ -1281,8 +1950,8 @@ export function DueDiligencePage({
                           <span className="pill">Call to action</span>
                         </div>
                         <ul className="compact-list">
-                          {debatePrepPlan.closing.map((line) => (
-                            <li key={line}>{line}</li>
+                          {debatePrepPlan.closing.map((line, idx) => (
+                            <li key={`${line}-${idx}`}>{line}</li>
                           ))}
                         </ul>
                       </div>
@@ -1299,8 +1968,8 @@ export function DueDiligencePage({
                       {debatePrepPlan.counterpoints.length === 0 ? (
                         <div className="table-row empty">No counterpoints generated.</div>
                       ) : (
-                        debatePrepPlan.counterpoints.map((row) => (
-                          <div className="table-row" key={row.theme}>
+                        debatePrepPlan.counterpoints.map((row, idx) => (
+                          <div className="table-row" key={`${row.theme}-${idx}`}>
                             <span>{row.theme}</span>
                             <span>{row.prompt}</span>
                           </div>
@@ -1464,7 +2133,11 @@ export function DueDiligencePage({
                   (item) => item.name === event.target.value,
                 )
                 setSubjectName(selected?.name || '')
-                setSubjectType(selected?.competitorType || 'Person')
+                setSubjectType(
+                  selected?.competitorType === 'Company'
+                    ? 'Organization'
+                    : selected?.competitorType || 'Person',
+                )
               }}
             >
               <option value="">Select competitor</option>
@@ -1477,7 +2150,12 @@ export function DueDiligencePage({
             <button
               className="button"
               type="button"
-              onClick={() => setActiveSubject(subjectName, subjectType, 'Configure')}
+              onClick={() => {
+                if (activeCaseId) {
+                  handleClearCase()
+                }
+                setActiveSubject(subjectName, subjectType, 'Configure')
+              }}
             >
               Use for analysis
             </button>
