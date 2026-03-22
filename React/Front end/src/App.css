@@ -136,13 +136,17 @@
 }
 
 .app-shell__navbar {
-  padding-top: calc(var(--space-4) + var(--app-shell-header-height, 78px));
+  padding-top: var(--space-4);
   z-index: 200;
-  margin-top: var(--space-6);
+  margin-top: calc(var(--app-shell-header-height, 78px) + var(--space-2));
+  margin-bottom: var(--space-2);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 22px;
   box-shadow: var(--shadow-lg);
+  max-height: calc(100vh - var(--app-shell-header-height, 78px) - var(--space-4));
+  overflow: auto;
+  padding-bottom: var(--space-3);
 }
 
 .language-select {
@@ -170,6 +174,10 @@
   gap: var(--space-2);
 }
 
+.brand__text {
+  max-width: none;
+  line-height: normal;
+}
 .brand__mark {
   width: 44px;
   height: 44px;
@@ -185,10 +193,11 @@
 .brand__title {
   font-weight: 700;
   color: var(--text-h);
+  font-size: 20px;
 }
 
 .brand__subtitle {
-  font-size: 12px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--muted);
@@ -199,6 +208,36 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.topbar__actions--right {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+}
+
+.topbar__center {
+  position: absolute;
+  left: 50%;
+  top: var(--space-3);
+  transform: translateX(-50%);
+  width: 176px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+}
+
+.topbar__center .mantine-Badge-root,
+.topbar__center .mantine-Button-root {
+  width: 100%;
+  justify-content: center;
+}
+
+.topbar__center .mantine-Badge-label {
+  font-size: 14px;
 }
 
 .topbar__current {
@@ -531,6 +570,14 @@
   display: grid;
   gap: var(--space-4);
   padding: var(--space-2) 0;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.module-hub__header {
+  text-align: center;
+  max-width: 520px;
+  margin: 0 auto;
 }
 
 .module-hub__header h1 {
@@ -540,8 +587,9 @@
 
 .module-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
   gap: var(--space-3);
+  align-items: stretch;
 }
 
 .module-tile {
@@ -601,16 +649,18 @@
 
 .module-view {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 312px minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
 
 .module-view__sidebar {
-  position: sticky;
-  top: 120px;
+  position: relative;
+  top: auto;
   display: grid;
   gap: var(--space-3);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .module-view__card {

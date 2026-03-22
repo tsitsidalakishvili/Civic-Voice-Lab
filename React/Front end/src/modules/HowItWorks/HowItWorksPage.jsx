@@ -427,6 +427,123 @@ export function HowItWorksPage({ t }) {
       ),
     },
     {
+      id: 'data-hub',
+      title: translate('module.dataHub'),
+      pill: 'Explore',
+      desc: translate('module.dataHub.desc'),
+      detailIntro:
+        'Connect sources, normalize records, and explore a unified Neo4j graph.',
+      details: [
+        {
+          title: 'Inputs',
+          items: [
+            'APIs and public sources',
+            'Internal databases',
+            'CSV uploads',
+            'Connector settings',
+          ],
+        },
+        {
+          title: 'Actions',
+          items: [
+            'Normalize schemas',
+            'Map entities and edges',
+            'Run enrichment queries',
+            'Sync to Neo4j',
+          ],
+        },
+        {
+          title: 'Outputs',
+          items: [
+            'Graph explorer views',
+            'Connected profiles',
+            'Snapshot exports',
+            'Connector health',
+          ],
+        },
+        {
+          title: 'Signals',
+          items: [
+            'Link density',
+            'Source coverage',
+            'Sync freshness',
+            'Data quality checks',
+          ],
+        },
+      ],
+      flow: (
+        <svg viewBox="0 0 720 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker
+              id="arrow-datahub"
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" fill="#64748B" />
+            </marker>
+          </defs>
+          <rect x="20" y="44" width="120" height="44" rx="10" fill="#F1F5F9" stroke="#CBD5E1" />
+          <rect x="160" y="44" width="120" height="44" rx="10" fill="#E0F2FE" stroke="#7DD3FC" />
+          <rect x="300" y="44" width="120" height="44" rx="10" fill="#F5F3FF" stroke="#C4B5FD" />
+          <rect x="440" y="44" width="120" height="44" rx="10" fill="#FFF7ED" stroke="#FDBA74" />
+          <rect x="580" y="44" width="120" height="44" rx="10" fill="#ECFDF3" stroke="#86EFAC" />
+          <line x1="140" y1="66" x2="160" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-datahub)" />
+          <line x1="280" y1="66" x2="300" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-datahub)" />
+          <line x1="420" y1="66" x2="440" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-datahub)" />
+          <line x1="560" y1="66" x2="580" y2="66" stroke="#64748B" strokeWidth="2" markerEnd="url(#arrow-datahub)" />
+          <text x="80" y="62" fontSize="9" textAnchor="middle" fill="#334155">
+            <tspan x="80" dy="-2">Sources</tspan>
+            <tspan x="80" dy="12">ingest</tspan>
+          </text>
+          <text x="220" y="62" fontSize="9" textAnchor="middle" fill="#1E3A8A">
+            <tspan x="220" dy="-2">Connectors</tspan>
+            <tspan x="220" dy="12">map</tspan>
+          </text>
+          <text x="360" y="62" fontSize="9" textAnchor="middle" fill="#6D28D9">
+            <tspan x="360" dy="-2">Normalize</tspan>
+            <tspan x="360" dy="12">entities</tspan>
+          </text>
+          <text x="500" y="62" fontSize="9" textAnchor="middle" fill="#9A3412">
+            <tspan x="500" dy="-2">Neo4j</tspan>
+            <tspan x="500" dy="12">graph</tspan>
+          </text>
+          <text x="640" y="62" fontSize="9" textAnchor="middle" fill="#166534">
+            <tspan x="640" dy="-2">Explorer</tspan>
+            <tspan x="640" dy="12">&amp; snapshot</tspan>
+          </text>
+        </svg>
+      ),
+      diagram: (
+        <div className="how-tile__diagram how-tile__diagram--double">
+          <svg viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="16" width="56" height="28" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+            <rect x="10" y="54" width="56" height="28" rx="6" fill="#F5F3FF" stroke="#C4B5FD" />
+            <rect x="10" y="92" width="56" height="18" rx="6" fill="#F1F5F9" stroke="#CBD5E1" />
+            <circle cx="108" cy="40" r="14" fill="#FFF7ED" stroke="#FDBA74" />
+            <circle cx="130" cy="68" r="14" fill="#ECFDF3" stroke="#86EFAC" />
+            <circle cx="96" cy="78" r="14" fill="#E0F2FE" stroke="#7DD3FC" />
+            <line x1="66" y1="30" x2="92" y2="40" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="66" y1="68" x2="100" y2="78" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="66" y1="100" x2="108" y2="68" stroke="#94A3B8" strokeWidth="2" />
+          </svg>
+          <svg viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="14" width="70" height="50" rx="8" fill="#F8FAFC" stroke="#E2E8F0" />
+            <rect x="90" y="14" width="60" height="22" rx="6" fill="#ECFDF3" stroke="#86EFAC" />
+            <rect x="90" y="42" width="60" height="22" rx="6" fill="#E0F2FE" stroke="#7DD3FC" />
+            <rect x="18" y="74" width="128" height="32" rx="8" fill="#FFF7ED" stroke="#FDBA74" />
+            <circle cx="30" cy="30" r="6" fill="#94A3B8" />
+            <circle cx="46" cy="34" r="6" fill="#94A3B8" />
+            <circle cx="38" cy="48" r="6" fill="#94A3B8" />
+            <line x1="30" y1="30" x2="46" y2="34" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="38" y1="48" x2="46" y2="34" stroke="#94A3B8" strokeWidth="2" />
+          </svg>
+        </div>
+      ),
+    },
+    {
       id: 'due',
       title: translate('module.dueDiligence'),
       pill: 'Investigate',

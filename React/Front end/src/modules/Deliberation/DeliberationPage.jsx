@@ -813,11 +813,14 @@ export function DeliberationPage({
   }, [activeId])
 
   const buildQuestionnaireLink = (questionnaireType, view) => {
-    if (!activeId) return ''
-    const base = import.meta.env.BASE_URL || '/'
-    const url = new URL(base, window.location.origin)
+    if (!activeId || typeof window === 'undefined') return ''
+    const url = new URL(window.location.href)
     url.search = ''
     url.hash = ''
+    const base = import.meta.env.BASE_URL || '/'
+    if (base !== '/' && !url.pathname.startsWith(base)) {
+      url.pathname = base
+    }
     url.searchParams.set('questionnaire', questionnaireType)
     url.searchParams.set('conversation_id', activeId)
     if (view) url.searchParams.set('view', view)

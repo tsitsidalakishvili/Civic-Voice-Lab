@@ -8,10 +8,9 @@ import {
   Card,
   Divider,
   Group,
-  NavLink,
+  Menu,
   Paper,
   Progress,
-  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
@@ -23,13 +22,13 @@ import {
   Textarea,
   useMantineColorScheme,
 } from '@mantine/core'
-import { useDisclosure } from '@mantine/hooks'
 import { Spotlight, spotlight } from '@mantine/spotlight'
 import {
   IconArrowRight,
   IconBulb,
   IconChartDots,
   IconLayoutGrid,
+  IconLanguage,
   IconMessage2,
   IconMoon,
   IconSearch,
@@ -52,7 +51,7 @@ import {
 } from './modules'
 import { API_BASE, getJson, requestJson } from './services/api'
 import { LANGUAGES, createTranslator } from './i18n'
-import { CivicStatGrid, FormSection, InfoHint, LanguageSelect, PageHeader, StatusMessage } from './ui'
+import { CivicStatGrid, FormSection, LanguageSelect, PageHeader, StatusMessage } from './ui'
 import './App.css'
 
 const normalizeLanguage = (value) => {
@@ -191,6 +190,7 @@ function App() {
   const questionnaire = params.get('questionnaire')
   const conversationId =
     params.get('conversation_id') || params.get('conversation') || ''
+  const viewParam = params.get('view') || ''
   const eventRegistration = params.get('event_registration')
   const eventId = params.get('event_id')
   const campaignPublic = params.get('campaign_public')
@@ -198,9 +198,10 @@ function App() {
   const reportShare = params.get('report_share') || params.get('report')
   const isPublicEvent = eventRegistration === '1' && eventId
   const isPublicCampaign = campaignPublic === '1'
+  const isQuestionnaireView = ['mobile', 'participant', 'embed', 'admin'].includes(viewParam)
   const isQuestionnaire =
     (questionnaire && questionnaire.startsWith('deliberation')) ||
-    (conversationId && params.get('view') === 'mobile')
+    (conversationId && isQuestionnaireView)
   const isPublicReport = Boolean(reportShare)
   const isPublicView = isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport
 
@@ -457,7 +458,6 @@ function App() {
   const [feedbackSending, setFeedbackSending] = useState(false)
   const initialUrlSync = useRef(true)
   const [moduleTabs, setModuleTabs] = useState({})
-  const [navOpened, { toggle: toggleNav, close: closeNav }] = useDisclosure(false)
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
 
   const moduleIconMap = {
@@ -486,7 +486,6 @@ function App() {
         description: module.description,
         onClick: () => {
           setActiveModuleId(module.id)
-          closeNav()
         },
         leftSection: (
           <ThemeIcon color="civic" variant="light" size="sm">
@@ -494,7 +493,7 @@ function App() {
           </ThemeIcon>
         ),
       })),
-    [modules, closeNav],
+    [modules],
   )
 
   const hubStats = useMemo(() => {
@@ -709,7 +708,6 @@ function App() {
     <AppShell
       padding="md"
       header={{ height: { base: 120, md: 78 } }}
-      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !navOpened } }}
       className="app-shell app-shell--sidebar"
     >
       <Spotlight
@@ -720,166 +718,72 @@ function App() {
       />
       <AppShell.Header className="app-shell__topbar">
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap">
-            <ActionIcon
-              variant="subtle"
-              size="lg"
-              onClick={toggleNav}
-              aria-label="Toggle navigation"
-              hiddenFrom="md"
-            >
-              <IconLayoutGrid size={20} />
-            </ActionIcon>
+          <Group gap="sm" wrap="nowrap" className="topbar__current">
             <Group gap="sm" className="brand" wrap="nowrap">
               <ThemeIcon size="lg" variant="light" color="civic">
                 <IconLayoutGrid size={18} />
               </ThemeIcon>
               <div>
-                <Text fw={700}>Freedom Square</Text>
-                <Text size="xs" c="dimmed">
+                <Text fw={700} className="brand__title">
+                  Freedom Square
+                </Text>
+                <Text size="xs" c="dimmed" className="brand__subtitle">
                   Civic Engagement Suite
                 </Text>
               </div>
             </Group>
-            <Badge variant="light" color="civic">
-              {activeModule ? activeModule.label : 'Module hub'}
-            </Badge>
+            <div className="topbar__center">
+              <Badge variant="light" color="civic">
+                {activeModule ? activeModule.label : 'Module hub'}
+              </Badge>
+              {activeModule ? (
+                <Button variant="light" size="xs" onClick={() => setActiveModuleId(null)}>
+                  Back to Modules
+                </Button>
+              ) : null}
+            </div>
           </Group>
-          <Group gap="sm" wrap="nowrap">
+          <Group
+            gap="sm"
+            wrap="nowrap"
+            className="topbar__actions topbar__actions--right"
+          >
             <Tooltip label="Search modules">
               <ActionIcon variant="light" size="lg" onClick={() => spotlight.open()}>
                 <IconSearch size={18} />
               </ActionIcon>
             </Tooltip>
-            <LanguageSelect
-              className="language-select--topbar"
-              language={language}
-              onLanguageChange={(value) => setLanguage(value)}
-              languages={LANGUAGES}
-              label={t('language.label')}
-              hideLabel
-            />
-            {activeModule ? (
-              <Button variant="light" onClick={() => setActiveModuleId(null)}>
-                Back to Modules
-              </Button>
-            ) : null}
+            <Tooltip label="How it works">
+              <ActionIcon
+                variant="light"
+                size="lg"
+                onClick={() => setActiveModuleId('how-it-works')}
+              >
+                <IconBulb size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Tooltip label={t('language.label')}>
+                  <ActionIcon variant="light" size="md">
+                    <IconLanguage size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {LANGUAGES.map((lang) => (
+                  <Menu.Item
+                    key={lang.id}
+                    onClick={() => setLanguage(lang.id)}
+                  >
+                    {lang.label}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Navbar p="md" className="app-shell__navbar">
-        <AppShell.Section grow component={ScrollArea} offsetScrollbars>
-          {activeModule ? (
-            <Stack gap="md">
-              <Paper className="module-view__card">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                  Flow
-                </Text>
-                <Text fw={600}>
-                  {activeModuleConfig?.flowTitle ||
-                    activeModuleConfig?.title ||
-                    activeModule?.label}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {activeModuleConfig?.flowSummary ||
-                    activeModuleConfig?.description ||
-                    activeModule?.description}
-                </Text>
-              </Paper>
-              <Divider label="Sections" />
-              <Stack gap="xs">
-                {(activeModuleConfig?.sections || []).map((item) => {
-                  const isActive =
-                    item.type === 'tab' && moduleTabs[activeModuleId] === item.value
-                  return (
-                    <NavLink
-                      key={`${item.label}-${item.value}`}
-                      active={isActive}
-                      label={item.label}
-                      description={item.hint}
-                      onClick={() => {
-                        if (item.type === 'tab') {
-                          handleModuleTabChange(activeModuleId, item.value)
-                        }
-                        if (item.type === 'anchor') {
-                          scrollToAnchor(item.value)
-                        }
-                      }}
-                      leftSection={
-                        <ThemeIcon variant="light" color="civic" size="sm">
-                          <IconArrowRight size={14} />
-                        </ThemeIcon>
-                      }
-                      rightSection={item.hint ? <InfoHint text={item.hint} /> : null}
-                    />
-                  )
-                })}
-              </Stack>
-            </Stack>
-          ) : (
-            <Stack gap="md">
-              {recentModules.length ? (
-                <Paper className="module-view__card">
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    Recent
-                  </Text>
-                  <Text fw={600}>Continue where you left off</Text>
-                  <Stack gap="xs" mt="sm">
-                    {recentModules.map((module) => (
-                      <NavLink
-                        key={`recent-${module.id}`}
-                        label={module.label}
-                        description={module.description}
-                        onClick={() => {
-                          setActiveModuleId(module.id)
-                          closeNav()
-                        }}
-                        leftSection={
-                          <ThemeIcon variant="light" color="civic" size="sm">
-                            {renderModuleIcon(module.id, 14)}
-                          </ThemeIcon>
-                        }
-                        rightSection={<IconArrowRight size={14} />}
-                      />
-                    ))}
-                  </Stack>
-                </Paper>
-              ) : null}
-
-              <Paper className="module-view__card">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                  Find anything
-                </Text>
-                <Text fw={600}>Search modules and actions</Text>
-                <Text size="sm" c="dimmed">
-                  Use Spotlight to jump to any workflow.
-                </Text>
-                <TextInput
-                  placeholder="Search (press / or Cmd+K)"
-                  leftSection={<IconSearch size={14} />}
-                  onFocus={() => spotlight.open()}
-                  readOnly
-                />
-                <Group gap="sm" mt="sm">
-                  <Button
-                    variant="light"
-                    size="xs"
-                    onClick={() => {
-                      setActiveModuleId('how-it-works')
-                      closeNav()
-                    }}
-                  >
-                    Open guide
-                  </Button>
-                  <Button variant="subtle" size="xs" onClick={() => spotlight.open()}>
-                    Open search
-                  </Button>
-                </Group>
-              </Paper>
-            </Stack>
-          )}
-        </AppShell.Section>
-      </AppShell.Navbar>
       <AppShell.Main>
         {!activeModule ? (
           <Stack gap="lg">
@@ -888,7 +792,11 @@ function App() {
                 <h1>Pick a module</h1>
                 <p className="muted">Choose where you want to work right now.</p>
               </div>
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+              <SimpleGrid
+                cols={{ base: 1, sm: 3 }}
+                spacing="md"
+                className="module-tiles"
+              >
                 {hubModules.map((module) => (
                   <Card
                     key={module.id}
@@ -929,22 +837,64 @@ function App() {
             </div>
           </Stack>
         ) : (
-          <div className="module-panel">
-            <PageHeader
-              className="page-header--hero"
-              title={pageTitle}
-              description={pageDescription}
-              eyebrow={pageEyebrow}
-            />
-            <ActiveComponent
-              t={t}
-              language={language}
-              activeTabOverride={moduleTabs[activeModuleId]}
-              onTabChange={(tabValue) => handleModuleTabChange(activeModuleId, tabValue)}
-              activeViewOverride={moduleTabs[activeModuleId]}
-              onViewChange={(viewValue) => handleModuleTabChange(activeModuleId, viewValue)}
-              showTabs={false}
-            />
+          <div className="module-view">
+            <aside className="module-view__sidebar">
+              <div className="module-view__card">
+                <span className="module-view__eyebrow">Active module</span>
+                <h3>{activeModuleConfig?.title || activeModule?.label}</h3>
+                <p className="muted">
+                  {activeModuleConfig?.description || activeModule?.description}
+                </p>
+              </div>
+              {activeModuleConfig?.sections?.length ? (
+                <div className="module-view__card">
+                  <span className="module-nav__title">Sections</span>
+                  <div className="module-view__sections">
+                    {activeModuleConfig.sections.map((section) => {
+                      const isActive =
+                        section.type === 'tab' &&
+                        moduleTabs[activeModuleId] === section.value
+                      return (
+                        <button
+                          key={`${activeModuleId}-${section.value}`}
+                          type="button"
+                          className={`module-view__section ${
+                            isActive ? 'module-view__section--active' : ''
+                          }`}
+                          onClick={() => {
+                            if (section.type === 'tab') {
+                              handleModuleTabChange(activeModuleId, section.value)
+                            } else if (section.type === 'anchor') {
+                              scrollToAnchor(section.value)
+                            }
+                          }}
+                        >
+                          <span>{section.label}</span>
+                          {section.hint ? <span className="muted">{section.hint}</span> : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </aside>
+            <div className="module-panel">
+              <PageHeader
+                className="page-header--hero"
+                title={pageTitle}
+                description={pageDescription}
+                eyebrow={pageEyebrow}
+              />
+              <ActiveComponent
+                t={t}
+                language={language}
+                activeTabOverride={moduleTabs[activeModuleId]}
+                onTabChange={(tabValue) => handleModuleTabChange(activeModuleId, tabValue)}
+                activeViewOverride={moduleTabs[activeModuleId]}
+                onViewChange={(viewValue) => handleModuleTabChange(activeModuleId, viewValue)}
+                showTabs={false}
+              />
+            </div>
           </div>
         )}
       </AppShell.Main>
@@ -1233,6 +1183,25 @@ function DeliberationQuestionnaire({
     [inviteCode, participantId],
   )
 
+  const emitEmbedEvent = useCallback(
+    (event, payload = {}) => {
+      if (typeof window === 'undefined') return
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(
+          {
+            type: 'fs_survey_event',
+            event,
+            conversation_id: conversationId,
+            participant_id: participantId,
+            ...payload,
+          },
+          '*',
+        )
+      }
+    },
+    [conversationId, participantId],
+  )
+
   const loadQueue = useCallback(
     async ({ reset = false, extraVotedIds = [] } = {}) => {
       if (!conversationId) return
@@ -1393,25 +1362,6 @@ function DeliberationQuestionnaire({
     }
   }
 
-  const emitEmbedEvent = useCallback(
-    (event, payload = {}) => {
-      if (typeof window === 'undefined') return
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage(
-          {
-            type: 'fs_survey_event',
-            event,
-            conversation_id: conversationId,
-            participant_id: participantId,
-            ...payload,
-          },
-          '*',
-        )
-      }
-    },
-    [conversationId, participantId],
-  )
-
   useEffect(() => {
     if (!conversationId) return
     emitEmbedEvent('view', { invite: inviteCode || null })
@@ -1503,6 +1453,7 @@ function DeliberationQuestionnaire({
   const handlePointerDown = (event) => {
     if (votingDisabled) return
     if (event.button !== undefined && event.button !== 0) return
+    event.preventDefault()
     beginDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -1524,6 +1475,7 @@ function DeliberationQuestionnaire({
     if (votingDisabled) return
     const touch = event.touches?.[0]
     if (!touch) return
+    event.preventDefault()
     beginDrag(touch.clientX, touch.clientY, 'touch')
   }
 
@@ -1531,6 +1483,9 @@ function DeliberationQuestionnaire({
     if (supportsPointerEvents) return
     const touch = event.touches?.[0]
     if (!touch) return
+    if (dragTypeRef.current === 'touch') {
+      event.preventDefault()
+    }
     updateDrag(touch.clientX, touch.clientY, 'touch')
   }
 
@@ -1544,6 +1499,7 @@ function DeliberationQuestionnaire({
     if (supportsPointerEvents) return
     if (votingDisabled) return
     if (event.button !== 0) return
+    event.preventDefault()
     beginDrag(event.clientX, event.clientY, 'mouse')
   }
 
@@ -1556,6 +1512,55 @@ function DeliberationQuestionnaire({
     if (supportsPointerEvents) return
     endDrag(event.clientX, event.clientY, 'mouse')
   }
+
+  useEffect(() => {
+    if (supportsPointerEvents) {
+      const handleWindowPointerMove = (event) => {
+        updateDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
+      }
+      const handleWindowPointerEnd = (event) => {
+        endDrag(event.clientX, event.clientY, 'pointer', event.pointerId)
+      }
+      window.addEventListener('pointermove', handleWindowPointerMove)
+      window.addEventListener('pointerup', handleWindowPointerEnd)
+      window.addEventListener('pointercancel', handleWindowPointerEnd)
+      return () => {
+        window.removeEventListener('pointermove', handleWindowPointerMove)
+        window.removeEventListener('pointerup', handleWindowPointerEnd)
+        window.removeEventListener('pointercancel', handleWindowPointerEnd)
+      }
+    }
+    const handleWindowMouseMove = (event) => {
+      updateDrag(event.clientX, event.clientY, 'mouse')
+    }
+    const handleWindowMouseUp = (event) => {
+      endDrag(event.clientX, event.clientY, 'mouse')
+    }
+    const handleWindowTouchMove = (event) => {
+      const touch = event.touches?.[0]
+      if (!touch) return
+      if (dragTypeRef.current === 'touch') {
+        event.preventDefault()
+      }
+      updateDrag(touch.clientX, touch.clientY, 'touch')
+    }
+    const handleWindowTouchEnd = (event) => {
+      const touch = event.changedTouches?.[0]
+      endDrag(touch?.clientX, touch?.clientY, 'touch')
+    }
+    window.addEventListener('mousemove', handleWindowMouseMove)
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('touchmove', handleWindowTouchMove, { passive: false })
+    window.addEventListener('touchend', handleWindowTouchEnd)
+    window.addEventListener('touchcancel', handleWindowTouchEnd)
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove)
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('touchmove', handleWindowTouchMove)
+      window.removeEventListener('touchend', handleWindowTouchEnd)
+      window.removeEventListener('touchcancel', handleWindowTouchEnd)
+    }
+  }, [endDrag, supportsPointerEvents, updateDrag])
 
   return (
     <section className={`delib-questionnaire ${isEmbed ? 'delib-questionnaire--embed' : ''}`}>
