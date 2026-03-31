@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 class ConversationCreate(BaseModel):
     topic: str = Field(..., min_length=3)
     description: Optional[str] = None
+    initial_statements: List[str] = Field(default_factory=list)
     is_open: bool = True
     allow_comment_submission: bool = True
     allow_viz: bool = True

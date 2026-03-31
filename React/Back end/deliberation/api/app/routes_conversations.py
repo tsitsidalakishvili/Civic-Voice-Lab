@@ -44,6 +44,9 @@ def create_conversation(payload: ConversationCreate):
     convo_id = str(uuid4())
     moderation_profile = payload.moderation_profile or "lazy"
     moderation_required = payload.moderation_required or moderation_profile == "strict"
+    initial_statements = [str(text).strip() for text in (payload.initial_statements or [])]
+    initial_statements = [text for text in initial_statements if text]
+    statement_rows = [{"id": str(uuid4()), "text": text} for text in initial_statements]
     driver = get_driver()
     query = """
     CREATE (c:Conversation {
@@ -89,6 +92,24 @@ def create_conversation(payload: ConversationCreate):
         record = records[0] if records else None
         if record is None:
             raise HTTPException(status_code=500, detail="Conversation creation failed")
+        if statement_rows:
+            _execute_write(
+                session,
+                """
+                MATCH (c:Conversation {id: $cid})
+                UNWIND $items AS item
+                CREATE (cm:Comment {
+                    id: item.id,
+                    text: item.text,
+                    createdAt: datetime(),
+                    status: "approved",
+                    isSeed: true,
+                    authorHash: "seed"
+                })
+                CREATE (c)-[:HAS_COMMENT]->(cm)
+                """,
+                {"cid": convo_id, "items": statement_rows},
+            )
         convo = _node_to_dict(record["c"])
     return _conversation_out(convo)
 

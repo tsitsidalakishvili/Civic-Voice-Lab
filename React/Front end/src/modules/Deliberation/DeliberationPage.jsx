@@ -236,7 +236,7 @@ export function DeliberationPage({
       window.localStorage.getItem(DELIBERATION_TAB_STORAGE_KEY),
     )
   })
-  const [setupMode, setSetupMode] = useState('')
+  const [setupMode, setSetupMode] = useState('new')
   const [publicReportLinks, setPublicReportLinks] = useState({})
   const applyActiveTab = (nextTab) => {
     const normalized = normalizeDeliberationTab(nextTab)
@@ -256,6 +256,7 @@ export function DeliberationPage({
   const [createForm, setCreateForm] = useState({
     topic: '',
     description: '',
+    initialStatements: '',
     allowCommentSubmission: true,
     allowViz: true,
     moderationProfile: 'lazy',
@@ -1080,6 +1081,10 @@ export function DeliberationPage({
       setConvoError('Topic must be at least 3 characters.')
       return
     }
+    const initialStatements = createForm.initialStatements
+      .split('\n')
+      .map((line) => sanitizeStatement(line))
+      .filter(Boolean)
     setConvoError('')
     try {
       const created = await requestJson('/conversations', {
@@ -1087,6 +1092,7 @@ export function DeliberationPage({
         payload: {
           topic: createForm.topic.trim(),
           description: createForm.description.trim(),
+          initial_statements: initialStatements,
           allow_comment_submission: createForm.allowCommentSubmission,
           allow_viz: createForm.allowViz,
           moderation_required: createForm.moderationProfile === 'strict',
@@ -1103,6 +1109,7 @@ export function DeliberationPage({
       setCreateForm({
         topic: '',
         description: '',
+        initialStatements: '',
         allowCommentSubmission: true,
         allowViz: true,
         moderationProfile: 'lazy',
@@ -2259,6 +2266,20 @@ export function DeliberationPage({
                 />
               </div>
               <div className="form-grid__full">
+                <label className="label">Statements for voting cards</label>
+                <textarea
+                  className="textarea"
+                  placeholder={'Add one statement per line.\nThese become participant voting cards.'}
+                  value={createForm.initialStatements}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      initialStatements: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="form-grid__full">
                 <textarea
                   className="textarea"
                   placeholder="Description"
@@ -2471,6 +2492,22 @@ export function DeliberationPage({
                             }))
                           }
                         />
+                      </div>
+                      <div className="form-grid__full">
+                        <label className="label">Statements for voting cards</label>
+                        <textarea
+                          className="textarea"
+                          placeholder={'Add one statement per line.\nThese become participant voting cards.'}
+                          value={seedText}
+                          onChange={(event) => setSeedText(event.target.value)}
+                        />
+                        <div className="filter-row">
+                          <button className="button-secondary" type="button" onClick={handleSeedComments}>
+                            Add statements
+                          </button>
+                          <span className="muted">Adds statements to the selected conversation.</span>
+                        </div>
+                        {seedStatus ? <p className="muted">{seedStatus}</p> : null}
                       </div>
                       <div className="field">
                         <label className="label">Moderation profile</label>
