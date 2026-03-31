@@ -3,7 +3,7 @@ import { Accordion, Timeline } from '@mantine/core'
 import { IconChartDots, IconTarget, IconUsers } from '@tabler/icons-react'
 import { CivicStatGrid } from '../../ui'
 
-export function HowItWorksPage({ t }) {
+export function HowItWorksPage({ t, showIntro = true }) {
   const translate = t || ((key) => key)
   const [activeTile, setActiveTile] = useState('network')
   const [expandedTile, setExpandedTile] = useState('')
@@ -53,7 +53,7 @@ export function HowItWorksPage({ t }) {
         </>
       ),
       detailIntro:
-        'Capture people, volunteers, tasks, and events so outreach is coordinated from a single hub.',
+        'Capture people, volunteers, and events so outreach is coordinated from a single hub.',
       details: [
         {
           title: 'Inputs',
@@ -61,7 +61,6 @@ export function HowItWorksPage({ t }) {
             'People and supporters',
             'Volunteers and skills',
             'Events and attendance',
-            'Tasks and follow-ups',
             'Furry friends directory',
           ],
         },
@@ -69,7 +68,6 @@ export function HowItWorksPage({ t }) {
           title: 'Actions',
           items: [
             'Segment and filter groups',
-            'Assign owners and tasks',
             'Track outreach activity',
             'Plan events and attendance',
           ],
@@ -128,8 +126,8 @@ export function HowItWorksPage({ t }) {
             <tspan x="360" dy="12">&amp; Events</tspan>
           </text>
           <text x="500" y="62" fontSize="9" textAnchor="middle" fill="#9A3412">
-            <tspan x="500" dy="-2">Tasks</tspan>
-            <tspan x="500" dy="12">&amp; Follow-up</tspan>
+            <tspan x="500" dy="-2">Lists</tspan>
+            <tspan x="500" dy="12">&amp; Activation</tspan>
           </text>
           <text x="640" y="62" fontSize="9" textAnchor="middle" fill="#166534">
             <tspan x="640" dy="-2">Dashboard</tspan>
@@ -149,7 +147,7 @@ export function HowItWorksPage({ t }) {
               People
             </text>
             <text x="95" y="36" fontSize="9" textAnchor="middle" fill="#1E3A8A">
-              Tasks
+              Lists
             </text>
             <text x="135" y="36" fontSize="9" textAnchor="middle" fill="#1E3A8A">
               Out
@@ -183,7 +181,7 @@ export function HowItWorksPage({ t }) {
       pill: 'Plan',
       desc: translate('module.campaigns.desc'),
       detailIntro:
-        'Turn topics into statements, launch surveys, and convert insights into tasks.',
+        'Turn topics into statements, launch surveys, and convert insights into campaign updates.',
       details: [
         {
           title: 'Inputs',
@@ -200,7 +198,6 @@ export function HowItWorksPage({ t }) {
             'Generate statements',
             'Launch survey flow',
             'Moderate feedback',
-            'Assign tasks',
           ],
         },
         {
@@ -209,7 +206,7 @@ export function HowItWorksPage({ t }) {
             'Final statements',
             'Consensus insights',
             'Action plan',
-            'Campaign tasks',
+            'Campaign updates',
           ],
         },
         {
@@ -874,6 +871,20 @@ export function HowItWorksPage({ t }) {
 
   return (
     <section className="module">
+      {showIntro ? (
+        <div className="module-card module-card__wide section-intro" id="how-overview">
+          <div className="card-header">
+            <div>
+              <h3>{translate('module.howItWorks')}</h3>
+              <p className="muted">{translate('module.howItWorks.desc')}</p>
+            </div>
+            <div className="pill">Overview</div>
+          </div>
+        </div>
+      ) : (
+        <div id="how-overview" />
+      )}
+
       <CivicStatGrid
         title="Platform pulse"
         description="A civic operating system built for trust, speed, and transparency."
@@ -899,7 +910,7 @@ export function HowItWorksPage({ t }) {
           </p>
         </div>
 
-        <div className="module-card module-card__wide">
+        <div className="module-card module-card__wide" id="how-modules">
           <h3>How each module works</h3>
           <div className="how-tile-grid">
             {tiles.map((tile) => (
@@ -918,7 +929,7 @@ export function HowItWorksPage({ t }) {
           </div>
         </div>
       </div>
-      <Accordion variant="separated" radius="lg">
+      <Accordion variant="separated" radius="lg" id="how-faq">
         <Accordion.Item value="trust">
           <Accordion.Control>How does this build trust?</Accordion.Control>
           <Accordion.Panel>

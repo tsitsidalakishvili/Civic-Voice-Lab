@@ -1,74 +1,35 @@
-import os
 import logging
+from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
-load_dotenv(
-    dotenv_path=os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
-    ),
-    override=True,
-)
-
+from .api.router import router as api_router
+from .core.auth import OptionalAuthMiddleware
+from .core.config import get_settings
+from .core.env import load_backend_env
 from .db import close_driver, db_health, init_constraints
-from .routes import router
-from .routes_crm import router as crm_router
-from .routes_due_diligence import router as dd_router
-from .routes_audience_discovery import router as audience_router
-from .routes_data_hub import router as data_hub_router
-from .routes_deliberation_extra import router as delib_extra_router
 
 logger = logging.getLogger(__name__)
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+load_backend_env(BACKEND_ROOT)
+settings = get_settings()
 
-app = FastAPI(title="Polis-style Deliberation API")
-
-cors_origins = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-    "http://127.0.0.1:5176",
-]
-custom_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-custom_origin_regex = str(os.getenv("CORS_ORIGIN_REGEX", "")).strip()
-cors_origin_regex = (
-    r"^https?://("
-    r"localhost|127\.0\.0\.1|"
-    r"10\.\d+\.\d+\.\d+|"
-    r"192\.168\.\d+\.\d+|"
-    r"172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|"
-    r"[a-z0-9-]+\.vercel\.app"
-    r")(:\d+)?$"
-)
-if custom_origins:
-    cors_origins = custom_origins
-if custom_origin_regex:
-    cors_origin_regex = custom_origin_regex
+app = FastAPI(title=settings.app_title)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_origin_regex=cors_origin_regex,
+    allow_origins=list(settings.cors_origins),
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(OptionalAuthMiddleware)
 
-app.include_router(router)
-app.include_router(delib_extra_router, prefix="/deliberation", tags=["deliberation"])
-app.include_router(crm_router, prefix="/crm", tags=["crm"])
-app.include_router(dd_router, prefix="/due-diligence", tags=["due-diligence"])
-app.include_router(
-    audience_router, prefix="/audience-discovery", tags=["audience-discovery"]
-)
-app.include_router(data_hub_router, prefix="/data-hub", tags=["data-hub"])
+app.include_router(api_router)
 
 
 @app.get("/")
@@ -78,6 +39,7 @@ def root():
         "status": "ok",
         "docs": "/docs",
         "health": "/healthz",
+        "auth_enabled": settings.auth_enabled,
     }
 
 
@@ -114,6 +76,8 @@ def on_startup():
         app.state.db_bootstrap_ok = False
         app.state.db_bootstrap_error = str(exc)
         logger.exception("Deliberation startup: Neo4j initialization failed: %s", exc)
+    if settings.auth_enabled and not settings.auth_secret_configured:
+        logger.warning("Freedom Square auth is enabled but no auth secret is configured.")
 
 
 @app.on_event("shutdown")

@@ -84,6 +84,31 @@ class CommentUpdate(BaseModel):
     is_seed: Optional[bool] = None
 
 
+class StatementDiscussionCommentCreate(BaseModel):
+    text: str = Field(..., min_length=1)
+    author_id: Optional[str] = None
+
+
+class StatementDiscussionReactionCreate(BaseModel):
+    reaction: str = Field(..., pattern="^(like|agree|disagree|insightful)$")
+    author_id: Optional[str] = None
+
+
+class StatementDiscussionCommentOut(BaseModel):
+    id: str
+    statement_id: str
+    conversation_id: str
+    text: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    author_hash: Optional[str] = None
+    like_count: int = 0
+    agree_count: int = 0
+    disagree_count: int = 0
+    insightful_count: int = 0
+    my_reaction: Optional[str] = None
+
+
 class SeedCommentsRequest(BaseModel):
     comments: List[str]
 

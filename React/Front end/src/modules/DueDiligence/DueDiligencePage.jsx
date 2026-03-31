@@ -9,9 +9,10 @@ export function DueDiligencePage({
   activeTabOverride,
   onTabChange,
   showTabs = true,
+  showIntro = true,
 }) {
   const translate = t || ((key, vars) => key)
-  const [activeTab, setActiveTab] = useState('analysis')
+  const [activeTab, setActiveTab] = useState('overview')
   const applyActiveTab = (nextTab) => {
     if (!nextTab) return
     setActiveTab(nextTab)
@@ -995,706 +996,749 @@ export function DueDiligencePage({
 
   return (
     <section className="module">
-      <details className="dashboard-detail">
-        <summary>Risk pipeline stats</summary>
-        <div className="dashboard-detail__body">
-          <div className="module-header__meta">
-            <div className="module-header__metric">
-              <span>Competitors</span>
-              <strong>{summary?.competitors ?? '—'}</strong>
+      <div className={showTabs ? 'module-layout' : 'module-layout module-layout--stacked'}>
+        <aside className="module-sidebar">
+          <div className="sidebar-card">
+            <h3>Start a new case</h3>
+            <p className="muted">Capture the subject and assign ownership.</p>
+            <div className="filter-row">
+              <input
+                className="input"
+                placeholder="Subject name"
+                value={caseSubject}
+                onChange={(event) => setCaseSubject(event.target.value)}
+              />
+              <select
+                className="select"
+                value={caseSubjectType}
+                onChange={(event) => setCaseSubjectType(event.target.value)}
+              >
+                <option value="Person">Person</option>
+                <option value="Organization">Organization</option>
+              </select>
+              <input
+                className="input"
+                placeholder="Owner (optional)"
+                value={newCaseOwner}
+                onChange={(event) => setNewCaseOwner(event.target.value)}
+              />
+              <select
+                className="select"
+                value={newCaseStatus}
+                onChange={(event) => setNewCaseStatus(event.target.value)}
+              >
+                {caseStatusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button"
+                type="button"
+                onClick={handleCreateCase}
+                disabled={caseCreating}
+              >
+                {caseCreating ? 'Creating…' : 'Create case'}
+              </button>
             </div>
-            <div className="module-header__metric">
-              <span>Network People</span>
-              <strong>{crmSummary?.total_people ?? '—'}</strong>
-            </div>
-            <div className="module-header__metric">
-              <span>Supporters</span>
-              <strong>{crmSummary?.supporters ?? '—'}</strong>
-            </div>
+            {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
           </div>
-        </div>
-      </details>
 
-      <CivicStatGrid
-        title="Risk intelligence pulse"
-        description="Signals across competitors, watchlists, and internal matches."
-        items={duePulseStats}
-      />
-
-      <Card className="module-card module-card__wide">
-        <Group justify="space-between" align="center" wrap="wrap">
-          <div>
-            <Text fw={600}>Analysis pipeline</Text>
-            <Text size="sm" c="dimmed">
-              Progress across internal checks and external sources.
-            </Text>
-          </div>
-          <RingProgress
-            size={86}
-            thickness={8}
-            roundCaps
-            sections={[{ value: analysisProgress, color: 'civic' }]}
-            label={
-              <Text size="sm" fw={600} ta="center">
-                {analysisProgress}%
-              </Text>
-            }
-          />
-        </Group>
-      </Card>
-
-      {error ? <div className="module-alert">{error}</div> : null}
-
-      {showTabs ? (
-        <div className="subtabs">
-          {[
-            { id: 'how-it-works', label: translate('dueDiligence.tabs.how') },
-            { id: 'configure', label: translate('dueDiligence.tabs.configure') },
-            { id: 'analysis', label: translate('dueDiligence.tabs.analysis') },
-            { id: 'debate-prep', label: translate('dueDiligence.tabs.debate') },
-            { id: 'launch', label: translate('dueDiligence.tabs.launch') },
-            { id: 'watchlist', label: translate('dueDiligence.tabs.watchlist') },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-              onClick={() => applyActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {activeTab === 'how-it-works' && (
-        <details className="dashboard-detail">
-          <summary>How the workflow runs</summary>
-          <div className="dashboard-detail__body">
-            <InfoBox
-              title="Workflow overview"
-              summary="Choose a subject → Check internal sources → Run external analysis → Review report."
-              hint="Use the Watchlist tab for repeat subjects, and Launch to open the external DD app."
-            />
-          </div>
-        </details>
-      )}
-
-      {activeTab === 'analysis' && (
-        <div className="stack">
-          <div className="module-card module-card__wide section-intro">
+          <div className="sidebar-card">
             <div className="card-header">
               <div>
-                <h3>Case workspace</h3>
-                <p className="muted">
-                  Create a case, run checks, and capture a decision.
-                </p>
+                <h3>Cases</h3>
+                <p className="muted">Select a case to open the workspace.</p>
               </div>
-              <div className="pill">Case flow</div>
+              <button className="button-secondary" type="button" onClick={loadCases}>
+                Refresh
+              </button>
             </div>
-            <InfoBox
-              title="Workflow"
-              summary="Intake → Internal checks → External analysis → Decision"
-              hint="Use Watchlist for repeat subjects and Launch for the external DD app."
-            />
-          </div>
-
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>Start a new case</h3>
-              <p className="muted">Capture the subject and assign ownership.</p>
-              <div className="filter-row">
-                <input
-                  className="input"
-                  placeholder="Subject name"
-                  value={caseSubject}
-                  onChange={(event) => setCaseSubject(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={caseSubjectType}
-                  onChange={(event) => setCaseSubjectType(event.target.value)}
-                >
-                  <option value="Person">Person</option>
-                  <option value="Organization">Organization</option>
-                </select>
-                <input
-                  className="input"
-                  placeholder="Owner (optional)"
-                  value={newCaseOwner}
-                  onChange={(event) => setNewCaseOwner(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={newCaseStatus}
-                  onChange={(event) => setNewCaseStatus(event.target.value)}
-                >
-                  {caseStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleCreateCase}
-                  disabled={caseCreating}
-                >
-                  {caseCreating ? 'Creating…' : 'Create case'}
-                </button>
+            {casesError ? <div className="module-alert">{casesError}</div> : null}
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Subject</span>
+                <span>Status</span>
+                <span>Risk</span>
+                <span>Updated</span>
               </div>
-              {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+              {casesLoading ? (
+                <div className="table-row empty">Loading cases…</div>
+              ) : cases.length === 0 ? (
+                <div className="table-row empty">No cases yet.</div>
+              ) : (
+                cases.map((row) => (
+                  <button
+                    className={`table-row table-row__button${
+                      activeCaseId === row.caseId ? ' is-active' : ''
+                    }`}
+                    type="button"
+                    key={row.caseId}
+                    onClick={() => handleSelectCase(row.caseId)}
+                  >
+                    <span>{row.subject || '—'}</span>
+                    <span>{row.status || 'Draft'}</span>
+                    <span>{row.lastRiskLevel || '—'}</span>
+                    <span>{row.updatedAt || row.createdAt || '—'}</span>
+                  </button>
+                ))
+              )}
             </div>
-
-            <div className="module-card">
-              <div className="card-header">
-                <div>
-                  <h3>Cases</h3>
-                  <p className="muted">Select a case to run checks.</p>
-                </div>
-                <button className="button-secondary" type="button" onClick={loadCases}>
-                  Refresh
-                </button>
-              </div>
-              {casesError ? <div className="module-alert">{casesError}</div> : null}
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Subject</span>
-                  <span>Status</span>
-                  <span>Risk</span>
-                  <span>Updated</span>
-                </div>
-                {casesLoading ? (
-                  <div className="table-row empty">Loading cases…</div>
-                ) : cases.length === 0 ? (
-                  <div className="table-row empty">No cases yet.</div>
-                ) : (
-                  cases.map((row) => (
-                    <button
-                      className={`table-row table-row__button${
-                        activeCaseId === row.caseId ? ' is-active' : ''
-                      }`}
-                      type="button"
-                      key={row.caseId}
-                      onClick={() => handleSelectCase(row.caseId)}
-                    >
-                      <span>{row.subject || '—'}</span>
-                      <span>{row.status || 'Draft'}</span>
-                      <span>{row.lastRiskLevel || '—'}</span>
-                      <span>{row.updatedAt || row.createdAt || '—'}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-              <div className="module-footer">
-                <span>
-                  {activeCaseId
-                    ? `Active case: ${activeCase?.subject || '—'}`
-                    : 'No case selected.'}
-                </span>
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={handleClearCase}
-                  disabled={!activeCaseId}
-                >
-                  Clear selection
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Start a due diligence check</h3>
-                <p className="muted">
-                  Choose a subject, run internal checks, then run external analysis.
-                </p>
-              </div>
-            </div>
-            {!activeCaseId ? (
-              <div className="module-alert">
-                No case selected yet. Create a case above or run analysis to auto-create
-                a draft case.
-              </div>
-            ) : null}
-            {activeCaseId ? (
-              <div className="module-alert module-alert--success">
-                Active case: {activeCase?.subject || '—'} · {caseStatus}
-              </div>
-            ) : null}
-            <InfoBox
-              title="Quick steps"
-              summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
-              hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
-            />
-            {(companyCandidate || personCandidate) && (
-              <>
-                <div className="card-divider">
-                  <h4>Suggested from watchlist</h4>
-                </div>
-                <div className="module-footer">
-                  <span>
-                    <strong>Company</strong>{' '}
-                    {companyCandidate?.name ? companyCandidate.name : '—'}
-                  </span>
-                  <span>
-                    <strong>Person</strong>{' '}
-                    {personCandidate?.name ? personCandidate.name : '—'}
-                  </span>
-                  {companyCandidate ? (
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleUseWatchlist(companyCandidate)}
-                    >
-                      Use company
-                    </button>
-                  ) : null}
-                  {personCandidate ? (
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleUseWatchlist(personCandidate)}
-                    >
-                      Use person
-                    </button>
-                  ) : null}
-                </div>
-              </>
-            )}
-          <div className="filter-row">
-            <input
-              className="input"
-              placeholder="Enter person or organization"
-              value={subjectName}
-              onChange={(event) => setSubjectName(event.target.value)}
-              disabled={Boolean(activeCaseId)}
-            />
-            <select
-              className="select"
-              value={subjectType}
-              onChange={(event) => setSubjectType(event.target.value)}
-              disabled={Boolean(activeCaseId)}
-            >
-              <option value="Person">Person</option>
-              <option value="Organization">Organization</option>
-            </select>
-            <button
-              className="button"
-              type="button"
-              onClick={runInternalChecks}
-            >
-              Check internal records
-            </button>
-            {activeCaseId ? (
+            <div className="module-footer">
+              <span>
+                {activeCaseId
+                  ? `Active case: ${activeCase?.subject || '—'}`
+                  : 'No case selected.'}
+              </span>
               <button
                 className="button-secondary"
                 type="button"
                 onClick={handleClearCase}
+                disabled={!activeCaseId}
               >
-                Change subject
+                Clear selection
               </button>
-            ) : null}
+            </div>
           </div>
-          <p className="muted">Internal checks look at Network + watchlist for matches.</p>
+        </aside>
 
-          <div className="metric-row">
-            <span>Active subject</span>
-            <strong>
-              {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
-            </strong>
-          </div>
-          <div className="metric-row">
-            <span>Subject status</span>
-            <strong>{subjectStatus}</strong>
-          </div>
-          {activeCaseId ? (
-            <div className="metric-row">
-              <span>Case status</span>
-              <strong>{caseStatus}</strong>
+        <div className="module-main">
+          {showIntro ? (
+            <div className="module-card module-card__wide section-intro">
+              <div className="card-header">
+                <div>
+                  <h3>{translate('dueDiligence.header.title')}</h3>
+                  <p className="muted">{translate('dueDiligence.header.subtitle')}</p>
+                </div>
+                <div className="pill">Due Diligence</div>
+              </div>
             </div>
           ) : null}
 
-          <div className="card-divider">
-            <h4>Internal checks</h4>
-          </div>
-          <details className="dashboard-detail" open>
-            <summary>Network matches ({crmMatches.length})</summary>
-            <div className="dashboard-detail__body">
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Name</span>
-                  <span>Email</span>
-                  <span>Group</span>
-                  <span>Time</span>
-                </div>
-                {!subjectName.trim() ? (
-                  <div className="table-row empty">Enter a subject to see matches.</div>
-                ) : !internalChecksRan ? (
-                  <div className="table-row empty">Run internal checks to see matches.</div>
-                ) : crmMatches.length === 0 ? (
-                  <div className="table-row empty">No Network matches.</div>
-                ) : (
-                  crmMatches.slice(0, 12).map((row, idx) => (
-                    <div className="table-row" key={`${row.email || 'match'}-${idx}`}>
-                      <span>{row.fullName || row.email}</span>
-                      <span>{row.email}</span>
-                      <span>{row.group || '—'}</span>
-                      <span>{row.timeAvailability || 'Unspecified'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </details>
+          {error ? <div className="module-alert">{error}</div> : null}
 
-          <details className="dashboard-detail" open>
-            <summary>Watchlist matches ({competitorMatches.length})</summary>
-            <div className="dashboard-detail__body">
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Name</span>
-                  <span>Type</span>
-                  <span>Notes</span>
-                </div>
-                {!subjectName.trim() ? (
-                  <div className="table-row empty">Enter a subject to see matches.</div>
-                ) : !internalChecksRan ? (
-                  <div className="table-row empty">Run internal checks to see matches.</div>
-                ) : competitorMatches.length === 0 ? (
-                  <div className="table-row empty">No watchlist matches.</div>
-                ) : (
-                  competitorMatches.slice(0, 10).map((row) => (
-                    <div className="table-row" key={row.competitorId || row.name}>
-                      <span>{row.name}</span>
-                      <span>{row.competitorType}</span>
-                      <span>{row.notes || '—'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </details>
-
-          <div className="card-divider">
-            <h4>External analysis</h4>
-          </div>
-          <p className="muted">Select sources and run the external check.</p>
-          <div className="filter-row">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={useWikidata}
-                onChange={(event) => setUseWikidata(event.target.checked)}
-              />
-              Wikidata
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={useOpenSanctions}
-                onChange={(event) => setUseOpenSanctions(event.target.checked)}
-              />
-              OpenSanctions
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={useNews}
-                onChange={(event) => setUseNews(event.target.checked)}
-              />
-              News / Web
-            </label>
-            <button className="button" type="button" onClick={handleRunAnalysis}>
-              {analysisLoading ? 'Running…' : 'Run external analysis'}
-            </button>
-          </div>
           <details className="dashboard-detail">
-            <summary>Advanced options</summary>
+            <summary>Risk pipeline stats</summary>
             <div className="dashboard-detail__body">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={useDemo}
-                  onChange={(event) => setUseDemo(event.target.checked)}
-                />
-                Use demo data if sources are unavailable
-              </label>
+              <div className="module-header__meta">
+                <div className="module-header__metric">
+                  <span>Competitors</span>
+                  <strong>{summary?.competitors ?? '—'}</strong>
+                </div>
+                <div className="module-header__metric">
+                  <span>Network People</span>
+                  <strong>{crmSummary?.total_people ?? '—'}</strong>
+                </div>
+                <div className="module-header__metric">
+                  <span>Supporters</span>
+                  <strong>{crmSummary?.supporters ?? '—'}</strong>
+                </div>
+              </div>
             </div>
           </details>
-          {analysisError ? <div className="module-alert">{analysisError}</div> : null}
-          {analysisNotice ? <p className="muted">{analysisNotice}</p> : null}
-          {analysisProgress > 0 ? (
-            <div className="questionnaire-progress">
-              <div className="questionnaire-progress__track">
-                <div
-                  className="questionnaire-progress__bar"
-                  style={{ width: `${Math.min(analysisProgress, 100)}%` }}
-                />
-              </div>
-              <span className="questionnaire-progress__label">{analysisProgress}%</span>
-            </div>
-          ) : null}
-          {analysisSteps.length ? (
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Step</span>
-                <span>Status</span>
-              </div>
-              {analysisSteps.map((step) => (
-                <div className="table-row" key={step.id}>
-                  <span>{step.label}</span>
-                  <span>{formatStepStatus(step.status)}</span>
-                </div>
+
+          <CivicStatGrid
+            title="Risk intelligence pulse"
+            description="Signals across competitors, watchlists, and internal matches."
+            items={duePulseStats}
+          />
+
+          {showTabs ? (
+            <div className="subtabs">
+              {[
+                { id: 'overview', label: 'Overview' },
+                { id: 'checks', label: 'Checks' },
+                { id: 'reports', label: 'Reports' },
+                { id: 'tasks', label: 'Tasks' },
+                { id: 'decision', label: 'Decision' },
+                { id: 'advanced', label: 'Advanced tools' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={tab.id === activeTab ? 'subtab active' : 'subtab'}
+                  onClick={() => applyActiveTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
           ) : null}
-          {analysisResult ? (
-            <div className="stack">
-              <div className="module-alert module-alert--success">
-                Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
-                {analysisResult.summary?.total_hits ?? 0}
-              </div>
-              {analysisResult.summary?.risk_score !== undefined ? (
-                <p className="muted">
-                  Risk score: {analysisResult.summary?.risk_score}/100
-                </p>
-              ) : null}
-              {analysisResult.summary?.risk_rationale?.length ? (
-                <ul className="compact-list">
-                  {analysisResult.summary.risk_rationale.map((item, idx) => (
-                    <li key={`${item}-${idx}`}>{item}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {analysisResult.warnings?.length ? (
-                <div className="module-alert">
-                  {analysisResult.warnings.map((warning, idx) => (
-                    <div key={`${warning}-${idx}`}>{warning}</div>
-                  ))}
-                </div>
-              ) : null}
-              {analysisResult.reportId ? (
-                <div className="filter-row">
-                  <a
-                    className="button-secondary"
-                    href={`${API_BASE}/due-diligence/reports/${analysisResult.reportId}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Download PDF report
-                  </a>
-                  <span className="muted">
-                    Stored: {analysisResult.storedAt || '—'}
-                  </span>
-                </div>
-              ) : null}
 
-              <details className="dashboard-detail" open>
-                <summary>
-                  Wikidata results ({(analysisResult.wikidata || []).length})
-                </summary>
-                <div className="dashboard-detail__body">
-                  <div className="table">
-                    <div className="table-row table-head">
-                      <span>Label</span>
-                      <span>Description</span>
-                      <span>Link</span>
-                    </div>
-                    {(analysisResult.wikidata || []).length === 0 ? (
-                      <div className="table-row empty">No Wikidata matches.</div>
-                    ) : (
-                      analysisResult.wikidata.map((row) => (
-                        <div className="table-row" key={row.id || row.label}>
-                          <span>{row.label || '—'}</span>
-                          <span>{row.description || '—'}</span>
-                          <span>
-                            {row.url ? (
-                              <a href={row.url} target="_blank" rel="noreferrer">
-                                View
-                              </a>
-                            ) : (
-                              '—'
-                            )}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </details>
-
-              <details className="dashboard-detail" open>
-                <summary>
-                  OpenSanctions results ({(analysisResult.opensanctions || []).length})
-                </summary>
-                <div className="dashboard-detail__body">
-                  <div className="table">
-                    <div className="table-row table-head">
-                      <span>Name</span>
-                      <span>Schema</span>
-                      <span>Datasets</span>
-                      <span>Score</span>
-                    </div>
-                    {(analysisResult.opensanctions || []).length === 0 ? (
-                      <div className="table-row empty">No OpenSanctions matches.</div>
-                    ) : (
-                      analysisResult.opensanctions.map((row) => (
-                        <div className="table-row" key={row.id || row.name}>
-                          <span>
-                            {row.url ? (
-                              <a href={row.url} target="_blank" rel="noreferrer">
-                                {row.name || '—'}
-                              </a>
-                            ) : (
-                              row.name || '—'
-                            )}
-                          </span>
-                          <span>{row.schema || '—'}</span>
-                          <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
-                          <span>{row.score?.toFixed?.(2) ?? row.score ?? '—'}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </details>
-
-              <details className="dashboard-detail" open>
-                <summary>
-                  News / Web results ({(analysisResult.news || []).length})
-                </summary>
-                <div className="dashboard-detail__body">
-                  <div className="table">
-                    <div className="table-row table-head">
-                      <span>Headline</span>
-                      <span>Source</span>
-                      <span>Tone</span>
-                    </div>
-                    {(analysisResult.news || []).length === 0 ? (
-                      <div className="table-row empty">No recent news found.</div>
-                    ) : (
-                      analysisResult.news.map((row) => (
-                        <div className="table-row" key={row.url || row.title}>
-                          <span>
-                            {row.url ? (
-                              <a href={row.url} target="_blank" rel="noreferrer">
-                                {row.title || '—'}
-                              </a>
-                            ) : (
-                              row.title || '—'
-                            )}
-                          </span>
-                          <span>{row.source || '—'}</span>
-                          <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '—'}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </details>
+          {activeCaseId ? (
+            <div className="module-alert module-alert--success">
+              Active case: {activeCase?.subject || '—'} · {caseStatus}
             </div>
-          ) : null}
-          {subjectName.trim() ? (
-            <details className="dashboard-detail">
-              <summary>Report history ({reportHistory.length})</summary>
-              <div className="dashboard-detail__body">
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Created</span>
-                    <span>Risk</span>
-                    <span>Total hits</span>
-                    <span>Sources</span>
-                    <span>Download</span>
+          ) : (
+            <div className="module-alert">
+              Select a case to begin. Create a new case in the left panel if needed.
+            </div>
+          )}
+
+          {activeTab === 'overview' && (
+            <div className="stack">
+              <Card className="module-card module-card__wide">
+                <Group justify="space-between" align="center" wrap="wrap">
+                  <div>
+                    <Text fw={600}>Analysis pipeline</Text>
+                    <Text size="sm" c="dimmed">
+                      Progress across internal checks and external sources.
+                    </Text>
                   </div>
-                  {historyLoading ? (
-                    <div className="table-row empty">Loading report history…</div>
-                  ) : reportHistory.length === 0 ? (
-                    <div className="table-row empty">No prior reports for this subject.</div>
-                  ) : (
-                    reportHistory.map((row) => (
-                      <div className="table-row" key={row.reportId}>
-                        <span>{row.createdAt || '—'}</span>
-                        <span>{row.riskLevel || '—'}</span>
-                        <span>{row.totalHits ?? 0}</span>
-                        <span>{(row.sources || []).join(', ') || '—'}</span>
-                        <span>
-                          <a
-                            href={`${API_BASE}/due-diligence/reports/${row.reportId}/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            PDF
-                          </a>
+                  <RingProgress
+                    size={86}
+                    thickness={8}
+                    roundCaps
+                    sections={[{ value: analysisProgress, color: 'civic' }]}
+                    label={
+                      <Text size="sm" fw={600} ta="center">
+                        {analysisProgress}%
+                      </Text>
+                    }
+                  />
+                </Group>
+              </Card>
+
+              {activeCaseId ? (
+                <div className="module-card">
+                  <div className="card-header">
+                    <div>
+                      <h3>Case overview</h3>
+                      <p className="muted">Key details and ownership.</p>
+                    </div>
+                  </div>
+                  <div className="metric-row">
+                    <span>Case ID</span>
+                    <strong>{activeCaseId}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Status</span>
+                    <strong>{caseStatus}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Owner</span>
+                    <strong>{caseOwner || '—'}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Last risk</span>
+                    <strong>{activeCase?.lastRiskLevel || '—'}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Last report</span>
+                    <strong>{activeCase?.lastReportAt || '—'}</strong>
+                  </div>
+                  <div className="filter-row">
+                    <select
+                      className="select"
+                      value={caseStatus}
+                      onChange={(event) => setCaseStatus(event.target.value)}
+                    >
+                      {caseStatusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input"
+                      placeholder="Owner"
+                      value={caseOwner}
+                      onChange={(event) => setCaseOwner(event.target.value)}
+                    />
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleUpdateCase}
+                      disabled={caseSaving}
+                    >
+                      {caseSaving ? 'Saving…' : 'Update case'}
+                    </button>
+                  </div>
+                  {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {activeTab === 'checks' && (
+            <div className="stack">
+              <div className="module-card module-card__wide section-intro">
+                <div className="card-header">
+                  <div>
+                    <h3>Checks</h3>
+                    <p className="muted">
+                      Run internal checks, then pull external sources for the case.
+                    </p>
+                  </div>
+                </div>
+                {!activeCaseId ? (
+                  <div className="module-alert">
+                    Select a case to run checks. Running analysis can auto-create a draft case.
+                  </div>
+                ) : null}
+                <InfoBox
+                  title="Quick steps"
+                  summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
+                  hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
+                />
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    placeholder="Enter person or organization"
+                    value={subjectName}
+                    onChange={(event) => setSubjectName(event.target.value)}
+                    disabled={Boolean(activeCaseId)}
+                  />
+                  <select
+                    className="select"
+                    value={subjectType}
+                    onChange={(event) => setSubjectType(event.target.value)}
+                    disabled={Boolean(activeCaseId)}
+                  >
+                    <option value="Person">Person</option>
+                    <option value="Organization">Organization</option>
+                  </select>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={runInternalChecks}
+                  >
+                    Check internal records
+                  </button>
+                  {activeCaseId ? (
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleClearCase}
+                    >
+                      Change subject
+                    </button>
+                  ) : null}
+                </div>
+                <p className="muted">Internal checks look at Network + watchlist for matches.</p>
+
+                <p className="muted">
+                  Current subject:{' '}
+                  <strong>
+                    {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
+                  </strong>
+                </p>
+              </div>
+
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>Internal checks</h3>
+                    <p className="muted">Network + watchlist match signals.</p>
+                  </div>
+                </div>
+                <details className="dashboard-detail" open>
+                  <summary>Network matches ({crmMatches.length})</summary>
+                  <div className="dashboard-detail__body">
+                    <div className="table">
+                      <div className="table-row table-head">
+                        <span>Name</span>
+                        <span>Email</span>
+                        <span>Group</span>
+                        <span>Time</span>
+                      </div>
+                      {!subjectName.trim() ? (
+                        <div className="table-row empty">Enter a subject to see matches.</div>
+                      ) : !internalChecksRan ? (
+                        <div className="table-row empty">Run internal checks to see matches.</div>
+                      ) : crmMatches.length === 0 ? (
+                        <div className="table-row empty">No Network matches.</div>
+                      ) : (
+                        crmMatches.slice(0, 12).map((row, idx) => (
+                          <div className="table-row" key={`${row.email || 'match'}-${idx}`}>
+                            <span>{row.fullName || row.email}</span>
+                            <span>{row.email}</span>
+                            <span>{row.group || '—'}</span>
+                            <span>{row.timeAvailability || 'Unspecified'}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </details>
+
+                <details className="dashboard-detail" open>
+                  <summary>Watchlist matches ({competitorMatches.length})</summary>
+                  <div className="dashboard-detail__body">
+                    <div className="table">
+                      <div className="table-row table-head">
+                        <span>Name</span>
+                        <span>Type</span>
+                        <span>Notes</span>
+                      </div>
+                      {!subjectName.trim() ? (
+                        <div className="table-row empty">Enter a subject to see matches.</div>
+                      ) : !internalChecksRan ? (
+                        <div className="table-row empty">Run internal checks to see matches.</div>
+                      ) : competitorMatches.length === 0 ? (
+                        <div className="table-row empty">No watchlist matches.</div>
+                      ) : (
+                        competitorMatches.slice(0, 10).map((row) => (
+                          <div className="table-row" key={row.competitorId || row.name}>
+                            <span>{row.name}</span>
+                            <span>{row.competitorType}</span>
+                            <span>{row.notes || '—'}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>External analysis</h3>
+                    <p className="muted">Select sources and run the external check.</p>
+                  </div>
+                </div>
+                <div className="filter-row">
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={useWikidata}
+                      onChange={(event) => setUseWikidata(event.target.checked)}
+                    />
+                    Wikidata
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={useOpenSanctions}
+                      onChange={(event) => setUseOpenSanctions(event.target.checked)}
+                    />
+                    OpenSanctions
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={useNews}
+                      onChange={(event) => setUseNews(event.target.checked)}
+                    />
+                    News / Web
+                  </label>
+                  <button className="button" type="button" onClick={handleRunAnalysis}>
+                    {analysisLoading ? 'Running…' : 'Run external analysis'}
+                  </button>
+                </div>
+                <details className="dashboard-detail">
+                  <summary>Advanced options</summary>
+                  <div className="dashboard-detail__body">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={useDemo}
+                        onChange={(event) => setUseDemo(event.target.checked)}
+                      />
+                      Use demo data if sources are unavailable
+                    </label>
+                  </div>
+                </details>
+                {analysisError ? <div className="module-alert">{analysisError}</div> : null}
+                {analysisNotice ? <p className="muted">{analysisNotice}</p> : null}
+                {analysisProgress > 0 ? (
+                  <div className="questionnaire-progress">
+                    <div className="questionnaire-progress__track">
+                      <div
+                        className="questionnaire-progress__bar"
+                        style={{ width: `${Math.min(analysisProgress, 100)}%` }}
+                      />
+                    </div>
+                    <span className="questionnaire-progress__label">{analysisProgress}%</span>
+                  </div>
+                ) : null}
+                {analysisSteps.length ? (
+                  <div className="table">
+                    <div className="table-row table-head">
+                      <span>Step</span>
+                      <span>Status</span>
+                    </div>
+                    {analysisSteps.map((step) => (
+                      <div className="table-row" key={step.id}>
+                        <span>{step.label}</span>
+                        <span>{formatStepStatus(step.status)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {analysisResult ? (
+                  <div className="stack">
+                    <div className="module-alert module-alert--success">
+                      Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
+                      {analysisResult.summary?.total_hits ?? 0}
+                    </div>
+                    {analysisResult.summary?.risk_score !== undefined ? (
+                      <p className="muted">
+                        Risk score: {analysisResult.summary?.risk_score}/100
+                      </p>
+                    ) : null}
+                    {analysisResult.summary?.risk_rationale?.length ? (
+                      <ul className="compact-list">
+                        {analysisResult.summary.risk_rationale.map((item, idx) => (
+                          <li key={`${item}-${idx}`}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {analysisResult.warnings?.length ? (
+                      <div className="module-alert">
+                        {analysisResult.warnings.map((warning, idx) => (
+                          <div key={`${warning}-${idx}`}>{warning}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {analysisResult.reportId ? (
+                      <div className="filter-row">
+                        <a
+                          className="button-secondary"
+                          href={`${API_BASE}/due-diligence/reports/${analysisResult.reportId}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Download PDF report
+                        </a>
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => applyActiveTab('reports')}
+                        >
+                          View full sources
+                        </button>
+                        <span className="muted">
+                          Stored: {analysisResult.storedAt || '—'}
                         </span>
                       </div>
-                    ))
-                  )}
-                </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            </details>
-          ) : null}
-        </div>
-        {activeCaseId ? (
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>Case overview</h3>
-              <div className="metric-row">
-                <span>Case ID</span>
-                <strong>{activeCaseId}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Status</span>
-                <strong>{caseStatus}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Owner</span>
-                <strong>{caseOwner || '—'}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Last risk</span>
-                <strong>{activeCase?.lastRiskLevel || '—'}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Last report</span>
-                <strong>{activeCase?.lastReportAt || '—'}</strong>
-              </div>
-              <div className="filter-row">
-                <select
-                  className="select"
-                  value={caseStatus}
-                  onChange={(event) => setCaseStatus(event.target.value)}
-                >
-                  {caseStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  placeholder="Owner"
-                  value={caseOwner}
-                  onChange={(event) => setCaseOwner(event.target.value)}
-                />
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={handleUpdateCase}
-                  disabled={caseSaving}
-                >
-                  {caseSaving ? 'Saving…' : 'Update case'}
-                </button>
-              </div>
-              {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
             </div>
+          )}
 
+          {activeTab === 'reports' && (
+            <div className="stack">
+              <div className="module-card module-card__wide section-intro">
+                <div className="card-header">
+                  <div>
+                    <h3>Reports</h3>
+                    <p className="muted">Review history and download PDFs.</p>
+                  </div>
+                </div>
+                {!subjectName.trim() ? (
+                  <div className="module-alert">Select a case to view report history.</div>
+                ) : null}
+              </div>
+
+              {analysisResult ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Latest analysis detail</h3>
+                      <p className="muted">Sources and evidence from the most recent run.</p>
+                    </div>
+                  </div>
+                  <div className="stack">
+                    <div className="module-alert module-alert--success">
+                      Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
+                      {analysisResult.summary?.total_hits ?? 0}
+                    </div>
+                    {analysisResult.summary?.risk_score !== undefined ? (
+                      <p className="muted">
+                        Risk score: {analysisResult.summary?.risk_score}/100
+                      </p>
+                    ) : null}
+                    {analysisResult.summary?.risk_rationale?.length ? (
+                      <ul className="compact-list">
+                        {analysisResult.summary.risk_rationale.map((item, idx) => (
+                          <li key={`${item}-${idx}`}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {analysisResult.warnings?.length ? (
+                      <div className="module-alert">
+                        {analysisResult.warnings.map((warning, idx) => (
+                          <div key={`${warning}-${idx}`}>{warning}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {analysisResult.reportId ? (
+                      <div className="filter-row">
+                        <a
+                          className="button-secondary"
+                          href={`${API_BASE}/due-diligence/reports/${analysisResult.reportId}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Download PDF report
+                        </a>
+                        <span className="muted">
+                          Stored: {analysisResult.storedAt || '—'}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    <details className="dashboard-detail" open>
+                      <summary>
+                        Wikidata results ({(analysisResult.wikidata || []).length})
+                      </summary>
+                      <div className="dashboard-detail__body">
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Label</span>
+                            <span>Description</span>
+                            <span>Link</span>
+                          </div>
+                          {(analysisResult.wikidata || []).length === 0 ? (
+                            <div className="table-row empty">No Wikidata matches.</div>
+                          ) : (
+                            analysisResult.wikidata.map((row) => (
+                              <div className="table-row" key={row.id || row.label}>
+                                <span>{row.label || '—'}</span>
+                                <span>{row.description || '—'}</span>
+                                <span>
+                                  {row.url ? (
+                                    <a href={row.url} target="_blank" rel="noreferrer">
+                                      View
+                                    </a>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </details>
+
+                    <details className="dashboard-detail" open>
+                      <summary>
+                        OpenSanctions results ({(analysisResult.opensanctions || []).length})
+                      </summary>
+                      <div className="dashboard-detail__body">
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Name</span>
+                            <span>Schema</span>
+                            <span>Datasets</span>
+                            <span>Score</span>
+                          </div>
+                          {(analysisResult.opensanctions || []).length === 0 ? (
+                            <div className="table-row empty">No OpenSanctions matches.</div>
+                          ) : (
+                            analysisResult.opensanctions.map((row) => (
+                              <div className="table-row" key={row.id || row.name}>
+                                <span>
+                                  {row.url ? (
+                                    <a href={row.url} target="_blank" rel="noreferrer">
+                                      {row.name || '—'}
+                                    </a>
+                                  ) : (
+                                    row.name || '—'
+                                  )}
+                                </span>
+                                <span>{row.schema || '—'}</span>
+                                <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
+                                <span>{row.score?.toFixed?.(2) ?? row.score ?? '—'}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </details>
+
+                    <details className="dashboard-detail" open>
+                      <summary>
+                        News / Web results ({(analysisResult.news || []).length})
+                      </summary>
+                      <div className="dashboard-detail__body">
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Headline</span>
+                            <span>Source</span>
+                            <span>Tone</span>
+                          </div>
+                          {(analysisResult.news || []).length === 0 ? (
+                            <div className="table-row empty">No recent news found.</div>
+                          ) : (
+                            analysisResult.news.map((row) => (
+                              <div className="table-row" key={row.url || row.title}>
+                                <span>
+                                  {row.url ? (
+                                    <a href={row.url} target="_blank" rel="noreferrer">
+                                      {row.title || '—'}
+                                    </a>
+                                  ) : (
+                                    row.title || '—'
+                                  )}
+                                </span>
+                                <span>{row.source || '—'}</span>
+                                <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '—'}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              ) : null}
+
+              {subjectName.trim() ? (
+                <details className="dashboard-detail" open>
+                  <summary>Report history ({reportHistory.length})</summary>
+                  <div className="dashboard-detail__body">
+                    <div className="table">
+                      <div className="table-row table-head">
+                        <span>Created</span>
+                        <span>Risk</span>
+                        <span>Total hits</span>
+                        <span>Sources</span>
+                        <span>Download</span>
+                      </div>
+                      {historyLoading ? (
+                        <div className="table-row empty">Loading report history…</div>
+                      ) : reportHistory.length === 0 ? (
+                        <div className="table-row empty">No prior reports for this subject.</div>
+                      ) : (
+                        reportHistory.map((row) => (
+                          <div className="table-row" key={row.reportId}>
+                            <span>{row.createdAt || '—'}</span>
+                            <span>{row.riskLevel || '—'}</span>
+                            <span>{row.totalHits ?? 0}</span>
+                            <span>{(row.sources || []).join(', ') || '—'}</span>
+                            <span>
+                              <a
+                                href={`${API_BASE}/due-diligence/reports/${row.reportId}/pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                PDF
+                              </a>
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          )}
+
+          {activeTab === 'tasks' && (
             <div className="module-card">
               <h3>Tasks</h3>
               <p className="muted">Track actions before final decision.</p>
+              {!activeCaseId ? (
+                <div className="module-alert">Select a case to manage tasks.</div>
+              ) : null}
               <div className="filter-row">
                 <input
                   className="input"
@@ -1767,10 +1811,15 @@ export function DueDiligencePage({
                 )}
               </div>
             </div>
+          )}
 
+          {activeTab === 'decision' && (
             <div className="module-card">
               <h3>Decision</h3>
               <p className="muted">Record the final due diligence outcome.</p>
+              {!activeCaseId ? (
+                <div className="module-alert">Select a case to record a decision.</div>
+              ) : null}
               <div className="filter-row">
                 <select
                   className="select"
@@ -1802,532 +1851,506 @@ export function DueDiligencePage({
                 <div className="module-alert module-alert--success">{decisionNotice}</div>
               ) : null}
             </div>
-          </div>
-        ) : (
-          <div className="module-alert">
-            Select a case to view tasks and record a decision.
-          </div>
-        )}
-      </div>
-      )}
+          )}
 
-      {activeTab === 'debate-prep' && (
-        <div className="module-card module-card__wide section-intro">
-          <div className="card-header">
-            <div>
-              <h3>Debate prep</h3>
-              <p className="muted">
-                Scan public mentions to map likely talking points and positions.
-              </p>
-            </div>
-          </div>
-          <div className="stack">
-            <div className="filter-row">
-              <input
-                className="input"
-                placeholder="Opponent name"
-                value={debateOpponent}
-                onChange={(event) => setDebateOpponent(event.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Topic (e.g., education)"
-                value={debateTopic}
-                onChange={(event) => setDebateTopic(event.target.value)}
-              />
-              <input
-                className="input"
-                type="number"
-                min="1"
-                max="10"
-                value={debateYears}
-                onChange={(event) => setDebateYears(event.target.value)}
-                placeholder="Years back"
-              />
-              <input
-                className="input"
-                type="number"
-                min="5"
-                max="100"
-                value={debateMaxResults}
-                onChange={(event) => setDebateMaxResults(event.target.value)}
-                placeholder="Max results"
-              />
-              <button
-                className="button"
-                type="button"
-                onClick={handleRunDebatePrep}
-              >
-                {debateLoading ? 'Running…' : 'Run debate prep'}
-              </button>
-            </div>
-            <div className="filter-row">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={debateUseWikipedia}
-                  onChange={(event) => setDebateUseWikipedia(event.target.checked)}
-                />
-                Wikipedia primer
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={debateUseGoogle}
-                  onChange={(event) => setDebateUseGoogle(event.target.checked)}
-                />
-                Google search results
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={debateUseLocalMedia}
-                  onChange={(event) => setDebateUseLocalMedia(event.target.checked)}
-                />
-                Local media RSS (Publika, Netgazeti)
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={debateUseDemo}
-                  onChange={(event) => setDebateUseDemo(event.target.checked)}
-                />
-                Use demo data if sources are unavailable
-              </label>
-            </div>
-            {debateError ? <div className="module-alert">{debateError}</div> : null}
-            {debateResult ? (
-              <div className="stack">
-                <div className="module-alert module-alert--success">
-                  {debateResult.mentions?.length ?? 0} mentions · {debateResult.startDate} →{' '}
-                  {debateResult.endDate}
+          {activeTab === 'advanced' && (
+            <div className="stack">
+              <details className="dashboard-detail">
+                <summary>Configure subject context</summary>
+                <div className="dashboard-detail__body">
+                  <div className="module-grid">
+                    <div className="module-card">
+                      <h3>Network context</h3>
+                      <div className="metric-row">
+                        <span>People</span>
+                        <strong>{crmSummary?.total_people ?? '—'}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Supporters</span>
+                        <strong>{crmSummary?.supporters ?? '—'}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Members</span>
+                        <strong>{crmSummary?.members ?? '—'}</strong>
+                      </div>
+                    </div>
+                    <div className="module-card">
+                      <h3>Competitors</h3>
+                      <p className="muted">Pick a watchlist subject to use for analysis.</p>
+                      <select
+                        className="select"
+                        value={subjectName}
+                        onChange={(event) => {
+                          const selected = competitors.find(
+                            (item) => item.name === event.target.value,
+                          )
+                          setSubjectName(selected?.name || '')
+                          setSubjectType(
+                            selected?.competitorType === 'Company'
+                              ? 'Organization'
+                              : selected?.competitorType || 'Person',
+                          )
+                        }}
+                      >
+                        <option value="">Select competitor</option>
+                        {competitors.map((item) => (
+                          <option key={item.competitorId} value={item.name}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => {
+                          if (activeCaseId) {
+                            handleClearCase()
+                          }
+                          setActiveSubject(subjectName, subjectType, 'Configure')
+                        }}
+                      >
+                        Use for analysis
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <p className="muted">
-                  Query: <strong>{debateResult.query}</strong>
-                </p>
-                {debateResult.keywords?.length ? (
-                  <p className="muted">Keywords: {debateResult.keywords.join(', ')}</p>
-                ) : null}
-                {debateResult.warnings?.length ? (
-                  <div className="module-alert">
-                    {debateResult.warnings.map((warning, idx) => (
-                      <div key={`${warning}-${idx}`}>{warning}</div>
+              </details>
+
+              <details className="dashboard-detail">
+                <summary>Watchlist</summary>
+                <div className="dashboard-detail__body">
+                  <form className="task-form" onSubmit={handleCreate}>
+                    <input
+                      className="input"
+                      placeholder="Competitor name"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                    <select
+                      className="select"
+                      value={competitorType}
+                      onChange={(event) => setCompetitorType(event.target.value)}
+                    >
+                      <option value="Person">Person</option>
+                      <option value="Company">Company</option>
+                    </select>
+                    <input
+                      className="input"
+                      placeholder="Notes (optional)"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                    />
+                    <button className="button" type="submit">
+                      {saving ? 'Saving…' : 'Add'}
+                    </button>
+                  </form>
+
+                  <div className="card-divider">
+                    <h4>CSV import</h4>
+                  </div>
+                  {importError ? <div className="module-alert">{importError}</div> : null}
+                  {importStatus ? (
+                    <div className="module-alert module-alert--success">{importStatus}</div>
+                  ) : null}
+                  <div className="stack">
+                    <input
+                      className="input"
+                      type="file"
+                      accept=".csv"
+                      onChange={(event) => handleImportWatchlist(event.target.files?.[0] || null)}
+                      disabled={importing}
+                    />
+                    <p className="muted">
+                      Required column: <strong>name</strong>. Optional: competitor_type, notes.
+                    </p>
+                  </div>
+
+                  <div className="table">
+                    <div className="table-row table-head">
+                      <span>Name</span>
+                      <span>Type</span>
+                      <span>Notes</span>
+                      <span>Action</span>
+                    </div>
+                    {competitors.length === 0 && (
+                      <div className="table-row empty">No competitors yet.</div>
+                    )}
+                    {competitors.map((item) => (
+                      <div className="table-row" key={item.competitorId}>
+                        <span>{item.name}</span>
+                        <span>{item.competitorType}</span>
+                        <span>{item.notes || '—'}</span>
+                        <div className="table-actions">
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => handleUseWatchlist(item)}
+                          >
+                            Use as subject
+                          </button>
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={() => handleDelete(item.competitorId)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                ) : null}
+                </div>
+              </details>
 
-                {debatePrepPlan ? (
-                  <>
-                    <div className="card-divider">
-                      <h4>Debate flow</h4>
+              <details className="dashboard-detail">
+                <summary>Debate prep</summary>
+                <div className="dashboard-detail__body">
+                  <div className="stack">
+                    <div className="filter-row">
+                      <input
+                        className="input"
+                        placeholder="Opponent name"
+                        value={debateOpponent}
+                        onChange={(event) => setDebateOpponent(event.target.value)}
+                      />
+                      <input
+                        className="input"
+                        placeholder="Topic (e.g., education)"
+                        value={debateTopic}
+                        onChange={(event) => setDebateTopic(event.target.value)}
+                      />
+                      <input
+                        className="input"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={debateYears}
+                        onChange={(event) => setDebateYears(event.target.value)}
+                        placeholder="Years back"
+                      />
+                      <input
+                        className="input"
+                        type="number"
+                        min="5"
+                        max="100"
+                        value={debateMaxResults}
+                        onChange={(event) => setDebateMaxResults(event.target.value)}
+                        placeholder="Max results"
+                      />
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={handleRunDebatePrep}
+                      >
+                        {debateLoading ? 'Running…' : 'Run debate prep'}
+                      </button>
                     </div>
-                    <div className="debate-flow-grid">
-                      <div className="module-card debate-flow-card">
-                        <div className="debate-card-header">
-                          <h5>Opening</h5>
-                          <span className="pill">Set the frame</span>
-                        </div>
-                        <ul className="compact-list">
-                          {debatePrepPlan.opening.map((line, idx) => (
-                            <li key={`${line}-${idx}`}>{line}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="module-card debate-flow-card">
-                        <div className="debate-card-header">
-                          <h5>Cross-exam</h5>
-                          <span className="pill">Pressure test</span>
-                        </div>
-                        <ul className="compact-list">
-                          {debatePrepPlan.crossExam.map((line, idx) => (
-                            <li key={`${line}-${idx}`}>{line}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="module-card debate-flow-card">
-                        <div className="debate-card-header">
-                          <h5>Closing</h5>
-                          <span className="pill">Call to action</span>
-                        </div>
-                        <ul className="compact-list">
-                          {debatePrepPlan.closing.map((line, idx) => (
-                            <li key={`${line}-${idx}`}>{line}</li>
-                          ))}
-                        </ul>
-                      </div>
+                    <div className="filter-row">
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={debateUseWikipedia}
+                          onChange={(event) => setDebateUseWikipedia(event.target.checked)}
+                        />
+                        Wikipedia primer
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={debateUseGoogle}
+                          onChange={(event) => setDebateUseGoogle(event.target.checked)}
+                        />
+                        Google search results
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={debateUseLocalMedia}
+                          onChange={(event) => setDebateUseLocalMedia(event.target.checked)}
+                        />
+                        Local media RSS (Publika, Netgazeti)
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={debateUseDemo}
+                          onChange={(event) => setDebateUseDemo(event.target.checked)}
+                        />
+                        Use demo data if sources are unavailable
+                      </label>
                     </div>
-
-                    <div className="card-divider">
-                      <h4>Likely counterpoints</h4>
-                    </div>
-                    <div className="table">
-                      <div className="table-row table-head">
-                        <span>Theme</span>
-                        <span>Counter-argument</span>
-                      </div>
-                      {debatePrepPlan.counterpoints.length === 0 ? (
-                        <div className="table-row empty">No counterpoints generated.</div>
-                      ) : (
-                        debatePrepPlan.counterpoints.map((row, idx) => (
-                          <div className="table-row" key={`${row.theme}-${idx}`}>
-                            <span>{row.theme}</span>
-                            <span>{row.prompt}</span>
+                    {debateError ? <div className="module-alert">{debateError}</div> : null}
+                    {debateResult ? (
+                      <div className="stack">
+                        <div className="module-alert module-alert--success">
+                          {debateResult.mentions?.length ?? 0} mentions ·{' '}
+                          {debateResult.startDate} → {debateResult.endDate}
+                        </div>
+                        <p className="muted">
+                          Query: <strong>{debateResult.query}</strong>
+                        </p>
+                        {debateResult.keywords?.length ? (
+                          <p className="muted">Keywords: {debateResult.keywords.join(', ')}</p>
+                        ) : null}
+                        {debateResult.warnings?.length ? (
+                          <div className="module-alert">
+                            {debateResult.warnings.map((warning, idx) => (
+                              <div key={`${warning}-${idx}`}>{warning}</div>
+                            ))}
                           </div>
-                        ))
-                      )}
-                    </div>
+                        ) : null}
 
-                    <div className="card-divider">
-                      <h4>Evidence cards</h4>
-                    </div>
-                    <div className="debate-evidence-grid">
-                      {debatePrepPlan.evidenceCards.length === 0 ? (
-                        <div className="table-row empty">No evidence cards yet.</div>
-                      ) : (
-                        debatePrepPlan.evidenceCards.map((card) => (
-                          <div className="debate-evidence-card" key={card.id}>
-                            <div className="debate-card-header">
-                              <h5>{card.title}</h5>
-                              <span className="pill">{card.phase}</span>
+                        {debatePrepPlan ? (
+                          <>
+                            <div className="card-divider">
+                              <h4>Debate flow</h4>
                             </div>
-                            <p className="muted">
-                              {card.source} · {card.date}
-                            </p>
-                            <p>{card.snippet}</p>
-                            {card.url ? (
-                              <a href={card.url} target="_blank" rel="noreferrer">
-                                Open source
-                              </a>
-                            ) : null}
+                            <div className="debate-flow-grid">
+                              <div className="module-card debate-flow-card">
+                                <div className="debate-card-header">
+                                  <h5>Opening</h5>
+                                  <span className="pill">Set the frame</span>
+                                </div>
+                                <ul className="compact-list">
+                                  {debatePrepPlan.opening.map((line, idx) => (
+                                    <li key={`${line}-${idx}`}>{line}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="module-card debate-flow-card">
+                                <div className="debate-card-header">
+                                  <h5>Cross-exam</h5>
+                                  <span className="pill">Pressure test</span>
+                                </div>
+                                <ul className="compact-list">
+                                  {debatePrepPlan.crossExam.map((line, idx) => (
+                                    <li key={`${line}-${idx}`}>{line}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="module-card debate-flow-card">
+                                <div className="debate-card-header">
+                                  <h5>Closing</h5>
+                                  <span className="pill">Call to action</span>
+                                </div>
+                                <ul className="compact-list">
+                                  {debatePrepPlan.closing.map((line, idx) => (
+                                    <li key={`${line}-${idx}`}>{line}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+
+                            <div className="card-divider">
+                              <h4>Likely counterpoints</h4>
+                            </div>
+                            <div className="table">
+                              <div className="table-row table-head">
+                                <span>Theme</span>
+                                <span>Counter-argument</span>
+                              </div>
+                              {debatePrepPlan.counterpoints.length === 0 ? (
+                                <div className="table-row empty">No counterpoints generated.</div>
+                              ) : (
+                                debatePrepPlan.counterpoints.map((row, idx) => (
+                                  <div className="table-row" key={`${row.theme}-${idx}`}>
+                                    <span>{row.theme}</span>
+                                    <span>{row.prompt}</span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            <div className="card-divider">
+                              <h4>Evidence cards</h4>
+                            </div>
+                            <div className="debate-evidence-grid">
+                              {debatePrepPlan.evidenceCards.length === 0 ? (
+                                <div className="table-row empty">No evidence cards yet.</div>
+                              ) : (
+                                debatePrepPlan.evidenceCards.map((card) => (
+                                  <div className="debate-evidence-card" key={card.id}>
+                                    <div className="debate-card-header">
+                                      <h5>{card.title}</h5>
+                                      <span className="pill">{card.phase}</span>
+                                    </div>
+                                    <p className="muted">
+                                      {card.source} · {card.date}
+                                    </p>
+                                    <p>{card.snippet}</p>
+                                    {card.url ? (
+                                      <a href={card.url} target="_blank" rel="noreferrer">
+                                        Open source
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </>
+                        ) : null}
+
+                        <div className="card-divider">
+                          <h4>Wikipedia primer</h4>
+                        </div>
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Article</span>
+                            <span>Summary</span>
+                            <span>Link</span>
                           </div>
-                        ))
-                      )}
+                          {(debateResult.wikipedia || []).length === 0 ? (
+                            <div className="table-row empty">No Wikipedia matches.</div>
+                          ) : (
+                            debateResult.wikipedia.map((row) => (
+                              <div className="table-row" key={row.url || row.title}>
+                                <span>{row.title || '—'}</span>
+                                <span>{row.summary || '—'}</span>
+                                <span>
+                                  {row.url ? (
+                                    <a href={row.url} target="_blank" rel="noreferrer">
+                                      View
+                                    </a>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="card-divider">
+                          <h4>Strategy map</h4>
+                        </div>
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Theme</span>
+                            <span>Mentions</span>
+                            <span>Examples</span>
+                          </div>
+                          {(debateResult.themes || []).length === 0 ? (
+                            <div className="table-row empty">No themes detected.</div>
+                          ) : (
+                            debateResult.themes.map((theme) => (
+                              <div className="table-row" key={theme.name}>
+                                <span>{theme.name}</span>
+                                <span>{theme.count}</span>
+                                <span>
+                                  {(theme.examples || []).slice(0, 2).join(' · ') || '—'}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="card-divider">
+                          <h4>Web mentions</h4>
+                        </div>
+                        <div className="table">
+                          <div className="table-row table-head">
+                            <span>Headline</span>
+                            <span>Source</span>
+                            <span>Snippet</span>
+                            <span>Date</span>
+                          </div>
+                          {(debateResult.mentions || []).length === 0 ? (
+                            <div className="table-row empty">No mentions found.</div>
+                          ) : (
+                            debateResult.mentions.map((row) => (
+                              <div className="table-row" key={row.url || row.title}>
+                                <span>
+                                  {row.url ? (
+                                    <a href={row.url} target="_blank" rel="noreferrer">
+                                      {row.title || '—'}
+                                    </a>
+                                  ) : (
+                                    row.title || '—'
+                                  )}
+                                </span>
+                                <span>{row.source || '—'}</span>
+                                <span>{row.snippet || '—'}</span>
+                                <span>{row.publishedAt || '—'}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
+
+              <details className="dashboard-detail">
+                <summary>Launch external DD app</summary>
+                <div className="dashboard-detail__body">
+                  <div className="stack">
+                    {subjectName ? (
+                      <div className="module-alert module-alert--success">
+                        Launch subject: {subjectName} ({subjectType})
+                      </div>
+                    ) : (
+                      <div className="module-alert">No subject selected yet.</div>
+                    )}
+                    <input
+                      className="input"
+                      placeholder="Due diligence app URL"
+                      value={ddAppUrl}
+                      onChange={(event) => setDdAppUrl(event.target.value)}
+                    />
+                    <input className="input" value={launchUrl} readOnly />
+                    <div className="filter-row">
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => window.open(launchUrl || ddAppUrl, '_blank')}
+                        disabled={!ddAppUrl}
+                      >
+                        Open DD app
+                      </button>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => window.open(gmailUrl, '_blank')}
+                        disabled={!subjectName}
+                      >
+                        Open in Gmail
+                      </button>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={embedApp}
+                          onChange={(event) => setEmbedApp(event.target.checked)}
+                        />
+                        Embed app below
+                      </label>
                     </div>
-                  </>
-                ) : null}
-
-                <div className="card-divider">
-                  <h4>Wikipedia primer</h4>
-                </div>
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Article</span>
-                    <span>Summary</span>
-                    <span>Link</span>
-                  </div>
-                  {(debateResult.wikipedia || []).length === 0 ? (
-                    <div className="table-row empty">No Wikipedia matches.</div>
-                  ) : (
-                    debateResult.wikipedia.map((row) => (
-                      <div className="table-row" key={row.url || row.title}>
-                        <span>{row.title || '—'}</span>
-                        <span>{row.summary || '—'}</span>
-                        <span>
-                          {row.url ? (
-                            <a href={row.url} target="_blank" rel="noreferrer">
-                              View
-                            </a>
-                          ) : (
-                            '—'
-                          )}
-                        </span>
+                    <input
+                      className="input"
+                      placeholder="Gmail to (optional)"
+                      value={gmailTo}
+                      onChange={(event) => setGmailTo(event.target.value)}
+                    />
+                    {embedApp && launchUrl ? (
+                      <iframe
+                        title="Due Diligence App"
+                        src={launchUrl}
+                        className="dd-embed"
+                      />
+                    ) : null}
+                    {!ddAppUrl ? (
+                      <div className="module-alert">
+                        External DD app URL is not configured yet. Set `DUE_DILIGENCE_APP_URL`
+                        (or `DD_APP_URL`) in your environment.
                       </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="card-divider">
-                  <h4>Strategy map</h4>
-                </div>
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Theme</span>
-                    <span>Mentions</span>
-                    <span>Examples</span>
+                    ) : null}
                   </div>
-                  {(debateResult.themes || []).length === 0 ? (
-                    <div className="table-row empty">No themes detected.</div>
-                  ) : (
-                    debateResult.themes.map((theme) => (
-                      <div className="table-row" key={theme.name}>
-                        <span>{theme.name}</span>
-                        <span>{theme.count}</span>
-                        <span>{(theme.examples || []).slice(0, 2).join(' · ') || '—'}</span>
-                      </div>
-                    ))
-                  )}
                 </div>
-
-                <div className="card-divider">
-                  <h4>Web mentions</h4>
-                </div>
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Headline</span>
-                    <span>Source</span>
-                    <span>Snippet</span>
-                    <span>Date</span>
-                  </div>
-                  {(debateResult.mentions || []).length === 0 ? (
-                    <div className="table-row empty">No mentions found.</div>
-                  ) : (
-                    debateResult.mentions.map((row) => (
-                      <div className="table-row" key={row.url || row.title}>
-                        <span>
-                          {row.url ? (
-                            <a href={row.url} target="_blank" rel="noreferrer">
-                              {row.title || '—'}
-                            </a>
-                          ) : (
-                            row.title || '—'
-                          )}
-                        </span>
-                        <span>{row.source || '—'}</span>
-                        <span>{row.snippet || '—'}</span>
-                        <span>{row.publishedAt || '—'}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
+              </details>
+            </div>
+          )}
         </div>
-      )}
-
-      {activeTab === 'configure' && (
-        <div className="stack">
-          <div className="module-card module-card__wide section-intro">
-            <div className="card-header">
-              <div>
-                <h3>Set subject context</h3>
-                <p className="muted">Pick a watchlist subject to prefill analysis.</p>
-              </div>
-              <div className="pill">Configure</div>
-            </div>
-          </div>
-          <div className="module-grid">
-          <div className="module-card">
-            <h3>Network context</h3>
-            <div className="metric-row">
-              <span>People</span>
-              <strong>{crmSummary?.total_people ?? '—'}</strong>
-            </div>
-            <div className="metric-row">
-              <span>Supporters</span>
-              <strong>{crmSummary?.supporters ?? '—'}</strong>
-            </div>
-            <div className="metric-row">
-              <span>Members</span>
-              <strong>{crmSummary?.members ?? '—'}</strong>
-            </div>
-          </div>
-          <div className="module-card">
-            <h3>Competitors</h3>
-            <p className="muted">Pick a watchlist subject to use for analysis.</p>
-            <select
-              className="select"
-              value={subjectName}
-              onChange={(event) => {
-                const selected = competitors.find(
-                  (item) => item.name === event.target.value,
-                )
-                setSubjectName(selected?.name || '')
-                setSubjectType(
-                  selected?.competitorType === 'Company'
-                    ? 'Organization'
-                    : selected?.competitorType || 'Person',
-                )
-              }}
-            >
-              <option value="">Select competitor</option>
-              {competitors.map((item) => (
-                <option key={item.competitorId} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="button"
-              type="button"
-              onClick={() => {
-                if (activeCaseId) {
-                  handleClearCase()
-                }
-                setActiveSubject(subjectName, subjectType, 'Configure')
-              }}
-            >
-              Use for analysis
-            </button>
-          </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'watchlist' && (
-        <div className="module-card module-card__wide section-intro">
-          <div className="card-header">
-            <div>
-              <h3>Watchlist</h3>
-              <p className="muted">Add people or companies you monitor regularly.</p>
-            </div>
-            <div className="pill">Due Diligence</div>
-          </div>
-
-          <form className="task-form" onSubmit={handleCreate}>
-            <input
-              className="input"
-              placeholder="Competitor name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <select
-              className="select"
-              value={competitorType}
-              onChange={(event) => setCompetitorType(event.target.value)}
-            >
-              <option value="Person">Person</option>
-              <option value="Company">Company</option>
-            </select>
-            <input
-              className="input"
-              placeholder="Notes (optional)"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-            />
-            <button className="button" type="submit">
-              {saving ? 'Saving…' : 'Add'}
-            </button>
-          </form>
-
-          <div className="card-divider">
-            <h4>CSV import</h4>
-          </div>
-          {importError ? <div className="module-alert">{importError}</div> : null}
-          {importStatus ? (
-            <div className="module-alert module-alert--success">{importStatus}</div>
-          ) : null}
-          <div className="stack">
-            <input
-              className="input"
-              type="file"
-              accept=".csv"
-              onChange={(event) => handleImportWatchlist(event.target.files?.[0] || null)}
-              disabled={importing}
-            />
-            <p className="muted">
-              Required column: <strong>name</strong>. Optional: competitor_type, notes.
-            </p>
-          </div>
-
-          <div className="table">
-            <div className="table-row table-head">
-              <span>Name</span>
-              <span>Type</span>
-              <span>Notes</span>
-              <span>Action</span>
-            </div>
-            {competitors.length === 0 && (
-              <div className="table-row empty">No competitors yet.</div>
-            )}
-            {competitors.map((item) => (
-              <div className="table-row" key={item.competitorId}>
-                <span>{item.name}</span>
-                <span>{item.competitorType}</span>
-                <span>{item.notes || '—'}</span>
-                <div className="table-actions">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleUseWatchlist(item)}
-                  >
-                    Use as subject
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleDelete(item.competitorId)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'launch' && (
-        <div className="module-card module-card__wide section-intro">
-          <div className="card-header">
-            <div>
-              <h3>Launch</h3>
-              <p className="muted">Open or embed the external DD app.</p>
-            </div>
-          </div>
-          <div className="stack">
-            {subjectName ? (
-              <div className="module-alert module-alert--success">
-                Launch subject: {subjectName} ({subjectType})
-              </div>
-            ) : (
-              <div className="module-alert">No subject selected yet.</div>
-            )}
-            <input
-              className="input"
-              placeholder="Due diligence app URL"
-              value={ddAppUrl}
-              onChange={(event) => setDdAppUrl(event.target.value)}
-            />
-            <input className="input" value={launchUrl} readOnly />
-            <div className="filter-row">
-              <button
-                className="button"
-                type="button"
-                onClick={() => window.open(launchUrl || ddAppUrl, '_blank')}
-                disabled={!ddAppUrl}
-              >
-                Open DD app
-              </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => window.open(gmailUrl, '_blank')}
-                disabled={!subjectName}
-              >
-                Open in Gmail
-              </button>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={embedApp}
-                  onChange={(event) => setEmbedApp(event.target.checked)}
-                />
-                Embed app below
-              </label>
-            </div>
-            <input
-              className="input"
-              placeholder="Gmail to (optional)"
-              value={gmailTo}
-              onChange={(event) => setGmailTo(event.target.value)}
-            />
-            {embedApp && launchUrl ? (
-              <iframe
-                title="Due Diligence App"
-                src={launchUrl}
-                className="dd-embed"
-              />
-            ) : null}
-            {!ddAppUrl ? (
-              <div className="module-alert">
-                External DD app URL is not configured yet. Set `DUE_DILIGENCE_APP_URL` (or
-                `DD_APP_URL`) in your environment.
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className="module-footer">
         <span>Backend scope:</span>

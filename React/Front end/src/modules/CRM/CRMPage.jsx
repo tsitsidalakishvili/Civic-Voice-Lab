@@ -4,8 +4,8 @@ import {
   requestForm,
   requestJson,
 } from '../../services/api'
-import { CivicStatGrid, PageHeader } from '../../ui'
-import { IconClipboardList, IconTarget, IconUsers } from '@tabler/icons-react'
+import { CivicStatGrid, ModuleFlow, PageHeader } from '../../ui'
+import { IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -91,6 +91,20 @@ const renderTemplate = (template, context) => {
   return template.replace(/\{(\w+)\}/g, (_, key) => context?.[key] ?? '')
 }
 
+const CRM_TAB_STORAGE_KEY = 'fs.crm.activeTab'
+const CRM_DEFAULT_TAB = 'overview'
+const CRM_TASKS_ENABLED = false
+const CRM_PRIMARY_TABS = new Set(
+  ['overview', 'people', 'outreach', CRM_TASKS_ENABLED ? 'tasks' : null].filter(Boolean),
+)
+
+const normalizeCrmTab = (tabId) => {
+  if (!tabId) return CRM_DEFAULT_TAB
+  if (tabId === 'events') return 'outreach'
+  if (!CRM_TASKS_ENABLED && tabId === 'tasks') return CRM_DEFAULT_TAB
+  return CRM_PRIMARY_TABS.has(tabId) ? tabId : CRM_DEFAULT_TAB
+}
+
 export function CRMPage({
   t,
   initialTab,
@@ -98,6 +112,7 @@ export function CRMPage({
   activeTabOverride,
   onTabChange,
   showTabs = true,
+  showIntro = true,
 }) {
   const translate = t || ((key, vars) => key)
   const [summary, setSummary] = useState(null)
@@ -111,19 +126,24 @@ export function CRMPage({
     key: 'name',
     direction: 'asc',
   })
-  const [activeTab, setActiveTab] = useState(initialTab || 'overview')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab) return normalizeCrmTab(initialTab)
+    if (typeof window === 'undefined') return CRM_DEFAULT_TAB
+    const stored = window.localStorage.getItem(CRM_TAB_STORAGE_KEY)
+    return normalizeCrmTab(stored)
+  })
   const [selectedEmail, setSelectedEmail] = useState('')
 
   const normalizeTab = (tabId) => {
-    if (!tabId) return ''
-    if (tabId === 'events') return 'outreach'
-    return tabId
+    return normalizeCrmTab(tabId)
   }
 
   const applyActiveTab = (nextTab) => {
     const normalized = normalizeTab(nextTab)
-    if (!normalized) return
     setActiveTab(normalized)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CRM_TAB_STORAGE_KEY, normalized)
+    }
     if (onTabChange) onTabChange(normalized)
   }
 
@@ -186,10 +206,11 @@ export function CRMPage({
   const [segmentTagOptions, setSegmentTagOptions] = useState([])
   const [segmentSkillOptions, setSegmentSkillOptions] = useState([])
   const [segmentMinEffort, setSegmentMinEffort] = useState('')
-  const [segmentLimit, setSegmentLimit] = useState(200)
+  const [segmentLimit, setSegmentLimit] = useState(75)
   const [segmentSelectedId, setSegmentSelectedId] = useState('')
   const [segmentResults, setSegmentResults] = useState([])
   const [segmentRunLoading, setSegmentRunLoading] = useState(false)
+  const [showNewSegmentForm, setShowNewSegmentForm] = useState(false)
   const [segmentTaskTitle, setSegmentTaskTitle] = useState('')
   const [segmentTaskDescription, setSegmentTaskDescription] = useState('')
   const [segmentTaskDueDate, setSegmentTaskDueDate] = useState('')
@@ -198,15 +219,12 @@ export function CRMPage({
   const [segmentTaskError, setSegmentTaskError] = useState('')
   const [groups, setGroups] = useState([])
   const [groupsError, setGroupsError] = useState('')
-  const [groupsLoading, setGroupsLoading] = useState(false)
-  const [groupName, setGroupName] = useState('')
-  const [groupInvite, setGroupInvite] = useState('')
-  const [groupNotes, setGroupNotes] = useState('')
   const [sendGroupId, setSendGroupId] = useState('')
-  const [sendMessage, setSendMessage] = useState('')
-  const [sendAppendInvite, setSendAppendInvite] = useState(true)
-  const [sendingMessage, setSendingMessage] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [channelSlackMode, setChannelSlackMode] = useState('default')
+  const [channelSlackCustom, setChannelSlackCustom] = useState('')
+  const [channelSlackError, setChannelSlackError] = useState('')
+  const [channelSlackStatus, setChannelSlackStatus] = useState('')
   const [individualQuery, setIndividualQuery] = useState('')
   const [individualResults, setIndividualResults] = useState([])
   const [individualSelected, setIndividualSelected] = useState([])
@@ -225,6 +243,12 @@ export function CRMPage({
   const [segmentEventCapacity, setSegmentEventCapacity] = useState('')
   const [segmentEventNotes, setSegmentEventNotes] = useState('')
   const [segmentEventStatusMessage, setSegmentEventStatusMessage] = useState('')
+  const [showNewEventForm, setShowNewEventForm] = useState(false)
+  const [outreachEvents, setOutreachEvents] = useState([])
+  const [outreachEventsError, setOutreachEventsError] = useState('')
+  const [outreachEventId, setOutreachEventId] = useState('')
+  const [sendingEventWhatsApp, setSendingEventWhatsApp] = useState(false)
+  const [sendingEventSlack, setSendingEventSlack] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -663,7 +687,6 @@ export function CRMPage({
   }
 
   const loadGroups = () => {
-    setGroupsLoading(true)
     setGroupsError('')
     getJson('/crm/whatsapp-groups')
       .then((payload) => {
@@ -671,9 +694,6 @@ export function CRMPage({
       })
       .catch((err) => {
         setGroupsError(err.message || 'Unable to load WhatsApp groups.')
-      })
-      .finally(() => {
-        setGroupsLoading(false)
       })
   }
 
@@ -691,11 +711,27 @@ export function CRMPage({
       })
   }
 
+  const loadOutreachEvents = () => {
+    setOutreachEventsError('')
+    getJson('/crm/events')
+      .then((payload) => {
+        const rows = Array.isArray(payload) ? payload : []
+        setOutreachEvents(rows)
+        if (outreachEventId && !rows.some((event) => event.eventId === outreachEventId)) {
+          setOutreachEventId('')
+        }
+      })
+      .catch((err) => {
+        setOutreachEventsError(err.message || 'Unable to load events.')
+      })
+  }
+
   useEffect(() => {
     if (activeTab !== 'outreach') return
     loadSegments()
     loadGroups()
     loadSegmentOptions()
+    loadOutreachEvents()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
@@ -719,6 +755,7 @@ export function CRMPage({
       setSegmentDescription('')
       setSegmentTags([])
       setSegmentSkills([])
+      setShowNewSegmentForm(false)
       loadSegments()
     } catch (err) {
       setSegmentsError(err.message || 'Unable to save segment.')
@@ -788,72 +825,6 @@ export function CRMPage({
     }
   }
 
-  const handleCreateGroup = async (event) => {
-    event.preventDefault()
-    if (!groupName.trim() || !groupInvite.trim()) {
-      setGroupsError('Group name and invite link are required.')
-      return
-    }
-    setGroupsError('')
-    try {
-      await requestJson('/crm/whatsapp-groups', {
-        method: 'POST',
-        payload: {
-          name: groupName.trim(),
-          inviteLink: groupInvite.trim(),
-          notes: groupNotes.trim(),
-        },
-      })
-      setGroupName('')
-      setGroupInvite('')
-      setGroupNotes('')
-      loadGroups()
-    } catch (err) {
-      setGroupsError(err.message || 'Unable to save WhatsApp group.')
-    }
-  }
-
-  const handleDeleteGroup = async (groupId) => {
-    setGroupsError('')
-    try {
-      await requestJson(`/crm/whatsapp-groups/${groupId}`, { method: 'DELETE' })
-      if (sendGroupId === groupId) {
-        setSendGroupId('')
-      }
-      loadGroups()
-    } catch (err) {
-      setGroupsError(err.message || 'Unable to delete WhatsApp group.')
-    }
-  }
-
-  const handleSendMessage = async () => {
-    if (!sendGroupId) {
-      setSendError('Select a WhatsApp group.')
-      return
-    }
-    if (!sendMessage.trim()) {
-      setSendError('Message is required.')
-      return
-    }
-    setSendError('')
-    setSendingMessage(true)
-    try {
-      await requestJson(`/crm/whatsapp-groups/${sendGroupId}/send`, {
-        method: 'POST',
-        payload: {
-          message: sendMessage.trim(),
-          appendInvite: sendAppendInvite,
-          source: 'react_outreach',
-        },
-      })
-      setSendMessage('')
-    } catch (err) {
-      setSendError(err.message || 'Unable to send message.')
-    } finally {
-      setSendingMessage(false)
-    }
-  }
-
   const handleIndividualSearch = async (event) => {
     event.preventDefault()
     const query = individualQuery.trim()
@@ -916,8 +887,8 @@ export function CRMPage({
   }
 
   const handleCreateSegmentEvent = async () => {
-    if (!segmentResults.length) {
-      setSegmentEventStatusMessage('Run a segment preview first.')
+    if (!segmentSelectedId) {
+      setSegmentEventStatusMessage('Select a saved segment first.')
       return
     }
     if (!segmentEventName.trim()) {
@@ -926,7 +897,13 @@ export function CRMPage({
     }
     setSegmentEventStatusMessage('')
     try {
-      const rows = segmentResults.map((row) => {
+      const limit = Math.max(1, Number(segmentLimit) || 200)
+      const audience = await getJson(`/crm/segments/${segmentSelectedId}/run?limit=${limit}`)
+      if (!Array.isArray(audience) || audience.length === 0) {
+        setSegmentEventStatusMessage('Selected segment has no people to invite.')
+        return
+      }
+      const rows = audience.map((row) => {
         const nameParts = splitFullName(row.fullName)
         return {
           email: row.email,
@@ -935,7 +912,7 @@ export function CRMPage({
           group: row.group,
         }
       })
-      await requestJson('/crm/events/with-people', {
+      const result = await requestJson('/crm/events/with-people', {
         method: 'POST',
         payload: {
           event: {
@@ -951,15 +928,99 @@ export function CRMPage({
           registrationStatus: 'Registered',
         },
       })
-      setSegmentEventStatusMessage('Event created for segment.')
+      setSegmentEventStatusMessage('Event created and attached to selected segment.')
+      if (result?.eventId) {
+        setOutreachEventId(result.eventId)
+      }
+      loadOutreachEvents()
       setSegmentEventName('')
       setSegmentEventStartDate('')
       setSegmentEventEndDate('')
       setSegmentEventLocation('')
       setSegmentEventCapacity('')
       setSegmentEventNotes('')
+      setShowNewEventForm(false)
     } catch (err) {
       setSegmentEventStatusMessage(err.message || 'Unable to create event.')
+    }
+  }
+
+  const outreachSelectedEvent = useMemo(
+    () => outreachEvents.find((event) => event.eventId === outreachEventId) || null,
+    [outreachEventId, outreachEvents],
+  )
+  const selectedSegment = useMemo(
+    () => segments.find((segment) => segment.segmentId === segmentSelectedId) || null,
+    [segmentSelectedId, segments],
+  )
+
+  const outreachBaseUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : ''
+
+  const outreachPublicLink =
+    outreachSelectedEvent && outreachBaseUrl
+      ? `${outreachBaseUrl}?event_registration=1&event_id=${outreachSelectedEvent.eventId}`
+      : ''
+
+  const handleSendEventWhatsApp = async () => {
+    const targetEvent = outreachSelectedEvent
+    const targetLink = outreachPublicLink
+    if (!targetEvent || !targetLink) {
+      setSegmentEventStatusMessage('Select an event to send.')
+      return
+    }
+    if (!sendGroupId) {
+      setSendError('Select a WhatsApp group first.')
+      return
+    }
+    setSendError('')
+    setSegmentEventStatusMessage('')
+    setSendingEventWhatsApp(true)
+    try {
+      await requestJson(`/crm/whatsapp-groups/${sendGroupId}/send`, {
+        method: 'POST',
+        payload: {
+          message: `Event registration: ${targetEvent.name}\n\nRegister here:\n${targetLink}`,
+          source: 'react_outreach',
+        },
+      })
+      setSegmentEventStatusMessage(`Sent "${targetEvent.name}" to WhatsApp.`)
+    } catch (err) {
+      setSendError(err.message || 'Unable to send event to WhatsApp.')
+    } finally {
+      setSendingEventWhatsApp(false)
+    }
+  }
+
+  const handleSendEventSlack = async () => {
+    const targetEvent = outreachSelectedEvent
+    const targetLink = outreachPublicLink
+    if (!targetEvent || !targetLink) {
+      setSegmentEventStatusMessage('Select an event to send.')
+      return
+    }
+    if (channelSlackMode === 'custom' && !channelSlackCustom.trim()) {
+      setChannelSlackError('Select or enter a Slack channel.')
+      return
+    }
+    setChannelSlackError('')
+    setChannelSlackStatus('')
+    setSegmentEventStatusMessage('')
+    setSendingEventSlack(true)
+    try {
+      await requestJson('/crm/slack/send', {
+        method: 'POST',
+        payload: {
+          message: `Event registration: ${targetEvent.name}\n\nRegister here:\n${targetLink}`,
+          channel: channelSlackMode === 'custom' ? channelSlackCustom.trim() : '',
+          source: 'react_outreach',
+        },
+      })
+      setChannelSlackStatus(`Sent "${targetEvent.name}" to Slack.`)
+    } catch (err) {
+      setChannelSlackError(err.message || 'Unable to send event to Slack.')
+    } finally {
+      setSendingEventSlack(false)
     }
   }
 
@@ -1052,14 +1113,6 @@ export function CRMPage({
     },
   }
 
-  const openTaskCount = useMemo(
-    () =>
-      tasks.filter(
-        (task) => String(task?.status || '').toLowerCase() === 'open',
-      ).length,
-    [tasks],
-  )
-
   const crmPulseStats = useMemo(
     () => [
       {
@@ -1075,46 +1128,50 @@ export function CRMPage({
         note: 'Community reach',
       },
       {
-        label: 'Open tasks',
-        value: openTaskCount,
-        icon: <IconClipboardList size={18} />,
-        badge: 'Today',
-      },
-      {
         label: 'Segments',
         value: segments.length,
         icon: <IconTarget size={18} />,
         note: 'Ready to activate',
       },
     ],
-    [openTaskCount, people.length, segments.length, summary],
+    [people.length, segments.length, summary],
   )
 
   return (
-    <section className="module">
+    <section className="module module--crm-radical">
+      {showIntro ? (
+        <div className="module-card module-card__wide section-intro">
+          <div className="card-header">
+            <div>
+              <h3>{translate('network.header.title')}</h3>
+              <p className="muted">{translate('network.header.subtitle')}</p>
+            </div>
+            <div className="pill">Network</div>
+          </div>
+        </div>
+      ) : null}
+
       {error ? <div className="module-alert">{error}</div> : null}
 
       <CivicStatGrid
         title="Network pulse"
-        description="Live health checks for supporters, tasks, and outreach readiness."
+        description="Live health checks for supporters, segments, and outreach readiness."
         items={crmPulseStats}
       />
 
       {!hideTabs && showTabs ? (
         <div className="subtabs">
           {[
-            { id: 'overview', label: translate('network.tabs.overview') },
-            { id: 'people', label: translate('network.tabs.people') },
-            { id: 'furry-friends', label: translate('network.tabs.furryFriends') },
-            { id: 'tasks', label: translate('network.tabs.tasks') },
-            { id: 'outreach', label: translate('network.tabs.outreach') },
-            { id: 'data-entry', label: translate('network.tabs.dataEntry') },
-          ].map((tab) => (
+            { id: 'overview', label: 'Overview' },
+            { id: 'people', label: 'People directory' },
+            { id: 'outreach', label: 'Outreach & events' },
+            CRM_TASKS_ENABLED ? { id: 'tasks', label: 'Task board' } : null,
+          ].filter(Boolean).map((tab) => (
             <button
               key={tab.id}
               type="button"
               className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-            onClick={() => applyActiveTab(tab.id)}
+              onClick={() => applyActiveTab(tab.id)}
             >
               {tab.label}
             </button>
@@ -1122,9 +1179,7 @@ export function CRMPage({
         </div>
       ) : null}
 
-      {activeTab === 'data-entry' && <CRMDataEntryTab />}
-      {activeTab === 'overview' && <CRMOverviewTab />}
-      {activeTab === 'campaigns' && <CRMCampaignsTab />}
+      {activeTab === 'overview' && <CRMOverviewTab onNavigate={applyActiveTab} />}
 
       {activeTab === 'people' && (
         <div className="stack">
@@ -1353,389 +1408,7 @@ export function CRMPage({
         </div>
       </div>
       )}
-      {activeTab === 'furry-friends' && (
-        <div className="module-layout">
-          <aside className="module-sidebar">
-            <div className="sidebar-card sidebar-card--accent">
-              <h3>Search filters</h3>
-              <form className="stack" onSubmit={handleFurrySearch}>
-                <label className="label">Search</label>
-                <input
-                  className="input"
-                  type="text"
-                  value={furryQuery}
-                  onChange={(event) => setFurryQuery(event.target.value)}
-                  placeholder="Search by name, breed, address, or chip"
-                />
-                <label className="label">Species</label>
-                <select
-                  className="select"
-                  value={furrySpecies}
-                  onChange={(event) => setFurrySpecies(event.target.value)}
-                >
-                  <option value="All">All species</option>
-                  <option value="Dog">Dogs</option>
-                  <option value="Cat">Cats</option>
-                </select>
-                <label className="label">Sort</label>
-                <select
-                  className="select"
-                  value={furrySort}
-                  onChange={(event) => setFurrySort(event.target.value)}
-                >
-                  <option value="Name">Sort: Name</option>
-                  <option value="Age">Sort: Age</option>
-                  <option value="Municipality">Sort: Municipality</option>
-                  <option value="Species">Sort: Species</option>
-                </select>
-                <button className="button" type="submit">
-                  {furryLoading ? 'Loading…' : 'Search'}
-                </button>
-              </form>
-            </div>
-            <div className="sidebar-card">
-              <h3>Furry friends stats</h3>
-              <div className="metric-row">
-                <span>Results</span>
-                <strong>{furryRows.length}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Total animals</span>
-                <strong>{furryTotalCount}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Dogs</span>
-                <strong>{furryDogCount}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Cats</span>
-                <strong>{furryCatCount}</strong>
-              </div>
-            </div>
-          </aside>
-          <div className="module-main">
-            {furryError ? <div className="module-alert">{furryError}</div> : null}
-            <div className="module-card module-card__wide panel">
-              <div className="card-header">
-                <div>
-                  <h3>Furry friends map</h3>
-                  <p className="muted">Map of animals with known locations.</p>
-                </div>
-                <div className="map-legend">
-                  <span>
-                    <span className="legend-dot legend-dot--dog" />
-                    Dogs
-                  </span>
-                  <span>
-                    <span className="legend-dot legend-dot--cat" />
-                    Cats
-                  </span>
-                </div>
-              </div>
-              <div className="map-canvas">
-                <MapContainer
-                  center={furryMapCenter}
-                  zoom={12}
-                  scrollWheelZoom={false}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  {furryMapRows.map((row) => (
-                    <CircleMarker
-                      key={row.furryId}
-                      center={[Number(row.lat), Number(row.lon)]}
-                      radius={8}
-                      pathOptions={{
-                        color: row.species === 'Cat' ? '#7c3aed' : '#2563eb',
-                        fillColor: row.species === 'Cat' ? '#7c3aed' : '#2563eb',
-                        fillOpacity: 0.7,
-                      }}
-                    >
-                      <Popup>
-                        <strong>{row.name || 'Unknown'}</strong>
-                        <div>{row.species || '—'}</div>
-                        <div>{row.breed || '—'}</div>
-                        <div>{row.address || row.municipality || '—'}</div>
-                        <div>Chip: {row.chipNumber || '—'}</div>
-                      </Popup>
-                    </CircleMarker>
-                  ))}
-                </MapContainer>
-              </div>
-            </div>
-
-            <div className="module-card module-card__wide panel panel--highlight">
-              <div className="card-header">
-                <div>
-                  <h3>Furry friends directory</h3>
-                  <p className="muted">
-                    Stray dogs and cats by address.
-                  </p>
-                </div>
-                <div className="pill">Network</div>
-              </div>
-              <div className="table">
-                <div className="table-row table-row--furry table-head">
-                  <span>Name</span>
-                  <span>Species</span>
-                  <span>Gender</span>
-                  <span>Age</span>
-                  <span>Neutered</span>
-                  <span>Breed</span>
-                  <span>Address</span>
-                  <span>Chip</span>
-                </div>
-                {furryRows.length === 0 && !furryLoading && (
-                  <div className="table-row empty">No records found.</div>
-                )}
-                {furryRows.map((row) => (
-                  <button
-                    className="table-row table-row--furry table-row__button"
-                    key={row.furryId}
-                    type="button"
-                    onClick={() => setSelectedFurryId(row.furryId)}
-                  >
-                    <span>{row.name || '—'}</span>
-                    <span>{row.species || '—'}</span>
-                    <span>{row.gender || '—'}</span>
-                    <span>{row.age ?? '—'}</span>
-                    <span>
-                      {typeof row.neutered === 'boolean'
-                        ? row.neutered
-                          ? 'Yes'
-                          : 'No'
-                        : '—'}
-                    </span>
-                    <span>{row.breed || '—'}</span>
-                    <span>{row.address || row.municipality || '—'}</span>
-                    <span>{row.chipNumber || '—'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="module-card module-card__wide panel">
-              <div className="card-header">
-                <div>
-                  <h3>Import furry friends CSV</h3>
-                  <p className="muted">
-                    Upload animal data to populate the directory.
-                  </p>
-                </div>
-              </div>
-              <div className="stack">
-                <input
-                  className="input"
-                  type="file"
-                  accept=".csv"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] || null
-                    setFurryImportFile(file)
-                  }}
-                />
-                <button className="button" type="button" onClick={handleFurryImport}>
-                  Import CSV
-                </button>
-                {furryImportStatus ? <p className="muted">{furryImportStatus}</p> : null}
-                <p className="muted">
-                  Expected columns: pet_type, name, gender, age, neutered, breed, color,
-                  chip_number, address, municipality (optional), lat, lon, notes.
-                </p>
-              </div>
-            </div>
-
-            <div className="module-card module-card__wide panel">
-              <div className="card-header">
-                <div>
-                  <h3>Furry friends details</h3>
-                  <p className="muted">
-                    Select a row above to view and edit the record.
-                  </p>
-                </div>
-                {selectedFurryId ? <div className="pill">{selectedFurryId}</div> : null}
-              </div>
-
-              {furryProfileError ? <div className="module-alert">{furryProfileError}</div> : null}
-
-              {!selectedFurryId && <p className="muted">No record selected.</p>}
-
-              {selectedFurryId && furryProfileDraft && (
-                <div className="profile-grid">
-                  <div>
-                    <label className="label">Name</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.name || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('name', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Municipality</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.municipality || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('municipality', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Species</label>
-                    <select
-                      className="select"
-                      value={furryProfileDraft.species || 'Dog'}
-                      onChange={(event) =>
-                        updateFurryProfileField('species', event.target.value)
-                      }
-                    >
-                      <option value="Dog">Dog</option>
-                      <option value="Cat">Cat</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Gender</label>
-                    <select
-                      className="select"
-                      value={furryProfileDraft.gender || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('gender', event.target.value)
-                      }
-                    >
-                      <option value="">Unspecified</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Age</label>
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      value={furryProfileDraft.age ?? ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('age', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Neutered</label>
-                    <select
-                      className="select"
-                      value={
-                        typeof furryProfileDraft.neutered === 'boolean'
-                          ? furryProfileDraft.neutered
-                            ? 'yes'
-                            : 'no'
-                          : ''
-                      }
-                      onChange={(event) => {
-                        const value = event.target.value
-                        updateFurryProfileField(
-                          'neutered',
-                          value === '' ? null : value === 'yes',
-                        )
-                      }}
-                    >
-                      <option value="">Unspecified</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Breed</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.breed || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('breed', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Color</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.color || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('color', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Chip number</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.chipNumber || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('chipNumber', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="profile-span">
-                    <label className="label">Address</label>
-                    <input
-                      className="input"
-                      value={furryProfileDraft.address || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('address', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Latitude</label>
-                    <input
-                      className="input"
-                      type="number"
-                      value={furryProfileDraft.lat ?? ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('lat', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Longitude</label>
-                    <input
-                      className="input"
-                      type="number"
-                      value={furryProfileDraft.lon ?? ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('lon', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="profile-span">
-                    <label className="label">Notes</label>
-                    <textarea
-                      className="textarea"
-                      value={furryProfileDraft.notes || ''}
-                      onChange={(event) =>
-                        updateFurryProfileField('notes', event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="profile-actions">
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={handleFurrySave}
-                      disabled={furryProfileSaving}
-                    >
-                      {furryProfileSaving ? 'Saving…' : 'Save record'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {activeTab === 'tasks' && (
+      {CRM_TASKS_ENABLED && activeTab === 'tasks' && (
         <div className="module-layout">
           <aside className="module-sidebar">
             <div className="sidebar-card sidebar-card--accent">
@@ -1914,575 +1587,357 @@ export function CRMPage({
       )}
       {activeTab === 'outreach' && (
         <div className="stack">
-          <div className="module-card module-card__wide section-intro">
+          <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
-                <h3>Outreach & Events</h3>
-                <p className="muted">
-                  Build segments, preview lists, and coordinate outreach or events in one flow.
-                </p>
+                <h3>1) Segment: create or select</h3>
+                <p className="muted">Save a new segment or pick an existing one.</p>
               </div>
-              <div className="pill">Network</div>
+              <div className="pill">Audience</div>
             </div>
-          </div>
-
-          <details className="dashboard-detail" open>
-            <summary>1. Build a segment</summary>
-            <div className="dashboard-detail__body">
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Segment basics</h3>
-                    <p className="muted">Save a list you can reuse for outreach.</p>
-                  </div>
-                  <div className="pill">Network</div>
-                </div>
-
-                {segmentsError ? <div className="module-alert">{segmentsError}</div> : null}
-
-                <form className="stack" onSubmit={handleCreateSegment}>
-                  <label className="label">Segment name</label>
-                  <input
-                    className="input"
-                    value={segmentName}
-                    onChange={(event) => setSegmentName(event.target.value)}
-                    placeholder="Active members in Ward 13"
-                  />
-                  <label className="label">Description</label>
-                  <input
-                    className="input"
-                    value={segmentDescription}
-                    onChange={(event) => setSegmentDescription(event.target.value)}
-                    placeholder="High commitment supporters for ward outreach"
-                  />
-                  <div className="filter-row">
-                    <select
-                      className="select"
-                      value={segmentGroup}
-                      onChange={(event) => setSegmentGroup(event.target.value)}
-                    >
-                      <option value="All">All groups</option>
-                      <option value="Supporter">Supporters</option>
-                      <option value="Member">Members</option>
-                    </select>
-                    <select
-                      className="select"
-                      value={segmentTimeAvailability}
-                      onChange={(event) => setSegmentTimeAvailability(event.target.value)}
-                    >
-                      <option value="All">Any availability</option>
-                      <option value="Weekends">Weekends</option>
-                      <option value="Evenings">Evenings</option>
-                      <option value="Full-time">Full-time</option>
-                      <option value="Ad-hoc">Ad-hoc</option>
-                    </select>
-                  </div>
-
-                  <details className="dashboard-detail">
-                    <summary>Advanced filters</summary>
-                    <div className="dashboard-detail__body">
-                      <div className="filter-row">
-                        <input
-                          className="input"
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={segmentMinEffort}
-                          onChange={(event) => setSegmentMinEffort(event.target.value)}
-                          placeholder="Min effort hours"
-                        />
-                        <input
-                          className="input"
-                          value={segmentNameContains}
-                          onChange={(event) => setSegmentNameContains(event.target.value)}
-                          placeholder="Name contains"
-                        />
-                        <input
-                          className="input"
-                          value={segmentAddressContains}
-                          onChange={(event) => setSegmentAddressContains(event.target.value)}
-                          placeholder="Address contains"
-                        />
-                      </div>
-                      <div className="filter-row">
-                        <select
-                          className="select"
-                          multiple
-                          value={segmentTags}
-                          onChange={(event) =>
-                            setSegmentTags(
-                              Array.from(event.target.selectedOptions, (opt) => opt.value),
-                            )
-                          }
-                        >
-                          {segmentTagOptions.map((tag) => (
-                            <option key={tag} value={tag}>
-                              {tag}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="select"
-                          multiple
-                          value={segmentSkills}
-                          onChange={(event) =>
-                            setSegmentSkills(
-                              Array.from(event.target.selectedOptions, (opt) => opt.value),
-                            )
-                          }
-                        >
-                          {segmentSkillOptions.map((skill) => (
-                            <option key={skill} value={skill}>
-                              {skill}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </details>
-
-                  <button className="button" type="submit">
-                    Save segment
-                  </button>
-                </form>
-
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Name</span>
-                    <span>Description</span>
-                    <span>Updated</span>
-                    <span />
-                  </div>
-                  {segments.length === 0 && !segmentsLoading && (
-                    <div className="table-row empty">No segments saved.</div>
-                  )}
-                  {segments.map((segment) => (
-                    <div className="table-row" key={segment.segmentId}>
-                      <span>{segment.name}</span>
-                      <span>{segment.description || '—'}</span>
-                      <span>{segment.updatedAt || '—'}</span>
-                      <div className="table-actions">
-                        <button
-                          className="button-secondary"
-                          type="button"
-                          onClick={() => {
-                            setSegmentSelectedId(segment.segmentId)
-                            handleRunSegment(segment.segmentId)
-                          }}
-                        >
-                          Run
-                        </button>
-                        <button
-                          className="button-secondary"
-                          type="button"
-                          onClick={() => handleDeleteSegment(segment.segmentId)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {segmentsError ? <div className="module-alert">{segmentsError}</div> : null}
+            <div className="filter-row">
+              <select
+                className="select"
+                value={segmentSelectedId}
+                onChange={(event) => setSegmentSelectedId(event.target.value)}
+              >
+                <option value="">Select saved segment</option>
+                {segments.map((segment) => (
+                  <option key={segment.segmentId} value={segment.segmentId}>
+                    {segment.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button-secondary"
+                type="button"
+                disabled={!segmentSelectedId}
+                onClick={() => handleDeleteSegment(segmentSelectedId)}
+              >
+                Delete segment
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => setShowNewSegmentForm((prev) => !prev)}
+              >
+                {showNewSegmentForm ? 'Close new segment' : '+ New segment'}
+              </button>
             </div>
-          </details>
-
-          <details className="dashboard-detail" open>
-            <summary>2. Preview & follow-up</summary>
-            <div className="dashboard-detail__body">
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Segment preview</h3>
-                    <p className="muted">Review results before outreach.</p>
-                  </div>
-                  <div className="pill">Network</div>
+            <div className="module-card">
+              <h4>Selected segment details</h4>
+              {!selectedSegment ? (
+                <p className="muted">No segment selected.</p>
+              ) : (
+                <div className="module-footer">
+                  <span>
+                    <strong>Name:</strong> {selectedSegment.name || '—'}
+                  </span>
+                  <span>
+                    <strong>Description:</strong> {selectedSegment.description || '—'}
+                  </span>
+                  <span>
+                    <strong>Updated:</strong> {selectedSegment.updatedAt || '—'}
+                  </span>
+                  <span>
+                    <strong>ID:</strong> {selectedSegment.segmentId || '—'}
+                  </span>
                 </div>
-
+              )}
+            </div>
+            {showNewSegmentForm ? (
+              <form className="stack" onSubmit={handleCreateSegment}>
+                <input
+                  className="input"
+                  value={segmentName}
+                  onChange={(event) => setSegmentName(event.target.value)}
+                  placeholder="Segment name"
+                />
+                <input
+                  className="input"
+                  value={segmentDescription}
+                  onChange={(event) => setSegmentDescription(event.target.value)}
+                  placeholder="Description"
+                />
+                <div className="filter-row">
+                  <select
+                    className="select"
+                    value={segmentGroup}
+                    onChange={(event) => setSegmentGroup(event.target.value)}
+                  >
+                    <option value="All">All groups</option>
+                    <option value="Supporter">Supporters</option>
+                    <option value="Member">Members</option>
+                  </select>
+                  <select
+                    className="select"
+                    value={segmentTimeAvailability}
+                    onChange={(event) => setSegmentTimeAvailability(event.target.value)}
+                  >
+                    <option value="All">Any availability</option>
+                    <option value="Weekends">Weekends</option>
+                    <option value="Evenings">Evenings</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Ad-hoc">Ad-hoc</option>
+                  </select>
+                </div>
                 <div className="filter-row">
                   <input
                     className="input"
                     type="number"
-                    min="10"
-                    max="2000"
-                    value={segmentLimit}
-                    onChange={(event) => setSegmentLimit(event.target.value)}
-                    placeholder="Limit"
-                  />
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => handleRunSegment(segmentSelectedId || null)}
-                  >
-                    {segmentRunLoading ? 'Running…' : 'Run filter'}
-                  </button>
-                </div>
-
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Name</span>
-                    <span>Email</span>
-                    <span>Group</span>
-                    <span>Effort</span>
-                  </div>
-                  {segmentResults.length === 0 && !segmentRunLoading && (
-                    <div className="table-row empty">No results yet.</div>
-                  )}
-                  {segmentResults.map((row) => (
-                    <div className="table-row" key={row.email}>
-                      <span>{row.fullName}</span>
-                      <span>{row.email}</span>
-                      <span>{row.group}</span>
-                      <span>{row.effortHours ?? 0}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <details className="dashboard-detail">
-                  <summary>Create tasks for segment</summary>
-                  <div className="dashboard-detail__body">
-                    {segmentTaskError ? (
-                      <div className="module-alert">{segmentTaskError}</div>
-                    ) : null}
-                    <div className="stack">
-                      <input
-                        className="input"
-                        value={segmentTaskTitle}
-                        onChange={(event) => setSegmentTaskTitle(event.target.value)}
-                        placeholder="Task title"
-                      />
-                      <input
-                        className="input"
-                        value={segmentTaskDescription}
-                        onChange={(event) => setSegmentTaskDescription(event.target.value)}
-                        placeholder="Notes"
-                      />
-                      <div className="filter-row">
-                        <input
-                          className="input"
-                          type="date"
-                          value={segmentTaskDueDate}
-                          onChange={(event) => setSegmentTaskDueDate(event.target.value)}
-                        />
-                        <select
-                          className="select"
-                          value={segmentTaskStatus}
-                          onChange={(event) => setSegmentTaskStatus(event.target.value)}
-                        >
-                          <option value="Open">Open</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Done">Done</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                      </div>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={handleBulkTasks}
-                        disabled={segmentTaskSaving}
-                      >
-                        {segmentTaskSaving ? 'Creating…' : 'Create tasks'}
-                      </button>
-                    </div>
-                  </div>
-                </details>
-
-                <details className="dashboard-detail">
-                  <summary>Create event for segment</summary>
-                  <div className="dashboard-detail__body">
-                    {segmentEventStatusMessage ? (
-                      <div className="module-alert">{segmentEventStatusMessage}</div>
-                    ) : null}
-                    <div className="stack">
-                      <input
-                        className="input"
-                        placeholder="Event name"
-                        value={segmentEventName}
-                        onChange={(event) => setSegmentEventName(event.target.value)}
-                      />
-                      <div className="filter-row">
-                        <input
-                          className="input"
-                          type="date"
-                          value={segmentEventStartDate}
-                          onChange={(event) => setSegmentEventStartDate(event.target.value)}
-                        />
-                        <input
-                          className="input"
-                          type="date"
-                          value={segmentEventEndDate}
-                          onChange={(event) => setSegmentEventEndDate(event.target.value)}
-                        />
-                      </div>
-                      <div className="filter-row">
-                        <input
-                          className="input"
-                          placeholder="Location"
-                          value={segmentEventLocation}
-                          onChange={(event) => setSegmentEventLocation(event.target.value)}
-                        />
-                        <select
-                          className="select"
-                          value={segmentEventStatus}
-                          onChange={(event) => setSegmentEventStatus(event.target.value)}
-                        >
-                          <option value="Planned">Planned</option>
-                          <option value="Scheduled">Scheduled</option>
-                          <option value="Completed">Completed</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                        <input
-                          className="input"
-                          type="number"
-                          placeholder="Capacity"
-                          value={segmentEventCapacity}
-                          onChange={(event) => setSegmentEventCapacity(event.target.value)}
-                        />
-                      </div>
-                      <input
-                        className="input"
-                        placeholder="Notes"
-                        value={segmentEventNotes}
-                        onChange={(event) => setSegmentEventNotes(event.target.value)}
-                      />
-                      <button className="button" type="button" onClick={handleCreateSegmentEvent}>
-                        Create event
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </details>
-
-          <details className="dashboard-detail">
-            <summary>3. Individual outreach</summary>
-            <div className="dashboard-detail__body">
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Individual outreach</h3>
-                    <p className="muted">Pick specific people and create tasks.</p>
-                  </div>
-                  <div className="pill">Network</div>
-                </div>
-
-                {individualError ? (
-                  <div className="module-alert">{individualError}</div>
-                ) : null}
-
-                <form className="filter-row" onSubmit={handleIndividualSearch}>
-                  <input
-                    className="input"
-                    placeholder="Search by name or email"
-                    value={individualQuery}
-                    onChange={(event) => setIndividualQuery(event.target.value)}
-                  />
-                  <button className="button" type="submit">
-                    {individualLoading ? 'Searching…' : 'Search'}
-                  </button>
-                </form>
-
-                <div className="table">
-                  <div className="table-row table-head">
-                    <span>Name</span>
-                    <span>Email</span>
-                    <span>Group</span>
-                    <span>Select</span>
-                  </div>
-                  {individualResults.length === 0 && !individualLoading && (
-                    <div className="table-row empty">No results yet.</div>
-                  )}
-                  {individualResults.map((row) => (
-                    <div className="table-row" key={row.email}>
-                      <span>{row.fullName}</span>
-                      <span>{row.email}</span>
-                      <span>{row.group}</span>
-                      <span>
-                        <input
-                          type="checkbox"
-                          checked={individualSelected.includes(row.email)}
-                          onChange={() => handleToggleIndividual(row.email)}
-                        />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <details className="dashboard-detail">
-                  <summary>Create tasks</summary>
-                  <div className="dashboard-detail__body">
-                    <p className="muted">
-                      Use placeholders like {'{fullName}'} and {'{email}'}.
-                    </p>
-                    <div className="stack">
-                      <input
-                        className="input"
-                        placeholder="Task title template"
-                        value={individualTaskTitle}
-                        onChange={(event) => setIndividualTaskTitle(event.target.value)}
-                      />
-                      <input
-                        className="input"
-                        placeholder="Task notes template"
-                        value={individualTaskDescription}
-                        onChange={(event) => setIndividualTaskDescription(event.target.value)}
-                      />
-                      <div className="filter-row">
-                        <input
-                          className="input"
-                          type="date"
-                          value={individualTaskDueDate}
-                          onChange={(event) => setIndividualTaskDueDate(event.target.value)}
-                        />
-                        <select
-                          className="select"
-                          value={individualTaskStatus}
-                          onChange={(event) => setIndividualTaskStatus(event.target.value)}
-                        >
-                          <option value="Open">Open</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Done">Done</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                      </div>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={handleIndividualTasks}
-                        disabled={individualTaskSaving}
-                      >
-                        {individualTaskSaving ? 'Creating…' : 'Create tasks'}
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </details>
-
-          <details className="dashboard-detail">
-            <summary>4. WhatsApp groups & messaging</summary>
-            <div className="dashboard-detail__body">
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h3>WhatsApp groups</h3>
-                    <p className="muted">Manage group links and notes.</p>
-                  </div>
-                  <div className="pill">Outreach</div>
-                </div>
-
-                {groupsError ? <div className="module-alert">{groupsError}</div> : null}
-
-                <form className="stack" onSubmit={handleCreateGroup}>
-                  <input
-                    className="input"
-                    value={groupName}
-                    onChange={(event) => setGroupName(event.target.value)}
-                    placeholder="Group name"
+                    min="0"
+                    step="0.5"
+                    value={segmentMinEffort}
+                    onChange={(event) => setSegmentMinEffort(event.target.value)}
+                    placeholder="Min effort hours"
                   />
                   <input
                     className="input"
-                    value={groupInvite}
-                    onChange={(event) => setGroupInvite(event.target.value)}
-                    placeholder="Invite link"
+                    value={segmentNameContains}
+                    onChange={(event) => setSegmentNameContains(event.target.value)}
+                    placeholder="Name contains"
                   />
                   <input
                     className="input"
-                    value={groupNotes}
-                    onChange={(event) => setGroupNotes(event.target.value)}
-                    placeholder="Notes"
+                    value={segmentAddressContains}
+                    onChange={(event) => setSegmentAddressContains(event.target.value)}
+                    placeholder="Address contains"
                   />
-                  <button className="button" type="submit">
-                    Save group
-                  </button>
-                </form>
-
-                <div className="table">
-                  <div className="table-row table-row--three table-head">
-                    <span>Name</span>
-                    <span>Invite link</span>
-                    <span />
-                  </div>
-                  {groups.length === 0 && !groupsLoading && (
-                    <div className="table-row table-row--three empty">No groups saved.</div>
-                  )}
-                  {groups.map((group) => (
-                    <div className="table-row table-row--three" key={group.groupId}>
-                      <span>{group.name}</span>
-                      <span className="muted">{group.inviteLink}</span>
-                      <div className="table-actions">
-                        <button
-                          className="button-secondary"
-                          type="button"
-                          onClick={() => handleDeleteGroup(group.groupId)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              </div>
-
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Send WhatsApp message</h3>
-                    <p className="muted">Send a message to a saved group.</p>
-                  </div>
-                  <div className="pill">Outreach</div>
-                </div>
-
-                {sendError ? <div className="module-alert">{sendError}</div> : null}
-
-                <div className="stack">
+                <div className="filter-row">
                   <select
                     className="select"
-                    value={sendGroupId}
-                    onChange={(event) => setSendGroupId(event.target.value)}
+                    multiple
+                    value={segmentTags}
+                    onChange={(event) =>
+                      setSegmentTags(
+                        Array.from(event.target.selectedOptions, (opt) => opt.value),
+                      )
+                    }
                   >
-                    <option value="">Select group</option>
-                    {groups.map((group) => (
-                      <option key={group.groupId} value={group.groupId}>
-                        {group.name}
+                    {segmentTagOptions.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
                       </option>
                     ))}
                   </select>
-                  <textarea
-                    className="textarea"
-                    value={sendMessage}
-                    onChange={(event) => setSendMessage(event.target.value)}
-                    placeholder="Message text"
-                  />
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={sendAppendInvite}
-                      onChange={(event) => setSendAppendInvite(event.target.checked)}
-                    />
-                    Append invite link
-                  </label>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={handleSendMessage}
-                    disabled={sendingMessage}
+                  <select
+                    className="select"
+                    multiple
+                    value={segmentSkills}
+                    onChange={(event) =>
+                      setSegmentSkills(
+                        Array.from(event.target.selectedOptions, (opt) => opt.value),
+                      )
+                    }
                   >
-                    {sendingMessage ? 'Sending…' : 'Send message'}
-                  </button>
+                    {segmentSkillOptions.map((skill) => (
+                      <option key={skill} value={skill}>
+                        {skill}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-            </div>
-          </details>
+                <button className="button" type="submit">
+                  Save segment
+                </button>
+              </form>
+            ) : null}
+          </div>
 
-          <details className="dashboard-detail">
-            <summary>5. Events</summary>
-            <div className="dashboard-detail__body">
-              <CRMEventsTab />
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>2) Events: create or select</h3>
+                <p className="muted">Create an event for the selected segment or pick an existing event.</p>
+              </div>
+              <div className="pill">Events</div>
             </div>
-          </details>
+            {outreachEventsError ? <div className="module-alert">{outreachEventsError}</div> : null}
+            {segmentEventStatusMessage ? <div className="module-alert">{segmentEventStatusMessage}</div> : null}
+            <div className="filter-row">
+              <select
+                className="select"
+                value={outreachEventId}
+                onChange={(event) => setOutreachEventId(event.target.value)}
+              >
+                <option value="">Select created event</option>
+                {outreachEvents.map((event) => (
+                  <option key={event.eventId} value={event.eventId}>
+                    {event.name}
+                  </option>
+                ))}
+              </select>
+              <button className="button-secondary" type="button" onClick={loadOutreachEvents}>
+                Refresh events
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => setShowNewEventForm((prev) => !prev)}
+              >
+                {showNewEventForm ? 'Close new event' : '+ New event'}
+              </button>
+            </div>
+            <input className="input" value={outreachPublicLink} readOnly placeholder="Event link" />
+            <div className="module-card">
+              <h4>Selected event details</h4>
+              {!outreachSelectedEvent ? (
+                <p className="muted">No event selected.</p>
+              ) : (
+                <div className="module-footer">
+                  <span>
+                    <strong>Name:</strong> {outreachSelectedEvent.name || '—'}
+                  </span>
+                  <span>
+                    <strong>Start:</strong> {outreachSelectedEvent.startDate || '—'}
+                  </span>
+                  <span>
+                    <strong>End:</strong> {outreachSelectedEvent.endDate || '—'}
+                  </span>
+                  <span>
+                    <strong>Status:</strong> {outreachSelectedEvent.status || 'Planned'}
+                  </span>
+                  <span>
+                    <strong>Registrations:</strong> {outreachSelectedEvent.registrations ?? 0}
+                  </span>
+                  <span>
+                    <strong>Location:</strong> {outreachSelectedEvent.location || '—'}
+                  </span>
+                </div>
+              )}
+            </div>
+            {showNewEventForm ? (
+              <div className="stack">
+                <input
+                  className="input"
+                  readOnly
+                  value={selectedSegment?.name || ''}
+                  placeholder="Selected segment"
+                />
+                <input
+                  className="input"
+                  placeholder="Event name"
+                  value={segmentEventName}
+                  onChange={(event) => setSegmentEventName(event.target.value)}
+                />
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    type="date"
+                    value={segmentEventStartDate}
+                    onChange={(event) => setSegmentEventStartDate(event.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={segmentEventEndDate}
+                    onChange={(event) => setSegmentEventEndDate(event.target.value)}
+                  />
+                </div>
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    placeholder="Location"
+                    value={segmentEventLocation}
+                    onChange={(event) => setSegmentEventLocation(event.target.value)}
+                  />
+                  <select
+                    className="select"
+                    value={segmentEventStatus}
+                    onChange={(event) => setSegmentEventStatus(event.target.value)}
+                  >
+                    <option value="Planned">Planned</option>
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                  <input
+                    className="input"
+                    type="number"
+                    placeholder="Capacity"
+                    value={segmentEventCapacity}
+                    onChange={(event) => setSegmentEventCapacity(event.target.value)}
+                  />
+                </div>
+                <input
+                  className="input"
+                  placeholder="Notes"
+                  value={segmentEventNotes}
+                  onChange={(event) => setSegmentEventNotes(event.target.value)}
+                />
+                <button className="button" type="button" onClick={handleCreateSegmentEvent}>
+                  Create event
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>3) Distribution: select channel and send</h3>
+                <p className="muted">Use the selected event link and send it to WhatsApp or Slack.</p>
+              </div>
+              <div className="pill">Distribution</div>
+            </div>
+            {groupsError ? <div className="module-alert">{groupsError}</div> : null}
+            {sendError ? <div className="module-alert">{sendError}</div> : null}
+            {channelSlackError ? <div className="module-alert">{channelSlackError}</div> : null}
+            {channelSlackStatus ? (
+              <div className="module-alert module-alert--success">{channelSlackStatus}</div>
+            ) : null}
+            <div className="filter-row">
+              <select
+                className="select"
+                value={sendGroupId}
+                onChange={(event) => setSendGroupId(event.target.value)}
+              >
+                <option value="">WhatsApp group</option>
+                {groups.map((group) => (
+                  <option key={group.groupId} value={group.groupId}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="select"
+                value={channelSlackMode}
+                onChange={(event) => setChannelSlackMode(event.target.value)}
+              >
+                <option value="default">Default Slack channel</option>
+                <option value="custom">Custom Slack channel</option>
+              </select>
+              {channelSlackMode === 'custom' ? (
+                <input
+                  className="input"
+                  value={channelSlackCustom}
+                  onChange={(event) => setChannelSlackCustom(event.target.value)}
+                  placeholder="#general"
+                />
+              ) : null}
+            </div>
+            <input className="input" value={outreachPublicLink} readOnly placeholder="Selected event link" />
+            <div className="filter-row">
+              <button
+                className="button"
+                type="button"
+                onClick={handleSendEventWhatsApp}
+                disabled={sendingEventWhatsApp || groups.length === 0 || !outreachEventId}
+              >
+                {sendingEventWhatsApp ? 'Sending…' : 'Send to WhatsApp'}
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={handleSendEventSlack}
+                disabled={sendingEventSlack || !outreachEventId}
+              >
+                {sendingEventSlack ? 'Sending…' : 'Send to Slack'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <div className="module-footer">
@@ -2973,9 +2428,34 @@ function CRMDashboardTab() {
   )
 }
 
-function CRMOverviewTab() {
+function CRMOverviewTab({ onNavigate }) {
+  const steps = [
+    {
+      id: 'people',
+      label: 'People',
+      description: 'Search, segment, and update supporter profiles.',
+    },
+    {
+      id: 'outreach',
+      label: 'Outreach',
+      description: 'Plan outreach, messages, and event activation.',
+    },
+    CRM_TASKS_ENABLED
+      ? {
+          id: 'tasks',
+          label: 'Tasks',
+          description: 'Assign follow-ups and track progress.',
+        }
+      : null,
+  ].filter(Boolean)
   return (
     <div className="stack">
+      <ModuleFlow
+        title="Network workflow"
+        summary="Move from people insights to outreach and activation."
+        steps={steps}
+        onStepSelect={onNavigate}
+      />
       <CRMMapTab />
       <CRMDashboardTab />
     </div>
@@ -5471,9 +4951,9 @@ function CRMCampaignsTab() {
         <div className="module-card module-card__wide">
           <div className="card-header">
             <div>
-              <h3>Updates and tasks</h3>
+              <h3>Campaign updates</h3>
               <p className="muted">
-                Keep stakeholders informed and track delivery tasks.
+                Keep stakeholders informed and share delivery progress.
               </p>
             </div>
           </div>
@@ -5544,114 +5024,123 @@ function CRMCampaignsTab() {
                 )}
               </div>
 
-              <div className="module-card">
-                <h4>Execution tasks</h4>
-                {campaignTaskError ? (
-                  <div className="module-alert">{campaignTaskError}</div>
-                ) : null}
-                {campaignTaskStatus ? (
-                  <div className="module-alert">{campaignTaskStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleCampaignTaskSubmit}>
-                  <input
-                    className="input"
-                    placeholder="Task title"
-                    value={campaignTaskForm.title}
-                    onChange={(event) =>
-                      setCampaignTaskForm((prev) => ({
-                        ...prev,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                  <textarea
-                    className="textarea"
-                    placeholder="Task description"
-                    value={campaignTaskForm.description}
-                    onChange={(event) =>
-                      setCampaignTaskForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                  />
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={campaignTaskForm.status}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          status: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="Open">Open</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Done">Done</option>
-                      <option value="Cancelled">Cancelled</option>
-                    </select>
+              {!CRM_TASKS_ENABLED ? (
+                <div className="module-card">
+                  <h4>Execution tasks</h4>
+                  <p className="muted">
+                    Task assignment is hidden for this release and will return once assignee accounts are introduced.
+                  </p>
+                </div>
+              ) : (
+                <div className="module-card">
+                  <h4>Execution tasks</h4>
+                  {campaignTaskError ? (
+                    <div className="module-alert">{campaignTaskError}</div>
+                  ) : null}
+                  {campaignTaskStatus ? (
+                    <div className="module-alert">{campaignTaskStatus}</div>
+                  ) : null}
+                  <form className="stack" onSubmit={handleCampaignTaskSubmit}>
                     <input
                       className="input"
-                      type="date"
-                      value={campaignTaskForm.dueDate}
+                      placeholder="Task title"
+                      value={campaignTaskForm.title}
                       onChange={(event) =>
                         setCampaignTaskForm((prev) => ({
                           ...prev,
-                          dueDate: event.target.value,
+                          title: event.target.value,
                         }))
                       }
                     />
-                  </div>
-                  <div className="form-grid">
-                    <input
-                      className="input"
-                      placeholder="Assignee email"
-                      value={campaignTaskForm.assigneeEmail}
+                    <textarea
+                      className="textarea"
+                      placeholder="Task description"
+                      value={campaignTaskForm.description}
                       onChange={(event) =>
                         setCampaignTaskForm((prev) => ({
                           ...prev,
-                          assigneeEmail: event.target.value,
+                          description: event.target.value,
                         }))
                       }
                     />
-                    <select
-                      className="select"
-                      value={campaignTaskForm.milestoneId}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          milestoneId: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Link to milestone</option>
-                      {milestones.map((milestone) => (
-                        <option
-                          key={`task-${milestone.milestoneId}`}
-                          value={milestone.milestoneId}
-                        >
-                          {milestone.title}
-                        </option>
+                    <div className="form-grid">
+                      <select
+                        className="select"
+                        value={campaignTaskForm.status}
+                        onChange={(event) =>
+                          setCampaignTaskForm((prev) => ({
+                            ...prev,
+                            status: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="Open">Open</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Done">Done</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                      <input
+                        className="input"
+                        type="date"
+                        value={campaignTaskForm.dueDate}
+                        onChange={(event) =>
+                          setCampaignTaskForm((prev) => ({
+                            ...prev,
+                            dueDate: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="form-grid">
+                      <input
+                        className="input"
+                        placeholder="Assignee email"
+                        value={campaignTaskForm.assigneeEmail}
+                        onChange={(event) =>
+                          setCampaignTaskForm((prev) => ({
+                            ...prev,
+                            assigneeEmail: event.target.value,
+                          }))
+                        }
+                      />
+                      <select
+                        className="select"
+                        value={campaignTaskForm.milestoneId}
+                        onChange={(event) =>
+                          setCampaignTaskForm((prev) => ({
+                            ...prev,
+                            milestoneId: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Link to milestone</option>
+                        {milestones.map((milestone) => (
+                          <option
+                            key={`task-${milestone.milestoneId}`}
+                            value={milestone.milestoneId}
+                          >
+                            {milestone.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button className="button" type="submit">
+                      Create task
+                    </button>
+                  </form>
+                  {campaignTasks.length === 0 ? (
+                    <p className="muted">No tasks yet.</p>
+                  ) : (
+                    <ul className="compact-list">
+                      {campaignTasks.slice(0, 5).map((task) => (
+                        <li key={task.taskId}>
+                          {task.title} — {task.status}
+                        </li>
                       ))}
-                    </select>
-                  </div>
-                  <button className="button" type="submit">
-                    Create task
-                  </button>
-                </form>
-                {campaignTasks.length === 0 ? (
-                  <p className="muted">No tasks yet.</p>
-                ) : (
-                  <ul className="compact-list">
-                    {campaignTasks.slice(0, 5).map((task) => (
-                      <li key={task.taskId}>
-                        {task.title} — {task.status}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -6143,50 +5632,6 @@ function CRMEventsTab() {
   return (
     <div className="module-grid">
       {error ? <div className="module-alert">{error}</div> : null}
-      <div className="module-card">
-        <h3>Event statistics</h3>
-        <div className="metric-row">
-          <span>Events</span>
-          <strong>{totalEvents}</strong>
-        </div>
-        <div className="metric-row">
-          <span>Registrations</span>
-          <strong>{totalRegs}</strong>
-        </div>
-        <div className="metric-row">
-          <span>Attended</span>
-          <strong>{attendedCount}</strong>
-        </div>
-        <div className="metric-row">
-          <span>Attendance rate</span>
-          <strong>{attendanceRate.toFixed(1)}%</strong>
-        </div>
-      </div>
-      <div className="module-card">
-        <h3>Registration status</h3>
-        {statusLabels.length ? (
-          <Pie data={statusChartData} />
-        ) : (
-          <p className="muted">No registration data yet.</p>
-        )}
-      </div>
-      <div className="module-card">
-        <h3>Exports</h3>
-        <p className="muted">Download events or registration data.</p>
-        <div className="stack">
-          <button className="button-secondary" type="button" onClick={handleExportEvents}>
-            Export events CSV
-          </button>
-          <button
-            className="button-secondary"
-            type="button"
-            onClick={handleExportRegistrations}
-          >
-            Export registrations CSV
-          </button>
-          {exportStatus ? <p className="muted">{exportStatus}</p> : null}
-        </div>
-      </div>
       <div className="module-card module-card__wide">
         <div className="card-header">
           <div>
@@ -6262,7 +5707,6 @@ function CRMEventsTab() {
           </button>
         </form>
       </div>
-
       <div className="module-card module-card__wide">
         <div className="card-header">
           <div>
@@ -6363,23 +5807,34 @@ function CRMEventsTab() {
           </button>
         </form>
       </div>
-
       <div className="module-card module-card__wide">
         <div className="card-header">
           <div>
-            <h3>Share registration link</h3>
-            <p className="muted">Send a public link to a WhatsApp group.</p>
+            <h3>Channels</h3>
+            <p className="muted">Share registration links through WhatsApp and Slack.</p>
           </div>
         </div>
         {shareError ? <div className="module-alert">{shareError}</div> : null}
+        {slackError ? <div className="module-alert">{slackError}</div> : null}
+        {slackStatus ? (
+          <div className="module-alert module-alert--success">{slackStatus}</div>
+        ) : null}
         <div className="stack">
+          {groups.length === 0 ? (
+            <p className="muted">
+              No groups available. Ask admin to configure WhatsApp groups first.
+            </p>
+          ) : null}
+          <div className="card-divider">
+            <h4>WhatsApp</h4>
+          </div>
           <input className="input" value={publicLink} readOnly />
           <select
             className="select"
             value={shareGroupId}
             onChange={(event) => setShareGroupId(event.target.value)}
           >
-            <option value="">Select WhatsApp group</option>
+            <option value="">Select existing WhatsApp group</option>
             {groups.map((group) => (
               <option key={group.groupId} value={group.groupId}>
                 {group.name}
@@ -6390,43 +5845,25 @@ function CRMEventsTab() {
             className="button"
             type="button"
             onClick={handleShareLink}
-            disabled={sendingLink}
+            disabled={sendingLink || groups.length === 0}
           >
             {sendingLink ? 'Sending…' : 'Send link'}
           </button>
-        </div>
-      </div>
-
-      <div className="module-card module-card__wide">
-        <div className="card-header">
-          <div>
-            <h3>Share to Slack</h3>
-            <p className="muted">Send the registration link to #fs.</p>
+          <div className="card-divider">
+            <h4>Slack</h4>
+            <p className="muted">Send to the default Slack channel.</p>
           </div>
-        </div>
-        {slackError ? <div className="module-alert">{slackError}</div> : null}
-        {slackStatus ? (
-          <div className="module-alert module-alert--success">{slackStatus}</div>
-        ) : null}
-        <div className="stack">
           <input className="input" value={publicLink} readOnly />
-          <textarea
-            className="textarea"
-            value={slackMessage}
-            onChange={(event) => setSlackMessage(event.target.value)}
-            placeholder="Slack message"
-          />
           <button
             className="button"
             type="button"
             onClick={handleSlackShare}
             disabled={sendingSlack}
           >
-            {sendingSlack ? 'Sending…' : 'Send to Slack'}
+            {sendingSlack ? 'Sending…' : 'Send to default Slack'}
           </button>
         </div>
       </div>
-
       <div className="module-card module-card__wide">
         <div className="card-header">
           <div>
@@ -6454,6 +5891,57 @@ function CRMEventsTab() {
           ))}
         </div>
       </div>
+      <details className="dashboard-detail module-card module-card__wide">
+        <summary>Reporting & exports (optional)</summary>
+        <div className="dashboard-detail__body">
+          <div className="module-grid">
+            <div className="module-card">
+              <h3>Event statistics</h3>
+              <div className="metric-row">
+                <span>Events</span>
+                <strong>{totalEvents}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Registrations</span>
+                <strong>{totalRegs}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Attended</span>
+                <strong>{attendedCount}</strong>
+              </div>
+              <div className="metric-row">
+                <span>Attendance rate</span>
+                <strong>{attendanceRate.toFixed(1)}%</strong>
+              </div>
+            </div>
+            <div className="module-card">
+              <h3>Registration status</h3>
+              {statusLabels.length ? (
+                <Pie data={statusChartData} />
+              ) : (
+                <p className="muted">No registration data yet.</p>
+              )}
+            </div>
+            <div className="module-card">
+              <h3>Exports</h3>
+              <p className="muted">Download events or registration data.</p>
+              <div className="stack">
+                <button className="button-secondary" type="button" onClick={handleExportEvents}>
+                  Export events CSV
+                </button>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={handleExportRegistrations}
+                >
+                  Export registrations CSV
+                </button>
+                {exportStatus ? <p className="muted">{exportStatus}</p> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
   )
 }

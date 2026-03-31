@@ -1,6 +1,10 @@
 .env
 **/.env
+**/.env.local
+**/.env.auth
+**/.env.auth.local
 .streamlit/secrets.toml
+**/public/runtime-config.js
 __pycache__/
 *.pyc
 .pytest_cache/

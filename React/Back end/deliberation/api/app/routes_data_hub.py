@@ -1,11 +1,22 @@
+import csv
+import io
+import re
 from typing import List, Optional
+from uuid import uuid4
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from .db import get_active_database, get_driver
 
 router = APIRouter()
+INTAKE_MODULE_IDS = {
+    "crm",
+    "campaigns",
+    "deliberation",
+    "due-diligence",
+    "audience-discovery",
+}
 
 SKIP_PROPERTY_KEYS = {
     "raw_html",
@@ -52,10 +63,64 @@ class GraphSnapshotOut(BaseModel):
     edges: List[GraphEdgeOut]
 
 
+class ConnectorOut(BaseModel):
+    connector_id: str = Field(alias="connectorId")
+    name: str
+    category: str
+    status: str
+    source_type: str = Field(alias="sourceType")
+    target: str
+    purpose: str
+    powers: List[str] = []
+    endpoints: List[str] = []
+
+
+class ConnectorModuleOut(BaseModel):
+    module_id: str = Field(alias="moduleId")
+    module_label: str = Field(alias="moduleLabel")
+    description: str
+    status: str
+    connectors: List[ConnectorOut]
+
+
+class ConnectorCatalogSummaryOut(BaseModel):
+    module_count: int = Field(alias="moduleCount")
+    connector_count: int = Field(alias="connectorCount")
+    active_connector_count: int = Field(alias="activeConnectorCount")
+    planned_connector_count: int = Field(alias="plannedConnectorCount")
+
+
+class ConnectorCatalogOut(BaseModel):
+    summary: ConnectorCatalogSummaryOut
+    modules: List[ConnectorModuleOut]
+
+
+class CsvImportOut(BaseModel):
+    import_id: str = Field(alias="importId")
+    module_id: str = Field(alias="moduleId")
+    module_label: str = Field(alias="moduleLabel")
+    file_name: str = Field(alias="fileName")
+    row_count: int = Field(alias="rowCount")
+    column_count: int = Field(alias="columnCount")
+    columns: List[str]
+    created_nodes: int = Field(alias="createdNodes")
+    target: str
+    message: str
+
+
 def _execute_read(session, query: str, params: Optional[dict] = None):
     if hasattr(session, "execute_read"):
         return session.execute_read(lambda tx: list(tx.run(query, params or {})))
     return session.read_transaction(lambda tx: list(tx.run(query, params or {})))
+
+
+def _execute_write(session, query: str, params: Optional[dict] = None):
+    def _run(tx):
+        return list(tx.run(query, params or {}))
+
+    if hasattr(session, "execute_write"):
+        return session.execute_write(_run)
+    return session.write_transaction(_run)
 
 
 def _db_session(driver):
@@ -235,6 +300,460 @@ def _load_graph_snapshot(session, limit: int, label: str) -> tuple[list, list]:
         for row in node_rows
     ]
     return nodes, []
+
+
+def _build_connector_catalog() -> ConnectorCatalogOut:
+    modules = [
+        ConnectorModuleOut(
+            moduleId="crm",
+            moduleLabel="Network / CRM",
+            description="Connectors for people, events, outreach channels, and supporter operations.",
+            status="active",
+            connectors=[
+                ConnectorOut(
+                    connectorId="crm-people-csv",
+                    name="People CSV import",
+                    category="ingest",
+                    status="active",
+                    sourceType="file",
+                    target="Neo4j Person graph",
+                    purpose="Bulk import supporters and members from spreadsheets.",
+                    powers=["read", "write", "bulk-import"],
+                    endpoints=["/crm/people/import", "/crm/people/bulk"],
+                ),
+                ConnectorOut(
+                    connectorId="crm-events-registration",
+                    name="Event registration intake",
+                    category="public intake",
+                    status="active",
+                    sourceType="public form",
+                    target="Neo4j Event + Person graph",
+                    purpose="Capture public event registrations directly into the CRM graph.",
+                    powers=["read", "write"],
+                    endpoints=["/crm/events/{event_id}/register", "/crm/events/with-people"],
+                ),
+                ConnectorOut(
+                    connectorId="crm-geocoding",
+                    name="Address geocoding",
+                    category="enrichment",
+                    status="active",
+                    sourceType="google maps api",
+                    target="Neo4j geo properties",
+                    purpose="Enrich supporter and campaign addresses with coordinates for map coverage.",
+                    powers=["read", "enrich"],
+                    endpoints=[],
+                ),
+                ConnectorOut(
+                    connectorId="crm-channel-webhooks",
+                    name="Outreach channel webhooks",
+                    category="delivery",
+                    status="active",
+                    sourceType="slack / whatsapp webhooks",
+                    target="External channels",
+                    purpose="Push updates and outreach messages from CRM workflows to external channels.",
+                    powers=["deliver"],
+                    endpoints=["/crm/slack/send", "/crm/whatsapp-groups/{group_id}/send"],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="campaigns",
+            moduleLabel="Campaigns",
+            description="Connectors that power campaign funding, transparency, and public campaign pages.",
+            status="active",
+            connectors=[
+                ConnectorOut(
+                    connectorId="campaigns-public-page",
+                    name="Public campaign experience",
+                    category="public intake",
+                    status="active",
+                    sourceType="public web page",
+                    target="Campaign graph",
+                    purpose="Serve public campaign detail, volunteer intake, and transparency data.",
+                    powers=["read", "write"],
+                    endpoints=[
+                        "/crm/campaigns/{campaign_id}",
+                        "/crm/campaigns/{campaign_id}/volunteers",
+                    ],
+                ),
+                ConnectorOut(
+                    connectorId="campaigns-payments",
+                    name="Contribution and payment webhook",
+                    category="payments",
+                    status="active",
+                    sourceType="payment processor / webhook",
+                    target="Campaign contribution graph",
+                    purpose="Track contribution checkouts and synchronize payment outcomes.",
+                    powers=["write", "sync"],
+                    endpoints=[
+                        "/crm/campaigns/{campaign_id}/contributions/checkout",
+                        "/crm/payments/webhook",
+                    ],
+                ),
+                ConnectorOut(
+                    connectorId="campaigns-proof",
+                    name="Proof and transparency intake",
+                    category="verification",
+                    status="active",
+                    sourceType="admin workflow",
+                    target="Campaign proof + expense graph",
+                    purpose="Collect proof artifacts, approvals, and audit data for campaign transparency.",
+                    powers=["read", "write", "review"],
+                    endpoints=[
+                        "/crm/campaigns/{campaign_id}/proof",
+                        "/crm/admin/proof-queue",
+                        "/crm/admin/expense-queue",
+                    ],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="deliberation",
+            moduleLabel="Survey & Consensus",
+            description="Connectors that power public surveys, votes, moderation, reporting, and exports.",
+            status="active",
+            connectors=[
+                ConnectorOut(
+                    connectorId="deliberation-public-survey",
+                    name="Public survey intake",
+                    category="public intake",
+                    status="active",
+                    sourceType="public web page",
+                    target="Conversation, vote, and comment graph",
+                    purpose="Capture participant views, votes, and comments from survey links.",
+                    powers=["read", "write"],
+                    endpoints=["/conversations/{conversation_id}/view", "/vote", "/conversations/{conversation_id}/comments"],
+                ),
+                ConnectorOut(
+                    connectorId="deliberation-reports",
+                    name="Public report sharing",
+                    category="publishing",
+                    status="active",
+                    sourceType="shared report link",
+                    target="Report graph",
+                    purpose="Publish live deliberation results as shareable public dashboards.",
+                    powers=["read", "publish"],
+                    endpoints=["/reports/public/{share_id}"],
+                ),
+                ConnectorOut(
+                    connectorId="deliberation-import-export",
+                    name="Dataset import and exports",
+                    category="data ops",
+                    status="active",
+                    sourceType="csv / zip",
+                    target="Conversation datasets",
+                    purpose="Seed conversations with imported datasets and export analytics snapshots.",
+                    powers=["read", "write", "export"],
+                    endpoints=[
+                        "/conversations/{conversation_id}/dataset:bulk",
+                        "/conversations/{conversation_id}/votes:bulk",
+                    ],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="due-diligence",
+            moduleLabel="Due Diligence",
+            description="Connectors for external watchlists, public intelligence sources, and report generation.",
+            status="pilot",
+            connectors=[
+                ConnectorOut(
+                    connectorId="dd-watchlists",
+                    name="Open-source screening feeds",
+                    category="screening",
+                    status="active",
+                    sourceType="public sanctions / entity feeds",
+                    target="Due diligence graph",
+                    purpose="Screen people or entities against public risk and sanctions datasets.",
+                    powers=["read", "enrich"],
+                    endpoints=[],
+                ),
+                ConnectorOut(
+                    connectorId="dd-report-pdf",
+                    name="PDF report output",
+                    category="publishing",
+                    status="active",
+                    sourceType="report generation",
+                    target="PDF stream",
+                    purpose="Render diligence findings into shareable PDF reports.",
+                    powers=["export"],
+                    endpoints=[],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="audience-discovery",
+            moduleLabel="Audience Discovery",
+            description="Connectors for crawlers, embeddings, LLMs, and graph writes used in audience discovery runs.",
+            status="pilot",
+            connectors=[
+                ConnectorOut(
+                    connectorId="audience-web-crawl",
+                    name="Website crawl intake",
+                    category="ingest",
+                    status="active",
+                    sourceType="web crawler",
+                    target="Audience discovery pipeline",
+                    purpose="Pull product and site content into discovery runs.",
+                    powers=["read", "crawl"],
+                    endpoints=[],
+                ),
+                ConnectorOut(
+                    connectorId="audience-embeddings",
+                    name="Embeddings provider",
+                    category="ai enrichment",
+                    status="active",
+                    sourceType="embedding api",
+                    target="Chunk vectors + cluster analysis",
+                    purpose="Generate vector representations for clustering and evidence search.",
+                    powers=["enrich", "cluster"],
+                    endpoints=[],
+                ),
+                ConnectorOut(
+                    connectorId="audience-llm",
+                    name="Messaging and segment generation",
+                    category="ai enrichment",
+                    status="active",
+                    sourceType="llm api",
+                    target="Segment drafts + messaging outputs",
+                    purpose="Generate segment summaries, evidence synthesis, and messaging ideas.",
+                    powers=["generate"],
+                    endpoints=[],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="data-hub",
+            moduleLabel="Data Hub",
+            description="Connectors and orchestration tools that stage, validate, and expose data across modules.",
+            status="active",
+            connectors=[
+                ConnectorOut(
+                    connectorId="datahub-neo4j-snapshot",
+                    name="Neo4j graph snapshot",
+                    category="core graph",
+                    status="active",
+                    sourceType="neo4j",
+                    target="Explorer + diagnostics",
+                    purpose="Inspect graph structure, labels, and relationships across the platform.",
+                    powers=["read", "explore"],
+                    endpoints=["/data-hub/graph"],
+                ),
+                ConnectorOut(
+                    connectorId="datahub-module-connectors",
+                    name="Connector registry",
+                    category="orchestration",
+                    status="active",
+                    sourceType="backend catalog",
+                    target="Data Hub workspace",
+                    purpose="Expose the connector inventory needed by every module and page.",
+                    powers=["read", "catalog"],
+                    endpoints=["/data-hub/connectors"],
+                ),
+            ],
+        ),
+        ConnectorModuleOut(
+            moduleId="admin",
+            moduleLabel="Admin / Platform",
+            description="Cross-platform connectors used for health monitoring, feedback, and operator workflows.",
+            status="active",
+            connectors=[
+                ConnectorOut(
+                    connectorId="admin-feedback-email",
+                    name="Feedback inbox",
+                    category="ops",
+                    status="active",
+                    sourceType="smtp",
+                    target="Feedback entry graph + inbox",
+                    purpose="Route user feedback into email and store a platform record in Neo4j.",
+                    powers=["deliver", "write"],
+                    endpoints=["/crm/feedback", "/crm/admin/feedback"],
+                ),
+                ConnectorOut(
+                    connectorId="admin-health",
+                    name="Platform health probes",
+                    category="ops",
+                    status="active",
+                    sourceType="internal service checks",
+                    target="Admin dashboards",
+                    purpose="Expose backend, Neo4j, and connector readiness for operators.",
+                    powers=["read", "monitor"],
+                    endpoints=["/healthz", "/crm/admin/status", "/platform/auth/status"],
+                ),
+            ],
+        ),
+    ]
+
+    connector_count = sum(len(module.connectors) for module in modules)
+    active_connector_count = sum(
+        1 for module in modules for connector in module.connectors if connector.status == "active"
+    )
+    planned_connector_count = sum(
+        1 for module in modules for connector in module.connectors if connector.status != "active"
+    )
+    return ConnectorCatalogOut(
+        summary=ConnectorCatalogSummaryOut(
+            moduleCount=len(modules),
+            connectorCount=connector_count,
+            activeConnectorCount=active_connector_count,
+            plannedConnectorCount=planned_connector_count,
+        ),
+        modules=modules,
+    )
+
+
+def _get_intake_module(module_id: str) -> ConnectorModuleOut:
+    for module in _build_connector_catalog().modules:
+        if module.module_id == module_id and module_id in INTAKE_MODULE_IDS:
+            return module
+    raise HTTPException(status_code=400, detail="Unsupported module for CSV intake.")
+
+
+def _sanitize_column_name(value: str, index: int) -> str:
+    text = re.sub(r"[^0-9a-zA-Z_]+", "_", (value or "").strip()).strip("_").lower()
+    if not text:
+        text = f"column_{index + 1}"
+    if text[0].isdigit():
+        text = f"field_{text}"
+    return text[:80]
+
+
+def _normalize_csv_rows(content: bytes) -> tuple[list[str], list[dict]]:
+    try:
+        decoded = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            decoded = content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"Could not decode CSV file: {exc}")
+
+    reader = csv.DictReader(io.StringIO(decoded))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV file must include a header row.")
+
+    column_map = {}
+    columns: list[str] = []
+    seen = set()
+    for index, field_name in enumerate(reader.fieldnames):
+        base_name = _sanitize_column_name(field_name or "", index)
+        next_name = base_name
+        suffix = 2
+        while next_name in seen:
+            next_name = f"{base_name}_{suffix}"
+            suffix += 1
+        seen.add(next_name)
+        column_map[field_name] = next_name
+        columns.append(next_name)
+
+    rows: list[dict] = []
+    for row_number, raw_row in enumerate(reader, start=1):
+        properties = {}
+        for original_name, safe_name in column_map.items():
+            value = raw_row.get(original_name)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            properties[safe_name] = text[:2000]
+        if properties:
+            rows.append({"rowNumber": row_number, "properties": properties})
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="No valid rows found in CSV.")
+
+    return columns, rows
+
+
+@router.get("/connectors", response_model=ConnectorCatalogOut)
+def get_connector_catalog():
+    return _build_connector_catalog()
+
+
+@router.post("/uploads/csv", response_model=CsvImportOut)
+async def upload_module_csv(
+    module_id: str = Form(..., alias="moduleId"),
+    source_location: str = Form(default="", alias="sourceLocation"),
+    owner: str = Form(default=""),
+    notes: str = Form(default=""),
+    file: UploadFile = File(...),
+):
+    module = _get_intake_module(module_id)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="CSV file name is required.")
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV uploads are supported right now.")
+
+    content = await file.read()
+    columns, rows = _normalize_csv_rows(content)
+    import_id = str(uuid4())
+
+    driver = get_driver()
+    with _db_session(driver) as session:
+        _execute_write(
+            session,
+            """
+            MERGE (module:PlatformModule {moduleId: $moduleId})
+            ON CREATE SET module.createdAt = datetime()
+            SET module.label = $moduleLabel,
+                module.lastCsvImportAt = datetime(),
+                module.updatedAt = datetime()
+            CREATE (batch:CsvImport {
+                importId: $importId,
+                moduleId: $moduleId,
+                moduleLabel: $moduleLabel,
+                fileName: $fileName,
+                rowCount: $rowCount,
+                columnCount: $columnCount,
+                columns: $columns,
+                sourceLocation: $sourceLocation,
+                owner: $owner,
+                notes: $notes,
+                importedAt: datetime()
+            })
+            MERGE (module)-[:HAS_IMPORT]->(batch)
+            WITH module, batch
+            UNWIND $rows AS row
+            CREATE (record:CsvRow {
+                recordId: randomUUID(),
+                importId: $importId,
+                moduleId: $moduleId,
+                moduleLabel: $moduleLabel,
+                fileName: $fileName,
+                rowNumber: row.rowNumber,
+                importedAt: datetime()
+            })
+            SET record += row.properties
+            MERGE (batch)-[:IMPORTED_ROW]->(record)
+            MERGE (module)-[:OWNS_ROW]->(record)
+            """,
+            {
+                "importId": import_id,
+                "moduleId": module.module_id,
+                "moduleLabel": module.module_label,
+                "fileName": file.filename,
+                "rowCount": len(rows),
+                "columnCount": len(columns),
+                "columns": columns,
+                "sourceLocation": source_location.strip()[:320],
+                "owner": owner.strip()[:160],
+                "notes": notes.strip()[:1000],
+                "rows": rows,
+            },
+        )
+
+    return CsvImportOut(
+        importId=import_id,
+        moduleId=module.module_id,
+        moduleLabel=module.module_label,
+        fileName=file.filename,
+        rowCount=len(rows),
+        columnCount=len(columns),
+        columns=columns,
+        createdNodes=len(rows),
+        target="Neo4j",
+        message=f"Imported {len(rows)} CSV rows into Neo4j for {module.module_label}.",
+    )
 
 
 @router.get("/graph", response_model=GraphSnapshotOut)

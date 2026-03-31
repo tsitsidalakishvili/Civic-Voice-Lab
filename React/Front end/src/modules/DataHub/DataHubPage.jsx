@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   forceCenter,
   forceCollide,
@@ -7,11 +7,19 @@ import {
   forceSimulation,
 } from 'd3-force'
 import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/icons-react'
-import { API_BASE, requestJson } from '../../services/api'
+import { API_BASE, getJson, requestForm, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
-const VIEWS = ['overview', 'explorer', 'connectors', 'nodes', 'relationships']
+const VIEWS = ['explorer', 'connectors']
 const DEFAULT_LIMIT = 80
+const DATAHUB_CONFIG_STORAGE_KEY = 'fs.datahub.connectorDrafts'
+const INTAKE_MODULE_IDS = [
+  'crm',
+  'campaigns',
+  'deliberation',
+  'due-diligence',
+  'audience-discovery',
+]
 const COLOR_PALETTE = [
   '#0ea5e9',
   '#22c55e',
@@ -26,6 +34,11 @@ const COLOR_PALETTE = [
   '#06b6d4',
   '#f59e0b',
 ]
+
+const normalizeView = (viewId) => {
+  if (viewId === 'nodes' || viewId === 'relationships') return 'explorer'
+  return VIEWS.includes(viewId) ? viewId : 'connectors'
+}
 
 const formatNumber = (value) => {
   if (value === null || value === undefined) return '0'
@@ -49,9 +62,137 @@ const stringifyProps = (props) => {
       return `${json.slice(0, 900)}...`
     }
     return json
-  } catch (err) {
+  } catch {
     return String(props)
   }
+}
+
+const getConnectorTone = (status) => {
+  if (status === 'active') return 'success'
+  if (status === 'pilot') return 'warning'
+  return 'default'
+}
+
+const MODULE_WORKSPACE_PRESETS = {
+  crm: {
+    entryModes: ['CSV upload', 'Public intake', 'Webhook', 'API sync', 'Manual entry'],
+    sourcePlaceholder: 'supporters.csv or public event intake',
+    destination: 'Neo4j people, events, segments, and outreach graph',
+    cadenceOptions: ['On demand', 'Daily', 'Weekly', 'Per event', 'Realtime'],
+    checklist: [
+      'Confirm people fields and dedupe keys',
+      'Validate event and outreach intake path',
+      'Enable enrichment and channel delivery only after import is stable',
+    ],
+  },
+  campaigns: {
+    entryModes: ['Public page', 'Payment webhook', 'Admin form', 'CSV upload'],
+    sourcePlaceholder: 'campaign public page, contribution webhook, or budget sheet',
+    destination: 'Neo4j campaign, volunteer, proof, and funding graph',
+    cadenceOptions: ['On demand', 'Daily', 'Per transaction', 'Per campaign milestone'],
+    checklist: [
+      'Define public contribution and volunteer intake path',
+      'Review transparency and proof workflow',
+      'Confirm payment and audit sync ownership',
+    ],
+  },
+  deliberation: {
+    entryModes: ['Public survey', 'CSV upload', 'Moderation queue', 'Report publish'],
+    sourcePlaceholder: 'survey link, imported dataset, or report share flow',
+    destination: 'Neo4j conversations, votes, comments, and reports',
+    cadenceOptions: ['On demand', 'Daily', 'Per survey response', 'Per report refresh'],
+    checklist: [
+      'Set conversation input source and moderation path',
+      'Confirm vote/comment capture and export readiness',
+      'Define public report refresh expectations',
+    ],
+  },
+  'due-diligence': {
+    entryModes: ['Watchlist feed', 'Manual case entry', 'File upload', 'API lookup'],
+    sourcePlaceholder: 'watchlist source, case dossier, or screening API',
+    destination: 'Neo4j diligence entities and generated reports',
+    cadenceOptions: ['On demand', 'Daily', 'Weekly', 'Per case'],
+    checklist: [
+      'Choose screening source and case intake owner',
+      'Define report output and approval path',
+      'Review what should stay as public-source enrichment only',
+    ],
+  },
+  'audience-discovery': {
+    entryModes: ['Crawler run', 'Seed URL list', 'Embedding API', 'LLM workflow'],
+    sourcePlaceholder: 'seed URLs, crawl sitemap, embedding provider, or LLM endpoint',
+    destination: 'Audience discovery runs, chunks, clusters, and segments',
+    cadenceOptions: ['On demand', 'Per run', 'Daily', 'Weekly'],
+    checklist: [
+      'Set crawl source and page limits',
+      'Verify embeddings and LLM provider settings',
+      'Confirm where validated outputs should land in the graph',
+    ],
+  },
+  'data-hub': {
+    entryModes: ['Internal graph sync', 'Connector registry', 'File staging', 'Manual mapping'],
+    sourcePlaceholder: 'graph snapshot query, staging file, or connector inventory',
+    destination: 'Shared graph explorer and connector workspace',
+    cadenceOptions: ['On demand', 'Daily', 'Per deployment'],
+    checklist: [
+      'Keep connector inventory current',
+      'Document staging rules before importing into Neo4j',
+      'Review graph explorer limits and label filters',
+    ],
+  },
+  admin: {
+    entryModes: ['Health check', 'SMTP', 'Slack webhook', 'Operator action'],
+    sourcePlaceholder: 'health endpoint, email setup, webhook config, or admin workflow',
+    destination: 'Admin status, feedback, notifications, and operator tooling',
+    cadenceOptions: ['On demand', 'Hourly', 'Daily', 'Per alert'],
+    checklist: [
+      'Assign owner for platform feedback and alerting',
+      'Verify operator endpoints and health probes',
+      'Document which channels are live versus pilot',
+    ],
+  },
+}
+
+const readConnectorDrafts = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(DATAHUB_CONFIG_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const buildModuleDraft = (moduleId, module, existing = {}) => {
+  const preset = MODULE_WORKSPACE_PRESETS[moduleId] || MODULE_WORKSPACE_PRESETS['data-hub']
+  return {
+    entryMode: existing.entryMode || preset.entryModes?.[0] || 'Manual entry',
+    sourceLocation: existing.sourceLocation || '',
+    refreshCadence: existing.refreshCadence || preset.cadenceOptions?.[0] || 'On demand',
+    destination: existing.destination || preset.destination || module?.moduleLabel || 'Neo4j',
+    owner: existing.owner || '',
+    readiness: existing.readiness || 'draft',
+    notes: existing.notes || '',
+    enabledConnectorIds:
+      existing.enabledConnectorIds && Array.isArray(existing.enabledConnectorIds)
+        ? existing.enabledConnectorIds
+        : (module?.connectors || []).map((connector) => connector.connectorId),
+  }
+}
+
+const getDraftProgress = (draft, module) => {
+  const connectors = module?.connectors || []
+  const checks = [
+    Boolean(draft?.entryMode),
+    Boolean(String(draft?.sourceLocation || '').trim()),
+    Boolean(String(draft?.owner || '').trim()),
+    Boolean(draft?.destination),
+    Boolean(draft?.readiness && draft.readiness !== 'draft'),
+    Boolean((draft?.enabledConnectorIds || []).length >= Math.min(1, connectors.length)),
+  ]
+  const completed = checks.filter(Boolean).length
+  return Math.round((completed / checks.length) * 100)
 }
 
 function DataHubGraph({
@@ -70,7 +211,7 @@ function DataHubGraph({
   const dragNodeRef = useRef(null)
   const [renderedNodes, setRenderedNodes] = useState([])
   const [renderedEdges, setRenderedEdges] = useState([])
-  const [tick, setTick] = useState(0)
+  const [, setTick] = useState(0)
   const [size, setSize] = useState({ width: 720, height: 460 })
   const [hoveredNodeId, setHoveredNodeId] = useState(null)
 
@@ -93,6 +234,8 @@ function DataHubGraph({
   useEffect(() => {
     const nextNodes = nodes.map((node) => ({ ...node }))
     const nextEdges = edges.map((edge) => ({ ...edge }))
+    // D3 needs mutable copies before the force simulation starts mutating positions.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRenderedNodes(nextNodes)
     setRenderedEdges(nextEdges)
     if (!nextNodes.length) {
@@ -120,7 +263,7 @@ function DataHubGraph({
       map[node.id] = node
     })
     return map
-  }, [renderedNodes, tick])
+  }, [renderedNodes])
 
   const degreeMap = useMemo(() => {
     const map = {}
@@ -252,34 +395,50 @@ export function DataHubPage({
   activeTabOverride,
   onTabChange,
   showTabs = true,
+  showIntro = true,
 }) {
   const translate = t || ((key) => key)
-  const [activeView, setActiveView] = useState(
-    VIEWS.includes(activeTabOverride) ? activeTabOverride : 'overview',
-  )
+  const [activeView, setActiveView] = useState(normalizeView(activeTabOverride))
   const [graph, setGraph] = useState(null)
   const [limit, setLimit] = useState(DEFAULT_LIMIT)
   const [labelFilter, setLabelFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [catalog, setCatalog] = useState(null)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogError, setCatalogError] = useState('')
   const [selectedNode, setSelectedNode] = useState(null)
   const [selectedEdge, setSelectedEdge] = useState(null)
   const [showAllLabels, setShowAllLabels] = useState(false)
+  const [selectedModuleId, setSelectedModuleId] = useState('crm')
+  const [connectorDrafts, setConnectorDrafts] = useState(() => readConnectorDrafts())
+  const [workspaceStatus, setWorkspaceStatus] = useState('')
+  const [uploadFiles, setUploadFiles] = useState({})
+  const [uploadErrors, setUploadErrors] = useState({})
+  const [uploadingByModule, setUploadingByModule] = useState({})
+  const [uploadResults, setUploadResults] = useState({})
 
   const applyView = (viewId) => {
     if (!viewId) return
-    setActiveView(viewId)
-    if (onTabChange) onTabChange(viewId)
+    const nextView = normalizeView(viewId)
+    setActiveView(nextView)
+    if (onTabChange) onTabChange(nextView)
   }
 
   useEffect(() => {
-    if (activeTabOverride && activeTabOverride !== activeView) {
-      setActiveView(activeTabOverride)
+    const nextView = normalizeView(activeTabOverride)
+    if (activeTabOverride && nextView !== activeView) {
+      setActiveView(nextView)
     }
   }, [activeTabOverride, activeView])
 
-  const loadGraph = async () => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(DATAHUB_CONFIG_STORAGE_KEY, JSON.stringify(connectorDrafts))
+  }, [connectorDrafts])
+
+  const loadGraph = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -302,17 +461,150 @@ export function DataHubPage({
     } finally {
       setLoading(false)
     }
-  }
+  }, [labelFilter, limit])
 
   useEffect(() => {
     loadGraph()
-  }, [limit, labelFilter])
+  }, [loadGraph])
 
-  const nodes = graph?.nodes || []
-  const edges = graph?.edges || []
-  const summary = graph?.summary || {}
-  const labelCounts = summary.labelCounts || []
-  const relationshipCounts = summary.relationshipCounts || []
+  const loadConnectorCatalog = useCallback(async () => {
+    setCatalogLoading(true)
+    setCatalogError('')
+    try {
+      const payload = await getJson('/data-hub/connectors', {
+        cacheMs: 0,
+        forceRefresh: true,
+      })
+      setCatalog(payload || null)
+    } catch (err) {
+      const message = err?.message || 'Unable to load Data Hub connectors.'
+      if (message.includes('Failed to fetch')) {
+        setCatalogError(`Unable to reach the backend at ${API_BASE}. Check the API port and logs.`)
+      } else {
+        setCatalogError(message)
+      }
+    } finally {
+      setCatalogLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadConnectorCatalog()
+  }, [loadConnectorCatalog])
+
+  const nodes = useMemo(() => graph?.nodes || [], [graph])
+  const edges = useMemo(() => graph?.edges || [], [graph])
+  const summary = useMemo(() => graph?.summary || {}, [graph])
+  const labelCounts = useMemo(() => summary.labelCounts || [], [summary])
+  const relationshipCounts = useMemo(() => summary.relationshipCounts || [], [summary])
+  const connectorModules = useMemo(() => catalog?.modules || [], [catalog])
+  const intakeModules = useMemo(
+    () => connectorModules.filter((module) => INTAKE_MODULE_IDS.includes(module.moduleId)),
+    [connectorModules],
+  )
+  const intakeConnectorCount = useMemo(
+    () =>
+      intakeModules.reduce((total, module) => total + Number(module.connectors?.length || 0), 0),
+    [intakeModules],
+  )
+  const intakeActiveConnectorCount = useMemo(
+    () =>
+      intakeModules.reduce(
+        (total, module) =>
+          total +
+          (module.connectors || []).filter((connector) => connector.status === 'active').length,
+        0,
+      ),
+    [intakeModules],
+  )
+  const selectedModule = useMemo(
+    () =>
+      intakeModules.find((module) => module.moduleId === selectedModuleId) ||
+      intakeModules[0] ||
+      null,
+    [intakeModules, selectedModuleId],
+  )
+
+  useEffect(() => {
+    if (!intakeModules.length) return
+    if (!intakeModules.find((module) => module.moduleId === selectedModuleId)) {
+      setSelectedModuleId(intakeModules[0].moduleId)
+    }
+  }, [intakeModules, selectedModuleId])
+
+  const updateModuleDraft = (moduleId, module, field, value) => {
+    if (!moduleId || !module) return
+    setConnectorDrafts((prev) => ({
+      ...prev,
+      [moduleId]: {
+        ...buildModuleDraft(moduleId, module, prev[moduleId] || {}),
+        [field]: value,
+      },
+    }))
+    setWorkspaceStatus('')
+  }
+
+  const moduleWorkspaceStats = useMemo(
+    () =>
+      intakeModules.map((module) => {
+        const draft = buildModuleDraft(
+          module.moduleId,
+          module,
+          connectorDrafts[module.moduleId] || {},
+        )
+        return {
+          module,
+          draft,
+          progress: getDraftProgress(draft, module),
+        }
+      }),
+    [connectorDrafts, intakeModules],
+  )
+
+  const uploadModuleCsv = async (module) => {
+    if (!module) return
+    const file = uploadFiles[module.moduleId]
+    if (!file) {
+      setUploadErrors((prev) => ({
+        ...prev,
+        [module.moduleId]: 'Choose a CSV file before uploading.',
+      }))
+      return
+    }
+
+    const draft = buildModuleDraft(module.moduleId, module, connectorDrafts[module.moduleId] || {})
+    const formData = new FormData()
+    formData.append('moduleId', module.moduleId)
+    formData.append('sourceLocation', draft.sourceLocation || file.name)
+    formData.append('owner', draft.owner || '')
+    formData.append('notes', draft.notes || '')
+    formData.append('file', file)
+
+    setSelectedModuleId(module.moduleId)
+    setUploadErrors((prev) => ({ ...prev, [module.moduleId]: '' }))
+    setUploadingByModule((prev) => ({ ...prev, [module.moduleId]: true }))
+    try {
+      const payload = await requestForm('/data-hub/uploads/csv', { formData })
+      setUploadResults((prev) => ({ ...prev, [module.moduleId]: payload }))
+      setWorkspaceStatus(payload?.message || `${module.moduleLabel} uploaded to Neo4j.`)
+      setConnectorDrafts((prev) => ({
+        ...prev,
+        [module.moduleId]: {
+          ...buildModuleDraft(module.moduleId, module, prev[module.moduleId] || {}),
+          sourceLocation: draft.sourceLocation || file.name,
+          readiness: 'live',
+        },
+      }))
+      await loadGraph()
+    } catch (err) {
+      setUploadErrors((prev) => ({
+        ...prev,
+        [module.moduleId]: err?.message || `Unable to upload ${module.moduleLabel} CSV.`,
+      }))
+    } finally {
+      setUploadingByModule((prev) => ({ ...prev, [module.moduleId]: false }))
+    }
+  }
 
   useEffect(() => {
     if (selectedNode && !nodes.find((node) => node.id === selectedNode.id)) {
@@ -417,59 +709,63 @@ export function DataHubPage({
   const dataHubPulse = useMemo(
     () => [
       {
-        label: 'Total nodes',
-        value: formatNumber(summary.nodeCount),
+        label: 'Platform modules',
+        value: formatNumber(intakeModules.length),
         icon: <IconDatabase size={18} />,
         badge: 'Live',
       },
       {
-        label: 'Relationships',
-        value: formatNumber(summary.relationshipCount),
+        label: 'Connector catalog',
+        value: formatNumber(intakeConnectorCount),
         icon: <IconLink size={18} />,
-        note: 'Graph edges',
+        note: 'Across all modules',
       },
       {
-        label: 'Snapshot nodes',
-        value: formatNumber(nodes.length),
+        label: 'Active connectors',
+        value: formatNumber(intakeActiveConnectorCount),
         icon: <IconChartDots size={18} />,
-        note: 'Explorer view',
+        note: 'Ready to use',
       },
       {
-        label: 'Snapshot edges',
-        value: formatNumber(edges.length),
+        label: 'Graph nodes',
+        value: formatNumber(summary.nodeCount),
         icon: <IconGitBranch size={18} />,
-        note: 'In memory',
+        note: 'Neo4j live graph',
       },
     ],
-    [edges.length, nodes.length, summary.nodeCount, summary.relationshipCount],
-  )
-
-  const connectorCatalog = useMemo(
-    () => [
-      {
-        id: 'dbms',
-        title: 'Database APIs',
-        description: 'Connect to external DBMS sources before writing to Neo4j.',
-        items: ['PostgreSQL', 'MySQL', 'MongoDB', 'BigQuery'],
-      },
-      {
-        id: 'public',
-        title: 'Public sources',
-        description: 'Pull data from open data portals and public APIs.',
-        items: ['OpenStreetMap', 'World Bank', 'UN Data', 'OpenSanctions'],
-      },
-      {
-        id: 'streams',
-        title: 'Event streams',
-        description: 'Ingest streaming updates to keep Neo4j current.',
-        items: ['Webhook feed', 'Kafka topic', 'CSV drop'],
-      },
+    [
+      intakeActiveConnectorCount,
+      intakeConnectorCount,
+      intakeModules.length,
+      summary.nodeCount,
     ],
-    [],
   )
 
   return (
     <section className="module">
+      {showIntro ? (
+        <div className="module-card module-card__wide section-intro">
+          <div className="card-header">
+            <div>
+              <h3>{translate('module.dataHub')}</h3>
+              <p className="muted">{translate('module.dataHub.desc')}</p>
+            </div>
+            <div className="pill">Data Hub</div>
+          </div>
+        </div>
+      ) : null}
+
+      <StatusMessage tone="error" message={error} />
+      <StatusMessage tone="error" message={catalogError} />
+      <StatusMessage
+        tone="info"
+        message={loading ? 'Loading graph snapshot...' : ''}
+      />
+      <StatusMessage
+        tone="info"
+        message={catalogLoading ? 'Loading connector catalog...' : ''}
+      />
+
       <CivicStatGrid
         title="Graph intelligence pulse"
         description="Snapshot of Neo4j size, relationships, and explorer readiness."
@@ -478,11 +774,8 @@ export function DataHubPage({
       {showTabs ? (
         <div className="subtabs">
           {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'explorer', label: 'Explorer' },
             { id: 'connectors', label: 'Data connectors' },
-            { id: 'nodes', label: 'Nodes' },
-            { id: 'relationships', label: 'Relationships' },
+            { id: 'explorer', label: 'Graph explorer' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -495,99 +788,6 @@ export function DataHubPage({
           ))}
         </div>
       ) : null}
-
-      <StatusMessage tone="error" message={error} />
-      <StatusMessage
-        tone="info"
-        message={loading ? 'Loading graph snapshot...' : ''}
-      />
-
-      {activeView === 'overview' && (
-        <div className="stack">
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Neo4j snapshot</h3>
-                <p className="muted">
-                  High-level counts of nodes and relationships currently in the database.
-                </p>
-              </div>
-              <div className="pill">Graph</div>
-            </div>
-            <div className="report-metrics">
-              <div className="report-metric">
-                <span>Total nodes</span>
-                <strong>{formatNumber(summary.nodeCount)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Total relationships</span>
-                <strong>{formatNumber(summary.relationshipCount)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Snapshot nodes</span>
-                <strong>{formatNumber(nodes.length)}</strong>
-              </div>
-              <div className="report-metric">
-                <span>Snapshot relationships</span>
-                <strong>{formatNumber(edges.length)}</strong>
-              </div>
-            </div>
-            <div className="filter-row">
-              <button className="button-secondary" type="button" onClick={loadGraph} disabled={loading}>
-                {loading ? 'Refreshing...' : 'Refresh snapshot'}
-              </button>
-            </div>
-          </div>
-
-          {labelCounts.length ? (
-            <div className="module-card module-card__wide">
-              <div className="card-header">
-                <div>
-                  <h3>Node labels</h3>
-                  <p className="muted">Distribution of labels across the full graph.</p>
-                </div>
-              </div>
-              <div className="cluster-grid">
-                {labelCounts.map((item) => (
-                  <div className="cluster-card" key={item.label}>
-                    <div className="cluster-card__header">
-                      <h4>{item.label}</h4>
-                      <span className="pill">{formatNumber(item.count)}</span>
-                    </div>
-                    <p className="muted">Nodes with the {item.label} label.</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {relationshipCounts.length ? (
-            <div className="module-card module-card__wide">
-              <div className="card-header">
-                <div>
-                  <h3>Relationship types</h3>
-                  <p className="muted">Most common relationship types in Neo4j.</p>
-                </div>
-              </div>
-              <div className="cluster-grid">
-                {relationshipCounts.map((item) => (
-                  <div className="cluster-card" key={item.label}>
-                    <div className="cluster-card__header">
-                      <h4>{item.label}</h4>
-                      <span className="pill">{formatNumber(item.count)}</span>
-                    </div>
-                    <p className="muted">Edges of type {item.label}.</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {activeView === 'overview' && !nodes.length && !loading
-        ? renderEmptyState('No graph data yet', 'Load data into Neo4j to see a snapshot.')
-        : null}
 
       {activeView === 'explorer' && (
         <div className="stack">
@@ -635,9 +835,10 @@ export function DataHubPage({
                 <div className="module-card module-card__wide">
                   <div className="card-header">
                     <div>
-                      <h3>Graph explorer</h3>
+                      <h3>Neo4j graph explorer</h3>
                       <p className="muted">
-                        Drag nodes to reposition the network. Click a node or relationship for details.
+                        Drag nodes to reposition the network. Click a node or relationship for
+                        details, then inspect labels, nodes, and relationship records below.
                       </p>
                     </div>
                   </div>
@@ -767,6 +968,160 @@ export function DataHubPage({
                 </div>
               ) : null}
 
+              {labelCounts.length ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Label explorer</h3>
+                      <p className="muted">
+                        Distribution of labels across the Neo4j graph snapshot.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="cluster-grid">
+                    {labelCounts.map((item) => (
+                      <div className="cluster-card" key={item.label}>
+                        <div className="cluster-card__header">
+                          <h4>{item.label}</h4>
+                          <span className="pill">{formatNumber(item.count)}</span>
+                        </div>
+                        <p className="muted">Nodes carrying the {item.label} label.</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {relationshipCounts.length ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Relationship explorer</h3>
+                      <p className="muted">
+                        Most common relationship types currently present in Neo4j.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="cluster-grid">
+                    {relationshipCounts.map((item) => (
+                      <div className="cluster-card" key={item.label}>
+                        <div className="cluster-card__header">
+                          <h4>{item.label}</h4>
+                          <span className="pill">{formatNumber(item.count)}</span>
+                        </div>
+                        <p className="muted">Edges stored as {item.label}.</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {nodes.length ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Node browser</h3>
+                      <p className="muted">
+                        Search and inspect node records loaded into the current Neo4j snapshot.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="filter-row">
+                    <Field id="datahub-search-nodes" label="Search nodes">
+                      <input
+                        className="input"
+                        placeholder="Search labels, names, or properties"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                      />
+                    </Field>
+                    {searchQuery ? (
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                      >
+                        Clear search
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="cluster-grid">
+                    {filteredNodes.map((node) => (
+                      <div className="cluster-card" key={node.id}>
+                        <div className="cluster-card__header">
+                          <h4>{node.display || node.id}</h4>
+                          <div className="cluster-tags">
+                            {(node.labels || []).length ? (
+                              node.labels.map((label) => (
+                                <span className="cluster-tag" key={`${node.id}-${label}`}>
+                                  {label}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="cluster-tag">No label</span>
+                            )}
+                          </div>
+                        </div>
+                        <pre className="code-block">{stringifyProps(node.properties)}</pre>
+                      </div>
+                    ))}
+                    {!filteredNodes.length ? (
+                      <p className="muted">No nodes match the search.</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {edges.length ? (
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Relationship browser</h3>
+                      <p className="muted">
+                        Search relationship records extracted from the current Neo4j snapshot.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="filter-row">
+                    <Field id="datahub-search-edges" label="Search relationships">
+                      <input
+                        className="input"
+                        placeholder="Search types, nodes, or properties"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                      />
+                    </Field>
+                    {searchQuery ? (
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                      >
+                        Clear search
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="cluster-grid">
+                    {filteredEdges.map((edge) => (
+                      <div className="cluster-card" key={edge.id}>
+                        <div className="cluster-card__header">
+                          <h4>{edge.type || 'Relationship'}</h4>
+                          <span className="pill">Edge</span>
+                        </div>
+                        <p className="muted">
+                          {nodeLookup[edge.source]?.display || edge.source} {'->'}{' '}
+                          {nodeLookup[edge.target]?.display || edge.target}
+                        </p>
+                        <pre className="code-block">{stringifyProps(edge.properties)}</pre>
+                      </div>
+                    ))}
+                    {!filteredEdges.length ? (
+                      <p className="muted">No relationships match the search.</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
               {!nodes.length && !loading
                 ? renderEmptyState(
                     'No graph data yet',
@@ -781,179 +1136,230 @@ export function DataHubPage({
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
-                <h3>Connector staging layer</h3>
+                <h3>CSV intake gate to Neo4j</h3>
                 <p className="muted">
-                  Neo4j is the system of record. Use connectors to pull from DBMS APIs or public
-                  sources, validate them, then promote into Neo4j.
+                  Every module uploads CSV through Data Hub first. Each upload creates a batch in
+                  Neo4j plus one row node per CSV row, so the graph becomes the single shared
+                  platform datastore.
                 </p>
               </div>
-              <div className="pill">Staging</div>
+              <div className="pill">Neo4j intake</div>
             </div>
             <div className="report-metrics">
               <div className="report-metric">
-                <span>Sources connected</span>
-                <strong>0</strong>
+                <span>Upload modules</span>
+                <strong>{formatNumber(intakeModules.length)}</strong>
               </div>
               <div className="report-metric">
-                <span>Pending imports</span>
-                <strong>0</strong>
+                <span>Total connectors</span>
+                <strong>{formatNumber(intakeConnectorCount)}</strong>
               </div>
               <div className="report-metric">
-                <span>Last sync</span>
-                <strong>—</strong>
+                <span>Neo4j graph nodes</span>
+                <strong>{formatNumber(summary.nodeCount)}</strong>
               </div>
               <div className="report-metric">
-                <span>Neo4j status</span>
-                <strong>Ready</strong>
+                <span>Uploads this session</span>
+                <strong>
+                  {formatNumber(Object.keys(uploadResults).length)}
+                </strong>
               </div>
             </div>
+            <StatusMessage tone="info" message={workspaceStatus} />
             <div className="filter-row">
-              <button className="button-secondary" type="button">
-                Add connector
+              <button className="button-secondary" type="button" onClick={loadConnectorCatalog} disabled={catalogLoading}>
+                {catalogLoading ? 'Refreshing...' : 'Refresh catalog'}
               </button>
-              <button className="button-secondary" type="button">
-                Review staging queue
+              <button className="button-secondary" type="button" onClick={loadGraph} disabled={loading}>
+                {loading ? 'Refreshing graph...' : 'Refresh graph'}
+              </button>
+              <button className="button-secondary" type="button" onClick={() => applyView('explorer')}>
+                Open graph explorer
               </button>
             </div>
           </div>
 
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Connector catalog</h3>
-                <p className="muted">
-                  Choose a source type, map fields, and validate before ingesting to Neo4j.
-                </p>
-              </div>
-            </div>
-            <div className="cluster-grid">
-              {connectorCatalog.map((group) => (
-                <div className="cluster-card" key={group.id}>
-                  <div className="cluster-card__header">
-                    <h4>{group.title}</h4>
-                    <span className="pill">{group.items.length}</span>
+          {intakeModules.length ? (
+            <div className="datahub-upload-grid">
+              {moduleWorkspaceStats.map(({ module, draft, progress }) => {
+                const modulePreset =
+                  MODULE_WORKSPACE_PRESETS[module.moduleId] || MODULE_WORKSPACE_PRESETS['data-hub']
+                const uploadResult = uploadResults[module.moduleId]
+                const uploadError = uploadErrors[module.moduleId]
+                const uploading = Boolean(uploadingByModule[module.moduleId])
+                const selectedFile = uploadFiles[module.moduleId]
+                return (
+                  <div
+                    className={`datahub-upload-tile ${
+                      selectedModule?.moduleId === module.moduleId ? 'is-active' : ''
+                    }`}
+                    key={module.moduleId}
+                  >
+                    <div className="cluster-card__header">
+                      <h3>{module.moduleLabel}</h3>
+                      <span
+                        className={`pill ${
+                          getConnectorTone(module.status) === 'success'
+                            ? 'pill--success'
+                            : getConnectorTone(module.status) === 'warning'
+                              ? 'pill--warning'
+                              : ''
+                        }`}
+                      >
+                        {module.status}
+                      </span>
+                    </div>
+                    <p className="muted">{module.description}</p>
+                    <div className="report-metrics">
+                      <div className="report-metric">
+                        <span>Readiness</span>
+                        <strong>{progress}%</strong>
+                      </div>
+                      <div className="report-metric">
+                        <span>Connectors</span>
+                        <strong>{formatNumber(module.connectors?.length)}</strong>
+                      </div>
+                      <div className="report-metric">
+                        <span>Target</span>
+                        <strong>Neo4j</strong>
+                      </div>
+                      <div className="report-metric">
+                        <span>Rows uploaded</span>
+                        <strong>{formatNumber(uploadResult?.rowCount || 0)}</strong>
+                      </div>
+                    </div>
+
+                    <FormSection
+                      title="CSV upload"
+                      description="Pick a CSV for this module. Data Hub will write the batch and rows directly into Neo4j."
+                    >
+                      <div className="form-grid">
+                        <Field
+                          id={`datahub-source-${module.moduleId}`}
+                          label="Source / dataset name"
+                          helper="Optional context stored with the import batch."
+                        >
+                          <input
+                            className="input"
+                            value={draft.sourceLocation}
+                            placeholder={modulePreset.sourcePlaceholder}
+                            onChange={(event) =>
+                              updateModuleDraft(
+                                module.moduleId,
+                                module,
+                                'sourceLocation',
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field id={`datahub-owner-${module.moduleId}`} label="Owner">
+                          <input
+                            className="input"
+                            value={draft.owner}
+                            placeholder="Board owner or operator"
+                            onChange={(event) =>
+                              updateModuleDraft(module.moduleId, module, 'owner', event.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field
+                          id={`datahub-notes-${module.moduleId}`}
+                          label="Import notes"
+                          className="form-grid__full"
+                        >
+                          <textarea
+                            className="textarea"
+                            rows="3"
+                            value={draft.notes}
+                            placeholder="Anything useful about this CSV upload."
+                            onChange={(event) =>
+                              updateModuleDraft(module.moduleId, module, 'notes', event.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field
+                          id={`datahub-file-${module.moduleId}`}
+                          label="CSV file"
+                          helper="One file per upload. Every CSV row becomes a Neo4j row node."
+                          className="form-grid__full"
+                        >
+                          <input
+                            className="datahub-file-input"
+                            type="file"
+                            accept=".csv,text/csv"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] || null
+                              setSelectedModuleId(module.moduleId)
+                              setUploadFiles((prev) => ({ ...prev, [module.moduleId]: file }))
+                              setUploadErrors((prev) => ({ ...prev, [module.moduleId]: '' }))
+                            }}
+                          />
+                        </Field>
+                      </div>
+                    </FormSection>
+
+                    {selectedFile ? (
+                      <div className="metric-row">
+                        <span>Selected file</span>
+                        <strong>{selectedFile.name}</strong>
+                      </div>
+                    ) : null}
+
+                    <div className="cluster-tags">
+                      {(module.connectors || []).map((connector) => (
+                        <span className="cluster-tag" key={connector.connectorId}>
+                          {connector.name}
+                        </span>
+                      ))}
+                    </div>
+
+                    <StatusMessage tone="error" message={uploadError} />
+                    <StatusMessage tone="info" message={uploadResult?.message || ''} />
+
+                    {uploadResult?.columns?.length ? (
+                      <div className="compact-list">
+                        <div className="metric-row">
+                          <span>Columns mapped</span>
+                          <strong>{formatNumber(uploadResult.columnCount)}</strong>
+                        </div>
+                        <div className="cluster-tags">
+                          {uploadResult.columns.slice(0, 8).map((column) => (
+                            <span className="cluster-tag" key={`${module.moduleId}-${column}`}>
+                              {column}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="datahub-upload-actions">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => uploadModuleCsv(module)}
+                        disabled={uploading}
+                      >
+                        {uploading ? 'Uploading to Neo4j...' : 'Upload CSV to Neo4j'}
+                      </button>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => {
+                          setSelectedModuleId(module.moduleId)
+                          applyView('explorer')
+                        }}
+                      >
+                        Inspect graph
+                      </button>
+                    </div>
                   </div>
-                  <p className="muted">{group.description}</p>
-                  <ul className="compact-list">
-                    {group.items.map((item) => (
-                      <li key={item}>
-                        <span>{item}</span>
-                        <strong>Configure</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                )
+              })}
             </div>
-          </div>
+          ) : null}
         </div>
       )}
-
-      {activeView === 'nodes' && nodes.length ? (
-        <div className="module-card module-card__wide">
-          <div className="card-header">
-            <div>
-              <h3>Nodes in snapshot</h3>
-              <p className="muted">Nodes loaded into the current graph snapshot.</p>
-            </div>
-          </div>
-          <div className="filter-row">
-            <Field id="datahub-search-nodes" label="Search nodes">
-              <input
-                className="input"
-                placeholder="Search labels, names, or properties"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </Field>
-            {searchQuery ? (
-              <button className="button-secondary" type="button" onClick={() => setSearchQuery('')}>
-                Clear search
-              </button>
-            ) : null}
-          </div>
-          <div className="cluster-grid">
-            {filteredNodes.map((node) => (
-              <div className="cluster-card" key={node.id}>
-                <div className="cluster-card__header">
-                  <h4>{node.display || node.id}</h4>
-                  <div className="cluster-tags">
-                    {(node.labels || []).length ? (
-                      node.labels.map((label) => (
-                        <span className="cluster-tag" key={`${node.id}-${label}`}>
-                          {label}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="cluster-tag">No label</span>
-                    )}
-                  </div>
-                </div>
-                <pre className="code-block">{stringifyProps(node.properties)}</pre>
-              </div>
-            ))}
-            {!filteredNodes.length ? <p className="muted">No nodes match the search.</p> : null}
-          </div>
-        </div>
-      ) : null}
-
-      {activeView === 'nodes' && !nodes.length && !loading
-        ? renderEmptyState(
-            'No nodes in snapshot',
-            'Increase the snapshot limit or load data into Neo4j to see nodes.',
-          )
-        : null}
-
-      {activeView === 'relationships' && edges.length ? (
-        <div className="module-card module-card__wide">
-          <div className="card-header">
-            <div>
-              <h3>Relationships in snapshot</h3>
-              <p className="muted">Relationships extracted from Neo4j.</p>
-            </div>
-          </div>
-          <div className="filter-row">
-            <Field id="datahub-search-edges" label="Search relationships">
-              <input
-                className="input"
-                placeholder="Search types, nodes, or properties"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </Field>
-            {searchQuery ? (
-              <button className="button-secondary" type="button" onClick={() => setSearchQuery('')}>
-                Clear search
-              </button>
-            ) : null}
-          </div>
-          <div className="cluster-grid">
-            {filteredEdges.map((edge) => (
-              <div className="cluster-card" key={edge.id}>
-                <div className="cluster-card__header">
-                  <h4>{edge.type || 'Relationship'}</h4>
-                  <span className="pill">Edge</span>
-                </div>
-                <p className="muted">
-                  {nodeLookup[edge.source]?.display || edge.source} {'->'}{' '}
-                  {nodeLookup[edge.target]?.display || edge.target}
-                </p>
-                <pre className="code-block">{stringifyProps(edge.properties)}</pre>
-              </div>
-            ))}
-            {!filteredEdges.length ? (
-              <p className="muted">No relationships match the search.</p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {activeView === 'relationships' && !edges.length && !loading
-        ? renderEmptyState(
-            'No relationships in snapshot',
-            'Load relationships into Neo4j or increase the snapshot limit.',
-          )
-        : null}
     </section>
   )
 }

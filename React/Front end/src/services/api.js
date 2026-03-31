@@ -1,50 +1,126 @@
-const DEFAULT_API_BASE = 'http://localhost:8010'
+import { getRuntimeConfig } from '../config/runtime'
+import { getAuthHeaders, getAuthSnapshot } from './runtimeAuth'
 
-export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE
+export const API_BASE = getRuntimeConfig().apiBaseUrl
 
-export async function getJson(path) {
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
-  const response = await fetch(url)
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed: ${response.status}`)
+const DEFAULT_GET_CACHE_MS = 5000
+const getCache = new Map()
+const inflightGetRequests = new Map()
+
+function buildUrl(path) {
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+function buildGetRequestKey(url) {
+  const auth = getAuthSnapshot()
+  if (!auth.enabled) return `GET:public:${url}`
+  const credential = auth.mode === 'api_key' ? auth.apiKey : auth.token
+  const authSuffix = credential ? credential.slice(-6) : 'anon'
+  return `GET:${auth.mode}:${auth.headerName}:${authSuffix}:${url}`
+}
+
+function cloneJson(value) {
+  if (value === null || value === undefined) return value
+  // Keep caller mutations from mutating cached state.
+  if (typeof structuredClone === 'function') return structuredClone(value)
+  return JSON.parse(JSON.stringify(value))
+}
+
+function clearGetCache() {
+  getCache.clear()
+  inflightGetRequests.clear()
+}
+
+async function parseError(response) {
+  const text = await response.text()
+  // Try to extract a readable message from JSON error responses (e.g. FastAPI {"detail": "..."})
+  try {
+    const json = JSON.parse(text)
+    if (typeof json?.detail === 'string') return json.detail
+    if (typeof json?.message === 'string') return json.message
+    if (typeof json?.error === 'string') return json.error
+  } catch {
+    // not JSON — fall through
   }
-  return response.json()
+  return text || `Request failed: ${response.status}`
+}
+
+export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefresh = false } = {}) {
+  const url = buildUrl(path)
+  const key = buildGetRequestKey(url)
+  const now = Date.now()
+  if (!forceRefresh) {
+    const cached = getCache.get(key)
+    if (cached && cached.expiresAt > now) {
+      return cloneJson(cached.value)
+    }
+    const pending = inflightGetRequests.get(key)
+    if (pending) {
+      return pending.then((value) => cloneJson(value))
+    }
+  }
+
+  const pendingRequest = fetch(url, {
+    headers: getAuthHeaders(),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(await parseError(response))
+      }
+      return response.json()
+    })
+    .then((payload) => {
+      if (cacheMs > 0) {
+        getCache.set(key, {
+          expiresAt: Date.now() + cacheMs,
+          value: payload,
+        })
+      } else {
+        getCache.delete(key)
+      }
+      return payload
+    })
+    .finally(() => {
+      inflightGetRequests.delete(key)
+    })
+  inflightGetRequests.set(key, pendingRequest)
+  return pendingRequest.then((value) => cloneJson(value))
 }
 
 export async function requestJson(path, { method = 'POST', payload, headers } = {}) {
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+  const url = buildUrl(path)
+  if (String(method).toUpperCase() !== 'GET') {
+    clearGetCache()
+  }
   const response = await fetch(url, {
     method,
     headers: {
+      ...getAuthHeaders(),
       'Content-Type': 'application/json',
       ...(headers || {}),
     },
     body: payload === undefined ? null : JSON.stringify(payload),
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed: ${response.status}`)
+    throw new Error(await parseError(response))
   }
-  if (response.status === 204) {
-    return null
-  }
+  if (response.status === 204) return null
   return response.json()
 }
 
 export async function requestForm(path, { method = 'POST', formData } = {}) {
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+  const url = buildUrl(path)
+  if (String(method).toUpperCase() !== 'GET') {
+    clearGetCache()
+  }
   const response = await fetch(url, {
     method,
+    headers: getAuthHeaders(),
     body: formData,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed: ${response.status}`)
+    throw new Error(await parseError(response))
   }
-  if (response.status === 204) {
-    return null
-  }
+  if (response.status === 204) return null
   return response.json()
 }

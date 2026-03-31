@@ -41,7 +41,13 @@ const downloadCsv = (filename, rows) => {
   URL.revokeObjectURL(url)
 }
 
-export function AdminPage({ t, showTabs = true }) {
+export function AdminPage({
+  t,
+  activeTabOverride,
+  onTabChange,
+  showTabs = true,
+  showIntro = true,
+}) {
   const translate = t || ((key, vars) => key)
   const [activeTab, setActiveTab] = useState('admin')
   const [status, setStatus] = useState(null)
@@ -70,6 +76,12 @@ export function AdminPage({ t, showTabs = true }) {
   const [summary, setSummary] = useState(null)
   const [featureFlags, setFeatureFlags] = useState(null)
   const [campaignAdminStatus, setCampaignAdminStatus] = useState('')
+
+  const applyActiveTab = (nextTab) => {
+    if (!nextTab) return
+    setActiveTab(nextTab)
+    if (onTabChange) onTabChange(nextTab)
+  }
 
   const loadAdminData = () => {
     setError('')
@@ -133,6 +145,12 @@ export function AdminPage({ t, showTabs = true }) {
   useEffect(() => {
     loadAdminData()
   }, [])
+
+  useEffect(() => {
+    if (activeTabOverride && activeTabOverride !== activeTab) {
+      setActiveTab(activeTabOverride)
+    }
+  }, [activeTabOverride, activeTab])
 
   const handleSlackTest = async () => {
     setSlackError('')
@@ -292,11 +310,20 @@ export function AdminPage({ t, showTabs = true }) {
 
   return (
     <section className="module">
-      <CivicStatGrid
-        title="Operations pulse"
-        description="Admin queues and system readiness at a glance."
-        items={adminPulse}
-      />
+      {showIntro ? (
+        <div className="module-card module-card__wide section-intro">
+          <div className="card-header">
+            <div>
+              <h3>{translate('settings.header.title')}</h3>
+              <p className="muted">{translate('settings.header.subtitle')}</p>
+            </div>
+            <div className="pill">Settings</div>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <div className="module-alert">{error}</div> : null}
+
       <details className="dashboard-detail">
         <summary>System status</summary>
         <div className="dashboard-detail__body">
@@ -317,7 +344,11 @@ export function AdminPage({ t, showTabs = true }) {
         </div>
       </details>
 
-      {error ? <div className="module-alert">{error}</div> : null}
+      <CivicStatGrid
+        title="Operations pulse"
+        description="Admin queues and system readiness at a glance."
+        items={adminPulse}
+      />
 
       {showTabs ? (
         <div className="subtabs">
@@ -329,7 +360,7 @@ export function AdminPage({ t, showTabs = true }) {
               key={tab.id}
               type="button"
               className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => applyActiveTab(tab.id)}
             >
               {tab.label}
             </button>

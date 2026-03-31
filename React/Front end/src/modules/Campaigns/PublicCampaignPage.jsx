@@ -563,7 +563,7 @@ export function PublicCampaignPage({
           </div>
 
           <div
-            className="module-tabs"
+            className="subtabs"
             role="tablist"
             aria-label={t?.('campaign.public.tabLabel') || 'Campaign sections'}
           >
@@ -571,7 +571,7 @@ export function PublicCampaignPage({
               <button
                 key={tab.id}
                 type="button"
-                className={activeSection === tab.id ? 'tab-button tab-active' : 'tab-button'}
+                className={activeSection === tab.id ? 'subtab active' : 'subtab'}
                 onClick={() => setActiveSection(tab.id)}
                 role="tab"
                 id={`campaign-tab-${tab.id}`}

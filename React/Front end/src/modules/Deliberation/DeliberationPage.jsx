@@ -11,7 +11,6 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js'
-import { Stepper } from '@mantine/core'
 import { IconChartDots, IconMessage2, IconUsers } from '@tabler/icons-react'
 import { API_BASE, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid } from '../../ui'
@@ -52,6 +51,18 @@ const truncateText = (value, limit = 64) => {
   return `${text.slice(0, Math.max(0, limit - 3))}...`
 }
 
+const buildStatementPreview = (comments = []) => {
+  if (!comments.length) return 'No approved statements yet.'
+  const lines = comments.slice(0, 3).map((comment, index) => {
+    const agree = comment.agree_count ?? 0
+    const disagree = comment.disagree_count ?? 0
+    const pass = comment.pass_count ?? 0
+    return `${index + 1}. ${truncateText(comment.text, 84)} (${agree}/${disagree}/${pass})`
+  })
+  const extra = comments.length > 3 ? `\n+${comments.length - 3} more` : ''
+  return `Approved statements:\n${lines.join('\n')}${extra}`
+}
+
 const sanitizeStatement = (value) => {
   const text = String(value || '').trim()
   if (!text) return ''
@@ -66,6 +77,18 @@ const sanitizeStatement = (value) => {
 }
 
 const formatPercent = (value) => `${Math.round((Number(value) || 0) * 100)}%`
+
+const buildClusterTooltip = (card) => {
+  if (!card) return []
+  const lines = [`${formatPercent(card.share)} of participants (${card.size})`]
+  if (card.agreeTopics.length) {
+    lines.push(`Agree: ${card.agreeTopics.join(', ')}`)
+  }
+  if (card.disagreeTopics.length) {
+    lines.push(`Disagree: ${card.disagreeTopics.join(', ')}`)
+  }
+  return lines
+}
 
 
 const buildStatementTooltipRows = (item) => {
@@ -172,6 +195,33 @@ const intersectSets = (setA, setB) => {
   return result
 }
 
+const DELIBERATION_TAB_STORAGE_KEY = 'fs.deliberation.activeTab'
+const DELIBERATION_DEFAULT_TAB = 'overview'
+const DELIBERATION_PRIMARY_TABS = new Set([
+  'overview',
+  'setup',
+  'distribute',
+  'insights',
+  'moderation',
+])
+
+const normalizeDeliberationTab = (tabId) => {
+  if (!tabId) return DELIBERATION_DEFAULT_TAB
+  return DELIBERATION_PRIMARY_TABS.has(tabId) ? tabId : DELIBERATION_DEFAULT_TAB
+}
+
+function ActiveConversationRequired({ message, onOpenOverview }) {
+  return (
+    <div className="module-card module-card__wide">
+      <h3>Select an active conversation</h3>
+      <p className="muted">{message}</p>
+      <button className="button-secondary" type="button" onClick={onOpenOverview}>
+        Go to Overview
+      </button>
+    </div>
+  )
+}
+
 export function DeliberationPage({
   t,
   language,
@@ -180,11 +230,21 @@ export function DeliberationPage({
   showTabs = true,
 }) {
   const translate = t || ((key, vars) => key)
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') return DELIBERATION_DEFAULT_TAB
+    return normalizeDeliberationTab(
+      window.localStorage.getItem(DELIBERATION_TAB_STORAGE_KEY),
+    )
+  })
+  const [setupMode, setSetupMode] = useState('')
+  const [publicReportLinks, setPublicReportLinks] = useState({})
   const applyActiveTab = (nextTab) => {
-    if (!nextTab) return
-    setActiveTab(nextTab)
-    if (onTabChange) onTabChange(nextTab)
+    const normalized = normalizeDeliberationTab(nextTab)
+    setActiveTab(normalized)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(DELIBERATION_TAB_STORAGE_KEY, normalized)
+    }
+    if (onTabChange) onTabChange(normalized)
   }
   const [conversations, setConversations] = useState([])
   const [convoError, setConvoError] = useState('')
@@ -264,6 +324,7 @@ export function DeliberationPage({
   const [loadingStats, setLoadingStats] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [tableExportingConversationId, setTableExportingConversationId] = useState('')
   const [csvColumns, setCsvColumns] = useState([])
   const [csvRows, setCsvRows] = useState([])
   const [csvMap, setCsvMap] = useState({})
@@ -274,6 +335,8 @@ export function DeliberationPage({
   const [slackMessage, setSlackMessage] = useState('')
   const [slackStatus, setSlackStatus] = useState('')
   const [slackError, setSlackError] = useState('')
+  const [slackChannelMode, setSlackChannelMode] = useState('default')
+  const [slackChannelValue, setSlackChannelValue] = useState('')
   const [sendingSlack, setSendingSlack] = useState(false)
   const [whatsappGroups, setWhatsappGroups] = useState([])
   const [whatsappGroupId, setWhatsappGroupId] = useState('')
@@ -285,10 +348,18 @@ export function DeliberationPage({
   const [polisPageId, setPolisPageId] = useState('PAGE_ID')
   const [polisConversationId, setPolisConversationId] = useState('')
   const [copyStatus, setCopyStatus] = useState(null)
+  const [discussionCommentsByStatement, setDiscussionCommentsByStatement] = useState({})
+  const [discussionDraftByStatement, setDiscussionDraftByStatement] = useState({})
+  const [discussionErrorByStatement, setDiscussionErrorByStatement] = useState({})
+  const [discussionLoadingByStatement, setDiscussionLoadingByStatement] = useState({})
+  const [discussionSavingByStatement, setDiscussionSavingByStatement] = useState({})
+  const [discussionReactionBusyByStatement, setDiscussionReactionBusyByStatement] = useState({})
 
   useEffect(() => {
-    if (activeTabOverride && activeTabOverride !== activeTab) {
-      setActiveTab(activeTabOverride)
+    if (!activeTabOverride) return
+    const normalized = normalizeDeliberationTab(activeTabOverride)
+    if (normalized !== activeTab) {
+      applyActiveTab(normalized)
     }
   }, [activeTabOverride, activeTab])
 
@@ -379,6 +450,25 @@ export function DeliberationPage({
       clusterSizes: clusterSummaries.map((row) => Number(row?.size || 0)),
     }
   }, [report])
+
+  const discussionStatementOptions = useMemo(() => {
+    const rows = [...(reportCharts?.consensusTop || []), ...(reportCharts?.polarizingTop || [])]
+    const unique = new Map()
+    rows.forEach((row) => {
+      if (!row?.id || unique.has(row.id)) return
+      unique.set(row.id, row)
+    })
+    return Array.from(unique.values())
+  }, [reportCharts])
+
+  const getDiscussionStateForStatement = (statementId) => ({
+    comments: discussionCommentsByStatement[statementId] || [],
+    draft: discussionDraftByStatement[statementId] || '',
+    error: discussionErrorByStatement[statementId] || '',
+    loading: Boolean(discussionLoadingByStatement[statementId]),
+    saving: Boolean(discussionSavingByStatement[statementId]),
+    reactionBusyId: discussionReactionBusyByStatement[statementId] || '',
+  })
 
   const topicMap = useMemo(() => {
     const points = report?.points || []
@@ -517,6 +607,47 @@ export function DeliberationPage({
       .sort((a, b) => b.size - a.size)
   }, [report])
 
+  const clusterCardById = useMemo(
+    () =>
+      clusterCards.reduce((acc, card) => {
+        acc[String(card.id)] = card
+        return acc
+      }, {}),
+    [clusterCards],
+  )
+
+  const verticalBarOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            afterBody: (items) => {
+              const label = items?.[0]?.label
+              const card = label ? clusterCardById[label] : null
+              return buildClusterTooltip(card)
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#64748b' },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#64748b' },
+          grid: { color: 'rgba(148, 163, 184, 0.2)' },
+        },
+      },
+    }),
+    [clusterCardById],
+  )
+
   const seedComments = useMemo(
     () => approvedComments.filter((comment) => comment.is_seed),
     [approvedComments],
@@ -627,29 +758,6 @@ export function DeliberationPage({
         y: {
           ticks: { color: '#0f172a' },
           grid: { display: false },
-        },
-      },
-    }),
-    [],
-  )
-
-  const verticalBarOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true },
-      },
-      scales: {
-        x: {
-          ticks: { color: '#64748b' },
-          grid: { display: false },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#64748b' },
-          grid: { color: 'rgba(148, 163, 184, 0.2)' },
         },
       },
     }),
@@ -786,7 +894,7 @@ export function DeliberationPage({
     Promise.all([
       getJson(`/conversations/${activeId}`),
       getJson(`/conversations/${activeId}/comments?status=approved`),
-      getJson(`/conversations/${activeId}/comments?status=pending`),
+      getJson(`/conversations/${activeId}/comments?status=pending&include_stats=false`),
     ])
       .then(([convo, approved, pending]) => {
         setActiveConvo(convo)
@@ -813,16 +921,28 @@ export function DeliberationPage({
       )
   }, [activeId])
 
-  const buildQuestionnaireLink = (questionnaireType, view) => {
-    if (!activeId || typeof window === 'undefined') return ''
+  const buildQuestionnaireLink = (questionnaireType, view, conversationId = activeId) => {
+    if (!conversationId || typeof window === 'undefined') return ''
     const origin = window.location.origin
     const currentPath = window.location.pathname || '/'
     const cleanPath = currentPath.replace(/\/index\.html$/, '/')
     const basePath = cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`
     const url = new URL(basePath, origin)
     url.searchParams.set('questionnaire', questionnaireType)
-    url.searchParams.set('conversation_id', activeId)
+    url.searchParams.set('conversation_id', conversationId)
     if (view) url.searchParams.set('view', view)
+    if (language) url.searchParams.set('lang', language)
+    return url.toString()
+  }
+
+  const buildPublicReportLink = (shareId) => {
+    if (!shareId || typeof window === 'undefined') return ''
+    const origin = window.location.origin
+    const currentPath = window.location.pathname || '/'
+    const cleanPath = currentPath.replace(/\/index\.html$/, '/')
+    const basePath = cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`
+    const url = new URL(basePath, origin)
+    url.searchParams.set('report_share', shareId)
     if (language) url.searchParams.set('lang', language)
     return url.toString()
   }
@@ -879,6 +999,10 @@ export function DeliberationPage({
       setSlackError('Select a conversation first.')
       return
     }
+    if (slackChannelMode === 'custom' && !slackChannelValue.trim()) {
+      setSlackError('Enter a Slack channel.')
+      return
+    }
     const message =
       slackMessage ||
       `Survey questionnaire: ${activeConvo?.topic || 'Conversation'}\n\n${questionnaireLink}`
@@ -890,6 +1014,7 @@ export function DeliberationPage({
         method: 'POST',
         payload: {
           message,
+          channel: slackChannelMode === 'custom' ? slackChannelValue.trim() : '',
           source: 'deliberation_share',
         },
       })
@@ -1093,7 +1218,7 @@ export function DeliberationPage({
         },
       })
       const pending = await getJson(
-        `/conversations/${activeId}/comments?status=pending`,
+        `/conversations/${activeId}/comments?status=pending&include_stats=false`,
       )
       setPendingComments(Array.isArray(pending) ? pending : [])
       const approved = await getJson(
@@ -1181,17 +1306,185 @@ export function DeliberationPage({
         payload: { text: commentText.trim() },
       })
       setCommentText('')
-      const approved = await getJson(
-        `/conversations/${activeId}/comments?status=approved`,
-      )
+      const [approved, pending] = await Promise.all([
+        getJson(`/conversations/${activeId}/comments?status=approved`),
+        getJson(`/conversations/${activeId}/comments?status=pending&include_stats=false`),
+      ])
       setApprovedComments(Array.isArray(approved) ? approved : [])
+      setPendingComments(Array.isArray(pending) ? pending : [])
     } catch (err) {
       setConvoError(err.message || 'Unable to submit comment.')
     }
   }
 
+  const getPublicReportLink = (convo) => {
+    if (!convo) return ''
+    const shareId =
+      convo.report_share_id ||
+      convo.reportShareId ||
+      convo.report_share ||
+      convo.reportShare ||
+      ''
+    if (shareId) return buildPublicReportLink(shareId)
+    return publicReportLinks[convo.id] || ''
+  }
+
+  const handleOpenPublicReport = async (convo) => {
+    if (!convo?.id) return
+    const existingLink = getPublicReportLink(convo)
+    if (existingLink) {
+      window.open(existingLink, '_blank', 'noopener,noreferrer')
+      return
+    }
+    try {
+      const payload = await requestJson(`/conversations/${convo.id}/reports`, {
+        method: 'POST',
+        payload: {
+          name: `${convo.topic || 'Survey'} report`,
+          theme_ids: [],
+          include_unassigned: true,
+        },
+      })
+      const shareId = payload?.share_id
+      if (!shareId) {
+        throw new Error('Public report link unavailable.')
+      }
+      const link = buildPublicReportLink(shareId)
+      setPublicReportLinks((prev) => ({ ...prev, [convo.id]: link }))
+      window.open(link, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      setConvoError(err.message || 'Unable to open public report.')
+    }
+  }
+
   const activeConversations = conversations.filter((convo) => convo.is_open)
   const closedConversations = conversations.filter((convo) => !convo.is_open)
+
+  const getDiscussionParticipantId = () => {
+    if (typeof window === 'undefined') return `insights_${Date.now()}`
+    const key = `fs.deliberation.discussion.participant.${activeId || 'default'}`
+    const existing = window.localStorage.getItem(key)
+    if (existing) return existing
+    const created = `insights_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+    window.localStorage.setItem(key, created)
+    return created
+  }
+
+  const loadStatementDiscussionComments = async (statementId) => {
+    if (!activeId || !statementId) return
+    setDiscussionLoadingByStatement((prev) => ({ ...prev, [statementId]: true }))
+    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
+    try {
+      const participantId = getDiscussionParticipantId()
+      const payload = await requestJson(
+        `/conversations/${activeId}/statements/${statementId}/discussion-comments`,
+        {
+          method: 'GET',
+          headers: { 'X-Participant-Id': participantId },
+        },
+      )
+      setDiscussionCommentsByStatement((prev) => ({
+        ...prev,
+        [statementId]: Array.isArray(payload) ? payload : [],
+      }))
+    } catch (err) {
+      setDiscussionErrorByStatement((prev) => ({
+        ...prev,
+        [statementId]: err.message || 'Unable to load statement comments.',
+      }))
+    } finally {
+      setDiscussionLoadingByStatement((prev) => ({ ...prev, [statementId]: false }))
+    }
+  }
+
+  const handleCreateStatementDiscussionComment = async (statementId) => {
+    const draft = discussionDraftByStatement[statementId] || ''
+    if (activeConvo?.is_open === false) {
+      setDiscussionErrorByStatement((prev) => ({
+        ...prev,
+        [statementId]: 'Conversation is closed. Reopen it to add statement comments.',
+      }))
+      return
+    }
+    if (!activeId || !statementId) {
+      setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: 'Select a statement first.' }))
+      return
+    }
+    if (!draft.trim()) {
+      setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: 'Comment text is required.' }))
+      return
+    }
+    setDiscussionSavingByStatement((prev) => ({ ...prev, [statementId]: true }))
+    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
+    try {
+      const participantId = getDiscussionParticipantId()
+      await requestJson(
+        `/conversations/${activeId}/statements/${statementId}/discussion-comments`,
+        {
+          method: 'POST',
+          payload: { text: draft.trim(), author_id: participantId },
+          headers: { 'X-Participant-Id': participantId },
+        },
+      )
+      setDiscussionDraftByStatement((prev) => ({ ...prev, [statementId]: '' }))
+      await loadStatementDiscussionComments(statementId)
+    } catch (err) {
+      setDiscussionErrorByStatement((prev) => ({
+        ...prev,
+        [statementId]: err.message || 'Unable to post statement comment.',
+      }))
+    } finally {
+      setDiscussionSavingByStatement((prev) => ({ ...prev, [statementId]: false }))
+    }
+  }
+
+  const handleReactToStatementDiscussionComment = async (statementId, commentId, reaction) => {
+    if (activeConvo?.is_open === false) {
+      setDiscussionErrorByStatement((prev) => ({
+        ...prev,
+        [statementId]: 'Conversation is closed. Reopen it to react on comments.',
+      }))
+      return
+    }
+    if (!activeId || !statementId || !commentId) return
+    setDiscussionReactionBusyByStatement((prev) => ({ ...prev, [statementId]: commentId }))
+    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
+    try {
+      const participantId = getDiscussionParticipantId()
+      const updated = await requestJson(
+        `/conversations/${activeId}/statements/${statementId}/discussion-comments/${commentId}/reactions`,
+        {
+          method: 'POST',
+          payload: { reaction, author_id: participantId },
+          headers: { 'X-Participant-Id': participantId },
+        },
+      )
+      setDiscussionCommentsByStatement((prev) => ({
+        ...prev,
+        [statementId]: (prev[statementId] || []).map((item) =>
+          item.id === commentId ? { ...item, ...(updated || {}) } : item,
+        ),
+      }))
+    } catch (err) {
+      setDiscussionErrorByStatement((prev) => ({
+        ...prev,
+        [statementId]: err.message || 'Unable to react to comment.',
+      }))
+    } finally {
+      setDiscussionReactionBusyByStatement((prev) => ({ ...prev, [statementId]: '' }))
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'insights') return
+    if (!activeId) return
+    discussionStatementOptions.forEach((row) => {
+      if (!row?.id) return
+      if (discussionCommentsByStatement[row.id]) return
+      loadStatementDiscussionComments(row.id)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, activeId, discussionStatementOptions])
 
   const handleRunAnalysis = async () => {
     if (!activeId) return
@@ -1257,6 +1550,31 @@ export function DeliberationPage({
       setExportStatus(err.message || 'Unable to download export.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  const handleDownloadConversationCsv = async (conversationId) => {
+    if (!conversationId) return
+    setTableExportingConversationId(conversationId)
+    setConvoError('')
+    try {
+      const response = await fetch(`${API_BASE}/conversations/${conversationId}/export.csv`)
+      if (!response.ok) {
+        throw new Error('Conversation CSV export failed.')
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `conversation_${conversationId}_dataset.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setConvoError(err.message || 'Unable to export conversation CSV.')
+    } finally {
+      setTableExportingConversationId('')
     }
   }
 
@@ -1619,12 +1937,6 @@ export function DeliberationPage({
     ? reportCharts?.majorityTop || []
     : reportCharts?.consensusTop || []
   const statementScoreLabel = useMajority ? 'Agreement ratio' : 'Consensus score'
-  const flowStepIndex = useMemo(() => {
-    if (activeTab === 'setup') return 0
-    if (activeTab === 'distribute') return 1
-    if (activeTab === 'insights') return 2
-    return 0
-  }, [activeTab])
   const deliberationPulse = useMemo(
     () => [
       {
@@ -1655,45 +1967,7 @@ export function DeliberationPage({
     [activeConvo?.allow_voting, approvedComments.length, conversations.length, pendingComments.length],
   )
   return (
-    <section className="module">
-      <details className="dashboard-detail">
-        <summary>Survey stats</summary>
-        <div className="dashboard-detail__body">
-          <div className="module-header__meta">
-            <div className="module-header__metric">
-              <span>Conversations</span>
-              <strong>{conversations.length}</strong>
-            </div>
-            <div className="module-header__metric">
-              <span>Approved</span>
-              <strong>{approvedComments.length}</strong>
-            </div>
-            <div className="module-header__metric">
-              <span>Pending</span>
-              <strong>{pendingComments.length}</strong>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <CivicStatGrid
-        title="Deliberation pulse"
-        description="Track active conversations, moderation load, and participation signals."
-        items={deliberationPulse}
-      />
-
-      <Stepper
-        active={flowStepIndex}
-        color="civic"
-        size="sm"
-        mb="md"
-        orientation="horizontal"
-      >
-        <Stepper.Step label="Set up" description="Define the topic" />
-        <Stepper.Step label="Share" description="Distribute links" />
-        <Stepper.Step label="Insights" description="Review outcomes" />
-      </Stepper>
-
+    <section className="module module--delib-radical">
       {convoError ? <div className="module-alert">{convoError}</div> : null}
       {copyStatus ? (
         <div
@@ -1706,11 +1980,11 @@ export function DeliberationPage({
       {showTabs ? (
         <div className="subtabs">
           {[
-            { id: 'overview', label: translate('deliberation.tabs.overview') },
-            { id: 'setup', label: translate('deliberation.tabs.setup') },
-            { id: 'distribute', label: translate('deliberation.tabs.distribute') },
-            { id: 'insights', label: translate('deliberation.tabs.insights') },
-            { id: 'moderation', label: translate('deliberation.tabs.moderation') },
+            { id: 'overview', label: 'Overview' },
+            { id: 'setup', label: 'Survey setup' },
+            { id: 'distribute', label: 'Share' },
+            { id: 'moderation', label: 'Review queue' },
+            { id: 'insights', label: 'Insights' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1726,6 +2000,11 @@ export function DeliberationPage({
 
       {activeTab === 'overview' && (
         <div className="stack">
+          <CivicStatGrid
+            title="Deliberation pulse"
+            description="Track active conversations, moderation load, and participation signals."
+            items={deliberationPulse}
+          />
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
@@ -1734,213 +2013,280 @@ export function DeliberationPage({
               </div>
             </div>
             <div className="table">
-              <div className="table-row table-head">
+              <div className="table-row table-row--conversations table-head">
                 <span>Topic</span>
                 <span>Status</span>
                 <span>Action</span>
-                <span>Set active</span>
+                <span>Active</span>
+                <span>Link</span>
+                <span>Statements</span>
+                <span>Export CSV</span>
               </div>
-              {activeConversations.map((convo) => (
-                <div className="table-row" key={convo.id}>
-                  <span>{convo.topic}</span>
-                  <span>Open</span>
-                  <div className="table-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleToggleConversation(convo.id, false)}
-                    >
-                      Close
-                    </button>
+              {activeConversations.map((convo) => {
+                const isActive = activeId === convo.id
+                const conversationLink = buildQuestionnaireLink(
+                  'deliberation',
+                  'participant',
+                  convo.id,
+                )
+                const publicReportLink = getPublicReportLink(convo)
+                const statementsTitle = isActive
+                  ? buildStatementPreview(approvedComments)
+                  : 'Set active to preview statements.'
+                return (
+                  <div className="table-row table-row--conversations" key={convo.id}>
+                    <span>
+                      <a
+                        className="table-link"
+                        href={publicReportLink || '#'}
+                        target={publicReportLink ? '_blank' : undefined}
+                        rel={publicReportLink ? 'noreferrer' : undefined}
+                        title="Open public report"
+                        onClick={(event) => {
+                          if (publicReportLink) return
+                          event.preventDefault()
+                          handleOpenPublicReport(convo)
+                        }}
+                      >
+                        {convo.topic}
+                      </a>
+                    </span>
+                    <span>Open</span>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleToggleConversation(convo.id, false)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => setActiveId(convo.id)}
+                        disabled={isActive}
+                      >
+                        {isActive ? 'Active' : 'Use'}
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        title={conversationLink || 'Select a conversation to generate a link.'}
+                        onClick={() => handleCopy(conversationLink, 'Participant link')}
+                        disabled={!conversationLink}
+                      >
+                        Copy
+                      </button>
+                      <a
+                        className="button-secondary button-secondary--small"
+                        href={conversationLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={conversationLink || 'Select a conversation to generate a link.'}
+                      >
+                        Open
+                      </a>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        title={statementsTitle}
+                        onClick={() => {
+                          if (!isActive) setActiveId(convo.id)
+                        }}
+                      >
+                        Statements
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        onClick={() => handleDownloadConversationCsv(convo.id)}
+                        disabled={tableExportingConversationId === convo.id}
+                      >
+                        {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="table-actions">
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => setActiveId(convo.id)}
-                      disabled={activeId === convo.id}
-                    >
-                      {activeId === convo.id ? 'Active' : 'Use'}
-                    </button>
+                )
+              })}
+              {closedConversations.map((convo) => {
+                const isActive = activeId === convo.id
+                const conversationLink = buildQuestionnaireLink(
+                  'deliberation',
+                  'participant',
+                  convo.id,
+                )
+                const publicReportLink = getPublicReportLink(convo)
+                const statementsTitle = isActive
+                  ? buildStatementPreview(approvedComments)
+                  : 'Set active to preview statements.'
+                return (
+                  <div className="table-row table-row--conversations" key={convo.id}>
+                    <span>
+                      <a
+                        className="table-link"
+                        href={publicReportLink || '#'}
+                        target={publicReportLink ? '_blank' : undefined}
+                        rel={publicReportLink ? 'noreferrer' : undefined}
+                        title="Open public report"
+                        onClick={(event) => {
+                          if (publicReportLink) return
+                          event.preventDefault()
+                          handleOpenPublicReport(convo)
+                        }}
+                      >
+                        {convo.topic}
+                      </a>
+                    </span>
+                    <span>Closed</span>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleToggleConversation(convo.id, true)}
+                      >
+                        Reopen
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => setActiveId(convo.id)}
+                        disabled={isActive}
+                      >
+                        {isActive ? 'Active' : 'Use'}
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        title={conversationLink || 'Select a conversation to generate a link.'}
+                        onClick={() => handleCopy(conversationLink, 'Participant link')}
+                        disabled={!conversationLink}
+                      >
+                        Copy
+                      </button>
+                      <a
+                        className="button-secondary button-secondary--small"
+                        href={conversationLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={conversationLink || 'Select a conversation to generate a link.'}
+                      >
+                        Open
+                      </a>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        title={statementsTitle}
+                        onClick={() => {
+                          if (!isActive) setActiveId(convo.id)
+                        }}
+                      >
+                        Statements
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        onClick={() => handleDownloadConversationCsv(convo.id)}
+                        disabled={tableExportingConversationId === convo.id}
+                      >
+                        {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {closedConversations.map((convo) => (
-                <div className="table-row" key={convo.id}>
-                  <span>{convo.topic}</span>
-                  <span>Closed</span>
-                  <div className="table-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleToggleConversation(convo.id, true)}
-                    >
-                      Reopen
-                    </button>
-                  </div>
-                  <div className="table-actions">
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => setActiveId(convo.id)}
-                      disabled={activeId === convo.id}
-                    >
-                      {activeId === convo.id ? 'Active' : 'Use'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
               {conversations.length === 0 && (
-                <div className="table-row empty">No conversations yet.</div>
+                <div className="table-row table-row--conversations empty">
+                  No conversations yet.
+                </div>
               )}
             </div>
-          </div>
-
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Active conversation</h3>
-                <p className="muted">This is the survey link you are sharing.</p>
-              </div>
-              {activeConvo ? (
-                <span className="pill">{activeConvo.is_open ? 'Open' : 'Closed'}</span>
-              ) : null}
-            </div>
-            {activeConvo ? (
-              <div className="stack">
-                <div>
-                  <strong>{activeConvo.topic}</strong>
-                  {activeConvo.description ? (
-                    <p className="muted">{activeConvo.description}</p>
-                  ) : (
-                    <p className="muted">Add a short description to guide participants.</p>
-                  )}
-                </div>
-                <div>
-                  <label className="label">Participant link</label>
-                  <input className="input" value={questionnaireLink} readOnly />
-                </div>
-                <div className="filter-row">
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => applyActiveTab('distribute')}
-                  >
-                    Share link
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleCopy(questionnaireLink, 'Participant link')}
-                  >
-                    Copy link
-                  </button>
-                  <a
-                    className="button-secondary"
-                    href={questionnaireLink}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open participant view
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <p className="muted">Select a conversation below to activate it.</p>
-            )}
-          </div>
-
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Statements</h3>
-                <p className="muted">Approved statements ready for voting.</p>
-              </div>
-              <span className="pill">{approvedComments.length}</span>
-            </div>
-            {approvedComments.length === 0 ? (
-              <p className="muted">No approved statements yet.</p>
-            ) : (
-              <div className="stack">
-                {approvedComments.slice(0, 8).map((comment) => (
-                  <div key={comment.id} className="split-row">
-                    <span>{comment.text}</span>
-                    <span className="muted">
-                      {comment.agree_count ?? 0}/{comment.disagree_count ?? 0}/
-                      {comment.pass_count ?? 0}
-                    </span>
-                  </div>
-                ))}
-                {approvedComments.length > 8 ? (
-                  <p className="muted">
-                    Showing 8 of {approvedComments.length} statements.
-                  </p>
-                ) : null}
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {activeTab === 'setup' && (
         <div className="stack">
-          <details className="dashboard-detail">
-            <summary>Setup checklist</summary>
-            <div className="dashboard-detail__body">
-              <ul className="compact-list">
-                <li>
-                  <span>Define the conversation</span>
-                  <strong>Topic, description, settings</strong>
-                </li>
-                <li>
-                  <span>Add starter statements</span>
-                  <strong>One per line or import CSV</strong>
-                </li>
-                <li>
-                  <span>Share the participant link</span>
-                  <strong>Invite supporters and members</strong>
-                </li>
-              </ul>
-            </div>
-          </details>
-
-          <div className="module-grid">
-            <div className="module-card">
-              <h3>Create a conversation</h3>
-              <p className="muted">Give the survey a clear topic and description.</p>
-              <input
-                className="input"
-                placeholder="Topic"
-                value={createForm.topic}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({ ...prev, topic: event.target.value }))
-                }
-              />
-              <textarea
-                className="textarea"
-                placeholder="Description"
-                value={createForm.description}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    description: event.target.value,
-                  }))
-                }
-              />
-              <label className="label">Moderation profile</label>
-              <select
-                className="select"
-                value={createForm.moderationProfile}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    moderationProfile: event.target.value,
-                  }))
-                }
+          <div className="module-card module-card__wide">
+            <h3>Start setup</h3>
+            <p className="muted">Create a new conversation or update an existing one.</p>
+            <div className="filter-row">
+              <button
+                className={setupMode === 'new' ? 'button' : 'button-secondary'}
+                type="button"
+                onClick={() => setSetupMode('new')}
               >
-                <option value="lazy">Lazy (auto-approve)</option>
-                <option value="strict">Strict (requires approval)</option>
-              </select>
+                New conversation
+              </button>
+              <button
+                className={setupMode === 'existing' ? 'button' : 'button-secondary'}
+                type="button"
+                onClick={() => setSetupMode('existing')}
+              >
+                Existing conversation
+              </button>
+            </div>
+          </div>
+
+          {setupMode === 'new' ? (
+          <div className="module-card module-card__wide">
+            <h3>Create survey</h3>
+            <p className="muted">Give the survey a clear topic and description.</p>
+            <div className="form-grid">
+              <div className="form-grid__full">
+                <input
+                  className="input"
+                  placeholder="Topic"
+                  value={createForm.topic}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, topic: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="form-grid__full">
+                <textarea
+                  className="textarea"
+                  placeholder="Description"
+                  value={createForm.description}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="field">
+                <label className="label">Moderation profile</label>
+                <select
+                  className="select"
+                  value={createForm.moderationProfile}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      moderationProfile: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="lazy">Lazy (auto-approve)</option>
+                  <option value="strict">Strict (requires approval)</option>
+                </select>
+              </div>
               <label className="checkbox">
                 <input
                   type="checkbox"
@@ -1967,138 +2313,181 @@ export function DeliberationPage({
                 />
                 Allow voting
               </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={createForm.allowViz}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, allowViz: event.target.checked }))
-                  }
-                />
-                Allow visualization
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={createForm.profanityFilterEnabled}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      profanityFilterEnabled: event.target.checked,
-                    }))
-                  }
-                />
-                Profanity filter (baseline)
-              </label>
-              <label className="label">Rate limit (per minute)</label>
-              <input
-                className="input"
-                type="number"
-                min="0"
-                max="120"
-                value={createForm.rateLimitPerMinute}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    rateLimitPerMinute: event.target.value,
-                  }))
-                }
-              />
-              <label className="label">Min votes for inclusion</label>
-              <input
-                className="input"
-                type="number"
-                min="0"
-                max="1000"
-                value={createForm.minVotesForInclusion}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    minVotesForInclusion: event.target.value,
-                  }))
-                }
-              />
-              <label className="label">Identity mode</label>
-              <select
-                className="select"
-                value={createForm.identityMode}
-                onChange={(event) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    identityMode: event.target.value,
-                  }))
-                }
-              >
-                <option value="anonymous">Anonymous</option>
-                <option value="xid_optional">Anonymous but verified</option>
-                <option value="xid_required">Login required</option>
-              </select>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={createForm.inviteOnly}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      inviteOnly: event.target.checked,
-                    }))
-                  }
-                />
-                Invite-only participation
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={createForm.isOpen}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, isOpen: event.target.checked }))
-                  }
-                />
-                Open for participation
-              </label>
-              <button className="button" type="button" onClick={handleCreateConversation}>
-                Create conversation
-              </button>
-            </div>
-
-            {activeConvo ? (
-              <>
-                <div className="module-card">
-                  <h3>Edit active conversation</h3>
-                  <p className="muted">Adjust the topic, description, and settings.</p>
-                  {updateForm ? (
-                    <div className="stack">
+              <div className="form-grid__full">
+                <details className="dashboard-detail">
+                  <summary>Advanced settings (optional)</summary>
+                  <div className="dashboard-detail__body form-grid">
+                    <label className="checkbox">
                       <input
-                        className="input"
-                        value={updateForm.topic}
+                        type="checkbox"
+                        checked={createForm.allowViz}
                         onChange={(event) =>
-                          setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
+                          setCreateForm((prev) => ({ ...prev, allowViz: event.target.checked }))
                         }
                       />
-                      <textarea
-                        className="textarea"
-                        value={updateForm.description}
+                      Allow visualization
+                    </label>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={createForm.profanityFilterEnabled}
                         onChange={(event) =>
-                          setUpdateForm((prev) => ({
+                          setCreateForm((prev) => ({
                             ...prev,
-                            description: event.target.value,
+                            profanityFilterEnabled: event.target.checked,
                           }))
                         }
                       />
-                  <label className="label">Moderation profile</label>
-                  <select
-                    className="select"
-                    value={updateForm.moderationProfile}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        moderationProfile: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="lazy">Lazy (auto-approve)</option>
-                    <option value="strict">Strict (requires approval)</option>
-                  </select>
+                      Profanity filter
+                    </label>
+                    <div className="field">
+                      <label className="label">Rate limit (per minute)</label>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        max="120"
+                        value={createForm.rateLimitPerMinute}
+                        onChange={(event) =>
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            rateLimitPerMinute: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="label">Min votes for inclusion</label>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        max="1000"
+                        value={createForm.minVotesForInclusion}
+                        onChange={(event) =>
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            minVotesForInclusion: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="label">Identity mode</label>
+                      <select
+                        className="select"
+                        value={createForm.identityMode}
+                        onChange={(event) =>
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            identityMode: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="anonymous">Anonymous</option>
+                        <option value="xid_optional">Anonymous but verified</option>
+                        <option value="xid_required">Login required</option>
+                      </select>
+                    </div>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={createForm.inviteOnly}
+                        onChange={(event) =>
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            inviteOnly: event.target.checked,
+                          }))
+                        }
+                      />
+                      Invite-only participation
+                    </label>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={createForm.isOpen}
+                        onChange={(event) =>
+                          setCreateForm((prev) => ({ ...prev, isOpen: event.target.checked }))
+                        }
+                      />
+                      Open for participation
+                    </label>
+                  </div>
+                </details>
+              </div>
+              <div className="form-grid__full">
+                <button className="button" type="button" onClick={handleCreateConversation}>
+                  Create conversation
+                </button>
+              </div>
+            </div>
+          </div>
+          ) : null}
+
+          {setupMode === 'existing' ? (
+            <div className="module-card module-card__wide">
+              <h3>Edit survey settings</h3>
+              <p className="muted">Update the topic, description, and participation rules.</p>
+              {conversations.length === 0 ? (
+                <p className="muted">No conversations yet. Create one first.</p>
+              ) : (
+                <>
+                  <div className="form-grid">
+                    <div className="field form-grid__full">
+                      <label className="label">Conversation</label>
+                      <select
+                        className="select"
+                        value={activeId}
+                        onChange={(event) => setActiveId(event.target.value)}
+                      >
+                        <option value="">Select a conversation</option>
+                        {conversations.map((convo) => (
+                          <option key={convo.id} value={convo.id}>
+                            {convo.topic} {convo.is_open ? '(Open)' : '(Closed)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {updateForm ? (
+                    <div className="form-grid">
+                      <div className="form-grid__full">
+                        <input
+                          className="input"
+                          value={updateForm.topic}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({ ...prev, topic: event.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="form-grid__full">
+                        <textarea
+                          className="textarea"
+                          value={updateForm.description}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="field">
+                        <label className="label">Moderation profile</label>
+                        <select
+                          className="select"
+                          value={updateForm.moderationProfile}
+                          onChange={(event) =>
+                            setUpdateForm((prev) => ({
+                              ...prev,
+                              moderationProfile: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="lazy">Lazy (auto-approve)</option>
+                          <option value="strict">Strict (requires approval)</option>
+                        </select>
+                      </div>
                       <label className="checkbox">
                         <input
                           type="checkbox"
@@ -2112,616 +2501,216 @@ export function DeliberationPage({
                         />
                         Allow comments
                       </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.allowVoting}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          allowVoting: event.target.checked,
-                        }))
-                      }
-                    />
-                    Allow voting
-                  </label>
                       <label className="checkbox">
                         <input
                           type="checkbox"
-                          checked={updateForm.allowViz}
+                          checked={updateForm.allowVoting}
                           onChange={(event) =>
                             setUpdateForm((prev) => ({
                               ...prev,
-                              allowViz: event.target.checked,
+                              allowVoting: event.target.checked,
                             }))
                           }
                         />
-                        Allow visualization
+                        Allow voting
                       </label>
-                      <label className="checkbox">
-                        <input
-                          type="checkbox"
-                      checked={updateForm.profanityFilterEnabled}
-                          onChange={(event) =>
-                            setUpdateForm((prev) => ({
-                              ...prev,
-                          profanityFilterEnabled: event.target.checked,
-                            }))
-                          }
-                        />
-                    Profanity filter (baseline)
-                      </label>
-                  <label className="label">Rate limit (per minute)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    max="120"
-                    value={updateForm.rateLimitPerMinute}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        rateLimitPerMinute: event.target.value,
-                      }))
-                    }
-                  />
-                  <label className="label">Min votes for inclusion</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    max="1000"
-                    value={updateForm.minVotesForInclusion}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        minVotesForInclusion: event.target.value,
-                      }))
-                    }
-                  />
-                  <label className="label">Identity mode</label>
-                  <select
-                    className="select"
-                    value={updateForm.identityMode}
-                    onChange={(event) =>
-                      setUpdateForm((prev) => ({
-                        ...prev,
-                        identityMode: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="anonymous">Anonymous</option>
-                    <option value="xid_optional">Anonymous but verified</option>
-                    <option value="xid_required">Login required</option>
-                  </select>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={updateForm.inviteOnly}
-                      onChange={(event) =>
-                        setUpdateForm((prev) => ({
-                          ...prev,
-                          inviteOnly: event.target.checked,
-                        }))
-                      }
-                    />
-                    Invite-only participation
-                  </label>
-                      <label className="checkbox">
-                        <input
-                          type="checkbox"
-                          checked={updateForm.isOpen}
-                          onChange={(event) =>
-                            setUpdateForm((prev) => ({
-                              ...prev,
-                              isOpen: event.target.checked,
-                            }))
-                          }
-                        />
-                        Open for participation
-                      </label>
-                      <button className="button" type="button" onClick={handleUpdateConversation}>
-                        Save settings
-                      </button>
+                      <div className="form-grid__full">
+                        <details className="dashboard-detail">
+                          <summary>Advanced settings (optional)</summary>
+                          <div className="dashboard-detail__body form-grid">
+                            <label className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={updateForm.allowViz}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    allowViz: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Allow visualization
+                            </label>
+                            <label className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={updateForm.profanityFilterEnabled}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    profanityFilterEnabled: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Profanity filter
+                            </label>
+                            <div className="field">
+                              <label className="label">Rate limit (per minute)</label>
+                              <input
+                                className="input"
+                                type="number"
+                                min="0"
+                                max="120"
+                                value={updateForm.rateLimitPerMinute}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    rateLimitPerMinute: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label className="label">Min votes for inclusion</label>
+                              <input
+                                className="input"
+                                type="number"
+                                min="0"
+                                max="1000"
+                                value={updateForm.minVotesForInclusion}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    minVotesForInclusion: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label className="label">Identity mode</label>
+                              <select
+                                className="select"
+                                value={updateForm.identityMode}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    identityMode: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="anonymous">Anonymous</option>
+                                <option value="xid_optional">Anonymous but verified</option>
+                                <option value="xid_required">Login required</option>
+                              </select>
+                            </div>
+                            <label className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={updateForm.inviteOnly}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    inviteOnly: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Invite-only participation
+                            </label>
+                            <label className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={updateForm.isOpen}
+                                onChange={(event) =>
+                                  setUpdateForm((prev) => ({
+                                    ...prev,
+                                    isOpen: event.target.checked,
+                                  }))
+                                }
+                              />
+                              Open for participation
+                            </label>
+                          </div>
+                        </details>
+                      </div>
+                      <div className="form-grid__full">
+                        <button className="button" type="button" onClick={handleUpdateConversation}>
+                          Save settings
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <p className="muted">Select a conversation in Overview.</p>
+                    <p className="muted">Select a conversation to edit.</p>
                   )}
-                </div>
-
-                <div className="module-card">
-                  <h3>Add starter statements</h3>
-                  <p className="muted">One statement per line. Participants vote on these.</p>
-                  <textarea
-                    className="textarea"
-                    placeholder="One comment per line"
-                    value={seedText}
-                    onChange={(event) => setSeedText(event.target.value)}
-                  />
-                  <button className="button" type="button" onClick={handleSeedComments}>
-                    Add seed comments
-                  </button>
-                {seedStatus ? <p className="muted">{seedStatus}</p> : null}
-                {seedComments.length ? (
-                  <div className="card-divider">
-                    <h4>Seed library</h4>
-                  </div>
-                ) : null}
-                {seedComments.map((comment) => (
-                  <div key={comment.id} className="comment-row">
-                    {seedEditId === comment.id ? (
-                      <div className="stack">
-                        <textarea
-                          className="textarea"
-                          value={seedEditText}
-                          onChange={(event) => setSeedEditText(event.target.value)}
+                  {updateForm ? (
+                    <details className="dashboard-detail">
+                      <summary>Invite-only waves (optional)</summary>
+                      <div className="dashboard-detail__body">
+                        <p className="muted">
+                          Issue invites in waves. When invite-only is enabled, participation requires
+                          a valid code.
+                        </p>
+                        <label className="label">Wave name</label>
+                        <input
+                          className="input"
+                          value={inviteForm.name}
+                          onChange={(event) =>
+                            setInviteForm((prev) => ({ ...prev, name: event.target.value }))
+                          }
                         />
-                        <div className="filter-row">
-                          <button
-                            className="button"
-                            type="button"
-                            onClick={() => handleUpdateSeedComment(comment.id, seedEditText)}
-                          >
-                            Save
-                          </button>
-                          <button
-                            className="button-secondary"
-                            type="button"
-                            onClick={() => {
-                              setSeedEditId('')
-                              setSeedEditText('')
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p>{comment.text}</p>
-                        <div className="table-actions">
-                          <button
-                            className="button-secondary"
-                            type="button"
-                            onClick={() => {
-                              setSeedEditId(comment.id)
-                              setSeedEditText(comment.text)
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="button-secondary"
-                            type="button"
-                            onClick={() => handleToggleSeed(comment.id, false)}
-                          >
-                            Unseed
-                          </button>
-                          <button
-                            className="button-secondary"
-                            type="button"
-                            onClick={() => handleDeleteComment(comment.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-                </div>
-
-                <div className="module-card">
-                  <h3>Ingestion pipeline</h3>
-                  <p className="muted">
-                    Paste a corpus, split into candidate statements, and seed the ones you want.
-                  </p>
-                  <label className="label">Split strategy</label>
-                  <select
-                    className="select"
-                    value={ingestStrategy}
-                    onChange={(event) => setIngestStrategy(event.target.value)}
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="lines">Lines</option>
-                    <option value="sentences">Sentences</option>
-                  </select>
-                  <textarea
-                    className="textarea"
-                    placeholder="Paste text or paste a CSV column here"
-                    value={ingestText}
-                    onChange={(event) => setIngestText(event.target.value)}
-                  />
-                  <button className="button-secondary" type="button" onClick={handleIngestText}>
-                    Generate statements
-                  </button>
-                  {ingestStatus ? <p className="muted">{ingestStatus}</p> : null}
-                  {ingestItems.length ? (
-                    <div className="ingest-list">
-                      {ingestItems.map((item) => (
-                        <label className="checkbox" key={item}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(ingestSelection[item])}
-                            onChange={(event) =>
-                              setIngestSelection((prev) => ({
-                                ...prev,
-                                [item]: event.target.checked,
-                              }))
-                            }
-                          />
-                          {item}
-                        </label>
-                      ))}
-                    </div>
-                  ) : null}
-                  {ingestItems.length ? (
-                    <button className="button" type="button" onClick={handleSeedFromIngest}>
-                      Seed selected statements
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="module-card">
-                  <h3>Invite tree & waves</h3>
-                  <p className="muted">
-                    Issue invites in waves. When invite-only is enabled, participation requires a
-                    valid code.
-                  </p>
-                  <label className="label">Wave name</label>
-                  <input
-                    className="input"
-                    value={inviteForm.name}
-                    onChange={(event) =>
-                      setInviteForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                  <label className="label">Invite count</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min="1"
-                    max="1000"
-                    value={inviteForm.count}
-                    onChange={(event) =>
-                      setInviteForm((prev) => ({ ...prev, count: event.target.value }))
-                    }
-                  />
-                  <label className="label">Parent invite (optional)</label>
-                  <input
-                    className="input"
-                    placeholder="Invite code for referral tree"
-                    value={inviteForm.parentCode}
-                    onChange={(event) =>
-                      setInviteForm((prev) => ({ ...prev, parentCode: event.target.value }))
-                    }
-                  />
-                  <button className="button" type="button" onClick={handleCreateInviteWave}>
-                    Create invite wave
-                  </button>
-                  {inviteError ? <p className="muted">{inviteError}</p> : null}
-                  {inviteWaves.length ? (
-                    <div className="stack">
-                      {inviteWaves.map((wave) => (
-                        <div className="card-divider" key={wave.id}>
-                          <div className="split-row">
-                            <div>
-                              <strong>{wave.name}</strong>
-                              <p className="muted">
-                                {wave.count} invites • {wave.created_at}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="invite-grid">
-                            {wave.invites.map((invite) => (
-                              <div key={invite.id} className="invite-pill">
-                                <span>{invite.code}</span>
-                                <button
-                                  className="button-secondary button-secondary--small"
-                                  type="button"
-                                  onClick={() => handleRevokeInvite(invite.id, true)}
-                                >
-                                  Revoke
-                                </button>
+                        <label className="label">Invite count</label>
+                        <input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={inviteForm.count}
+                          onChange={(event) =>
+                            setInviteForm((prev) => ({ ...prev, count: event.target.value }))
+                          }
+                        />
+                        <label className="label">Parent invite (optional)</label>
+                        <input
+                          className="input"
+                          placeholder="Invite code for referral tree"
+                          value={inviteForm.parentCode}
+                          onChange={(event) =>
+                            setInviteForm((prev) => ({ ...prev, parentCode: event.target.value }))
+                          }
+                        />
+                        <button className="button" type="button" onClick={handleCreateInviteWave}>
+                          Create invite wave
+                        </button>
+                        {inviteError ? <p className="muted">{inviteError}</p> : null}
+                        {inviteWaves.length ? (
+                          <div className="stack">
+                            {inviteWaves.map((wave) => (
+                              <div className="card-divider" key={wave.id}>
+                                <div className="split-row">
+                                  <div>
+                                    <strong>{wave.name}</strong>
+                                    <p className="muted">
+                                      {wave.count} invites • {wave.created_at}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="invite-grid">
+                                  {wave.invites.map((invite) => (
+                                    <div key={invite.id} className="invite-pill">
+                                      <span>{invite.code}</span>
+                                      <button
+                                        className="button-secondary button-secondary--small"
+                                        type="button"
+                                        onClick={() => handleRevokeInvite(invite.id, true)}
+                                      >
+                                        Revoke
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ) : null}
+                      </div>
+                    </details>
                   ) : null}
-                </div>
-              </>
-            ) : (
-              <div className="module-card module-card__wide">
-                <h3>Select an active conversation</h3>
-                <p className="muted">
-                  Go to Overview to choose the conversation you want to configure.
-                </p>
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => applyActiveTab('overview')}
-                >
-                  Go to Overview
-                </button>
-              </div>
-            )}
-          </div>
-
-          <details className="dashboard-detail">
-            <summary>Advanced setup</summary>
-            {activeConvo ? (
-              <div className="dashboard-detail__body">
-                <p className="muted">
-                  Optional tools for importing datasets or generating demo votes.
-                </p>
-                <ul className="compact-list">
-                  <li>
-                    <span>Import votes and comments</span>
-                    <strong>CSV upload</strong>
-                  </li>
-                  <li>
-                    <span>Seed statements quickly</span>
-                    <strong>Download templates</strong>
-                  </li>
-                  <li>
-                    <span>Run analysis after import</span>
-                    <strong>Optional</strong>
-                  </li>
-                </ul>
-
-                <div className="module-grid">
-                  <div className="module-card">
-                    <h3>Generate demo votes</h3>
-                    <p className="muted">Use mock participants to preview analytics.</p>
-                    <input
-                      className="input"
-                      type="number"
-                      value={simulateForm.participants}
-                      onChange={(event) =>
-                        setSimulateForm((prev) => ({
-                          ...prev,
-                          participants: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      className="input"
-                      type="number"
-                      value={simulateForm.votesPerParticipant}
-                      onChange={(event) =>
-                        setSimulateForm((prev) => ({
-                          ...prev,
-                          votesPerParticipant: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      className="input"
-                      type="number"
-                      value={simulateForm.seed}
-                      onChange={(event) =>
-                        setSimulateForm((prev) => ({ ...prev, seed: event.target.value }))
-                      }
-                    />
-                    <button className="button" type="button" onClick={handleSimulateVotes}>
-                      Generate votes
-                    </button>
-                  </div>
-                </div>
-
-                <div className="module-card module-card__wide">
-                  <h3>Import data (CSV)</h3>
-                  <input
-                    className="input"
-                    type="file"
-                    accept=".csv"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      if (file) parseCsvFile(file)
-                    }}
-                  />
-                  <div className="stack">
-                    <p className="muted">
-                      Required columns: <strong>conversation_id</strong>,{' '}
-                      <strong>participant_id</strong>, <strong>comment_id</strong>,{' '}
-                      <strong>comment_text</strong>, <strong>is_seed</strong>,{' '}
-                      <strong>vote</strong>.
-                    </p>
-                    <p className="muted">
-                      Optional columns: comment_created_at, reaction_created_at, participant_cluster.
-                    </p>
-                    <p className="muted">
-                      Seed comments CSV: <strong>comment_text</strong> column required.
-                    </p>
-                  </div>
-                  {csvColumns.length ? (
-                    <div className="form-grid">
-                      <select
-                        className="select"
-                        value={csvMap.conversation_id || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, conversation_id: event.target.value }))
-                        }
-                      >
-                        <option value="">Conversation ID column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.comment_id || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, comment_id: event.target.value }))
-                        }
-                      >
-                        <option value="">Comment ID column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.participant_id || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, participant_id: event.target.value }))
-                        }
-                      >
-                        <option value="">Participant ID column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.participant_cluster || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, participant_cluster: event.target.value }))
-                        }
-                      >
-                        <option value="">Participant cluster column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.comment_text || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, comment_text: event.target.value }))
-                        }
-                      >
-                        <option value="">Comment text column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.is_seed || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, is_seed: event.target.value }))
-                        }
-                      >
-                        <option value="">Is seed column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.comment_created_at || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, comment_created_at: event.target.value }))
-                        }
-                      >
-                        <option value="">Comment created_at column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.vote || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, vote: event.target.value }))
-                        }
-                      >
-                        <option value="">Vote column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select"
-                        value={csvMap.reaction_created_at || ''}
-                        onChange={(event) =>
-                          setCsvMap((prev) => ({ ...prev, reaction_created_at: event.target.value }))
-                        }
-                      >
-                        <option value="">Vote created_at column</option>
-                        {csvColumns.map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
-                  <div className="filter-row">
-                    <select
-                      className="select"
-                      value={seedCsvColumn}
-                      onChange={(event) => setSeedCsvColumn(event.target.value)}
-                    >
-                      <option value="">Seed comments from column</option>
-                      {csvColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="input"
-                      type="number"
-                      min="1"
-                      placeholder="Max rows"
-                      value={seedCsvLimit}
-                      onChange={(event) => setSeedCsvLimit(event.target.value)}
-                    />
-                    <button className="button-secondary" type="button" onClick={handleSeedFromCsv}>
-                      Seed comments
-                    </button>
-                    <button className="button" type="button" onClick={handleImportDataset}>
-                      Import dataset
-                    </button>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={runAnalysisAfterImport}
-                        onChange={(event) => setRunAnalysisAfterImport(event.target.checked)}
-                      />
-                      Run analysis after import
-                    </label>
-                  </div>
-                  {csvStatus ? <p className="muted">{csvStatus}</p> : null}
-                </div>
-              </div>
-            ) : (
-              <div className="dashboard-detail__body">
-                <p className="muted">
-                  Select an active conversation in Overview to use advanced setup tools.
-                </p>
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => applyActiveTab('overview')}
-                >
-                  Go to Overview
-                </button>
-              </div>
-            )}
-          </details>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
+
 
       {activeTab === 'distribute' && (
         <div className="stack">
@@ -2733,21 +2722,14 @@ export function DeliberationPage({
           </details>
 
           {!activeConvo ? (
-            <div className="module-card module-card__wide">
-              <h3>Select an active conversation</h3>
-              <p className="muted">Choose a conversation in Overview to generate sharing links.</p>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => applyActiveTab('overview')}
-              >
-                Go to Overview
-              </button>
-            </div>
+            <ActiveConversationRequired
+              message="Choose a conversation in Overview to generate sharing links."
+              onOpenOverview={() => applyActiveTab('overview')}
+            />
           ) : (
             <>
               <div className="module-card module-card__wide">
-                <h3>Participant link</h3>
+                <h3>Share survey link</h3>
                 <p className="muted">This link opens the swipe experience.</p>
                 {questionnaireLink ? (
                   <div className="stack">
@@ -2782,31 +2764,32 @@ export function DeliberationPage({
                 )}
               </div>
 
-              <details className="dashboard-detail">
-                <summary>Team channels and admin link</summary>
-                <div className="dashboard-detail__body">
+              <div className="module-grid">
+                <div className="module-card">
+                  <h3>Share to Slack</h3>
                   {slackError ? <div className="module-alert">{slackError}</div> : null}
                   {slackStatus ? (
                     <div className="module-alert module-alert--success">{slackStatus}</div>
                   ) : null}
-                  {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
-                  {whatsappStatus ? (
-                    <div className="module-alert module-alert--success">{whatsappStatus}</div>
-                  ) : null}
                   <div className="stack">
-                    <div>
-                      <label className="label">Admin link</label>
-                      <input className="input" value={adminQuestionnaireLink} readOnly />
-                    </div>
-                    <div className="filter-row">
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => handleCopy(adminQuestionnaireLink, 'Admin link')}
-                      >
-                        Copy admin link
-                      </button>
-                    </div>
+                    <label className="label">Slack channel</label>
+                    <select
+                      className="select"
+                      value={slackChannelMode}
+                      onChange={(event) => setSlackChannelMode(event.target.value)}
+                    >
+                      <option value="default">Default channel</option>
+                      <option value="custom">Custom channel</option>
+                    </select>
+                    {slackChannelMode === 'custom' ? (
+                      <input
+                        className="input"
+                        value={slackChannelValue}
+                        onChange={(event) => setSlackChannelValue(event.target.value)}
+                        placeholder="#general"
+                      />
+                    ) : null}
+                    <label className="label">Slack message</label>
                     <textarea
                       className="textarea"
                       value={slackMessage}
@@ -2821,9 +2804,16 @@ export function DeliberationPage({
                     >
                       {sendingSlack ? 'Sending…' : 'Send to Slack'}
                     </button>
-                    <div className="card-divider">
-                      <h4>WhatsApp share</h4>
-                    </div>
+                  </div>
+                </div>
+                <div className="module-card">
+                  <h3>Share to WhatsApp</h3>
+                  {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
+                  {whatsappStatus ? (
+                    <div className="module-alert module-alert--success">{whatsappStatus}</div>
+                  ) : null}
+                  <div className="stack">
+                    <label className="label">WhatsApp group</label>
                     <select
                       className="select"
                       value={whatsappGroupId}
@@ -2836,6 +2826,7 @@ export function DeliberationPage({
                         </option>
                       ))}
                     </select>
+                    <label className="label">WhatsApp message</label>
                     <textarea
                       className="textarea"
                       value={whatsappMessage}
@@ -2852,85 +2843,7 @@ export function DeliberationPage({
                     </button>
                   </div>
                 </div>
-              </details>
-
-              <details className="dashboard-detail">
-                <summary>Embed on your site</summary>
-                <div className="dashboard-detail__body">
-                  <p className="muted">
-                    Use a stable page id for persistent conversations, or embed a single
-                    conversation id.
-                  </p>
-                  <div className="stack">
-                    <input
-                      className="input"
-                      value={polisPageId}
-                      onChange={(event) => setPolisPageId(event.target.value)}
-                      placeholder="PAGE_ID"
-                    />
-                    <input
-                      className="input"
-                      value={polisSiteId}
-                      onChange={(event) => setPolisSiteId(event.target.value)}
-                      placeholder="Polis site id"
-                    />
-                    <pre className="code-block">{pageEmbedCode}</pre>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleCopy(pageEmbedCode, 'Embed code')}
-                    >
-                      Copy embed code
-                    </button>
-                    <div className="card-divider">
-                      <h4>Single conversation embed</h4>
-                    </div>
-                    <input
-                      className="input"
-                      value={polisConversationId}
-                      onChange={(event) => setPolisConversationId(event.target.value)}
-                      placeholder="Polis conversation id"
-                    />
-                    <pre className="code-block">{conversationEmbedCode}</pre>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleCopy(conversationEmbedCode, 'Embed code')}
-                    >
-                      Copy embed code
-                    </button>
-                    <div className="card-divider">
-                      <h4>Survey & Consensus widget</h4>
-                    </div>
-                    <pre className="code-block">{questionnaireEmbedCode}</pre>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => handleCopy(questionnaireEmbedCode, 'Embed code')}
-                    >
-                      Copy widget embed
-                    </button>
-                    <p className="muted">
-                      The iframe sends <code>postMessage</code> events: <code>view</code>,{' '}
-                      <code>vote_cast</code>, <code>comment_submitted</code>,{' '}
-                      <code>completed_all</code>.
-                    </p>
-                  </div>
-                </div>
-              </details>
-
-              <details className="dashboard-detail">
-                <summary>Participant identity (XID)</summary>
-                <div className="dashboard-detail__body">
-                  <p className="muted">
-                    If you have known users, attach an xid to match participants with your data.
-                  </p>
-                  <pre className="code-block">{`<div class="polis" data-page_id="${polisPageId}" data-site_id="${polisSiteId}" data-xid="user-123"></div>`}</pre>
-                  <p className="muted">
-                    Use a stable id like a GUID. Avoid personal emails unless required.
-                  </p>
-                </div>
-              </details>
+              </div>
             </>
           )}
         </div>
@@ -2939,20 +2852,13 @@ export function DeliberationPage({
       {activeTab === 'moderation' && (
         <div className="stack">
           {!activeConvo ? (
-            <div className="module-card module-card__wide">
-              <h3>Select an active conversation</h3>
-              <p className="muted">Choose a conversation in Overview to moderate comments.</p>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => applyActiveTab('overview')}
-              >
-                Go to Overview
-              </button>
-            </div>
+            <ActiveConversationRequired
+              message="Choose a conversation in Overview to moderate comments."
+              onOpenOverview={() => applyActiveTab('overview')}
+            />
           ) : (
             <div className="module-card module-card__wide">
-              <h3>Pending comments</h3>
+              <h3>Review queue</h3>
               {pendingComments.length === 0 ? (
                 <p className="muted">No pending comments.</p>
               ) : (
@@ -3017,19 +2923,26 @@ export function DeliberationPage({
       {activeTab === 'insights' && (
         <div className="stack">
           {!activeConvo ? (
-            <div className="module-card module-card__wide">
-              <h3>Select an active conversation</h3>
-              <p className="muted">Choose a conversation in Overview to run insights.</p>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={() => applyActiveTab('overview')}
-              >
-                Go to Overview
-              </button>
-            </div>
+            <ActiveConversationRequired
+              message="Choose a conversation in Overview to run insights."
+              onOpenOverview={() => applyActiveTab('overview')}
+            />
           ) : (
             <div className="module-card module-card__wide">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h4>Conversation in focus</h4>
+                    <p className="muted">{activeConvo?.topic || 'Untitled conversation'}</p>
+                  </div>
+                  <span className="pill">{activeConvo?.is_open ? 'Open' : 'Closed'}</span>
+                </div>
+                <div className="module-footer">
+                  <span>
+                    <strong>ID:</strong> {activeConvo?.id || activeId}
+                  </span>
+                </div>
+              </div>
               <div className="filter-row">
                 <button className="button" type="button" onClick={handleRunAnalysis}>
                   Run analysis
@@ -3059,1158 +2972,631 @@ export function DeliberationPage({
             {exportStatus ? (
               <div className="module-alert module-alert--success">{exportStatus}</div>
             ) : null}
-            {stats ? (
+            {stats || report ? (
               <div className="stack report-stack">
                 <div className="report-header">
                   <div>
-                    <h4>Monitoring</h4>
-                    <p className="muted">Live participation and activity signals.</p>
-                  </div>
-                  <span className="pill">Live</span>
-                </div>
-                <div className="report-metrics">
-                  <div className="report-metric">
-                    <span>Views</span>
-                    <strong>{stats.views}</strong>
-                    <span className="muted">Survey page visits</span>
-                  </div>
-                  <div className="report-metric">
-                    <span>Voters</span>
-                    <strong>{stats.voters}</strong>
-                    <span className="muted">Participants who voted</span>
-                  </div>
-                  <div className="report-metric">
-                    <span>Commenters</span>
-                    <strong>{stats.commenters}</strong>
-                    <span className="muted">Unique comment authors</span>
-                  </div>
-                  <div className="report-metric">
-                    <span>Votes per voter</span>
-                    <strong>{stats.votes_per_participant}</strong>
-                    <span className="muted">Average depth</span>
-                  </div>
-                </div>
-                {statsSeries ? (
-                  <div className="report-chart-row">
-                    <div className="module-card report-card">
-                      <h4>Votes over time</h4>
-                      <div className="chart-frame chart-frame--short report-chart">
-                        <Line
-                          data={{
-                            labels: statsSeries.votes.labels,
-                            datasets: [
-                              {
-                                label: 'Votes',
-                                data: statsSeries.votes.data,
-                                borderColor: '#2563eb',
-                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
-                                tension: 0.3,
-                              },
-                            ],
-                          }}
-                          options={lineOptions}
-                        />
-                      </div>
-                    </div>
-                    <div className="module-card report-card">
-                      <h4>Comments over time</h4>
-                      <div className="chart-frame chart-frame--short report-chart">
-                        <Line
-                          data={{
-                            labels: statsSeries.comments.labels,
-                            datasets: [
-                              {
-                                label: 'Comments',
-                                data: statsSeries.comments.data,
-                                borderColor: '#16a34a',
-                                backgroundColor: 'rgba(22, 163, 74, 0.2)',
-                                tension: 0.3,
-                              },
-                            ],
-                          }}
-                          options={lineOptions}
-                        />
-                      </div>
-                    </div>
-                    <div className="module-card report-card">
-                      <h4>Views over time</h4>
-                      <div className="chart-frame chart-frame--short report-chart">
-                        <Line
-                          data={{
-                            labels: statsSeries.views.labels,
-                            datasets: [
-                              {
-                                label: 'Views',
-                                data: statsSeries.views.data,
-                                borderColor: '#f97316',
-                                backgroundColor: 'rgba(249, 115, 22, 0.2)',
-                                tension: 0.3,
-                              },
-                            ],
-                          }}
-                          options={lineOptions}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-              {report ? (
-                <div className="stack report-stack">
-                  <div className="report-header">
-                    <div>
-                      <h4>Survey report</h4>
-                      <p className="muted">
-                        A plain-language summary of participation, clusters, and top statements.
-                      </p>
-                    {activeConvo?.min_votes_for_inclusion ? (
+                    <h4>Key insights</h4>
+                    <p className="muted">Live participation signals and report totals.</p>
+                    {report && activeConvo?.min_votes_for_inclusion ? (
                       <p className="muted">
                         Inclusion threshold: {activeConvo.min_votes_for_inclusion} votes per
                         statement.
                       </p>
                     ) : null}
-                    </div>
+                  </div>
+                  {report ? (
                     <span className="pill">Report loaded</span>
-                  </div>
-
-              <div className="report-metrics">
-                <div className="report-metric">
-            <span>Participants</span>
-                  <strong>{report.metrics.total_participants}</strong>
-                  <span className="muted">Active in this survey</span>
-          </div>
-                <div className="report-metric">
-                  <span>Statements</span>
-                  <strong>{report.metrics.total_comments}</strong>
-                  <span className="muted">Included in analysis</span>
-        </div>
-                <div className="report-metric">
-                  <span>Votes</span>
-                  <strong>{report.metrics.total_votes}</strong>
-                  <span className="muted">Total cast</span>
-        </div>
-                <div className="report-metric">
-                  <span>Potential agreement</span>
-                  <strong>{report.potential_agreements?.length || 0}</strong>
-                  <span className="muted">Shared topics</span>
-      </div>
-              </div>
-
-              <div className="report-highlights">
-                {reportSummary ? (
-                  <div className="module-card report-card">
-                    <h4>Auto summary</h4>
-                    <p className="muted">
-                      {reportSummary.participants} participants shared {reportSummary.votes} votes
-                      across {reportSummary.statements} statements.
-                    </p>
-                    <ul className="compact-list">
-                      <li>
-                        <span>Largest opinion group</span>
-                        <strong>{reportSummary.largestCluster || '—'}</strong>
-                      </li>
-                      <li>
-                        <span>Top consensus</span>
-                        <strong>
-                          {reportSummary.topConsensus
-                            ? truncateText(reportSummary.topConsensus, 70)
-                            : '—'}
-                        </strong>
-                      </li>
-                      <li>
-                        <span>Top divisive</span>
-                        <strong>
-                          {reportSummary.topPolarizing
-                            ? truncateText(reportSummary.topPolarizing, 70)
-                            : '—'}
-                        </strong>
-                      </li>
-                      <li>
-                        <span>Potential agreement topics</span>
-                        <strong>{reportSummary.agreementTopics}</strong>
-                      </li>
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="module-card report-card">
-                  <h4>Highlights</h4>
-                  <ul className="compact-list">
-                    <li>
-                      <span>Largest cluster</span>
-                      <strong>
-                        {clusterCards[0]
-                          ? `${clusterCards[0].id} (${formatPercent(clusterCards[0].share)})`
-                          : '—'}
-                      </strong>
-                    </li>
-                    <li>
-                      <span>Top consensus</span>
-                      <strong>
-                        {reportCharts?.consensusTop?.[0]
-                          ? truncateText(reportCharts.consensusTop[0].text, 70)
-                          : '—'}
-                      </strong>
-                    </li>
-                    <li>
-                      <span>Top polarizing</span>
-                      <strong>
-                        {reportCharts?.polarizingTop?.[0]
-                          ? truncateText(reportCharts.polarizingTop[0].text, 70)
-                          : '—'}
-                      </strong>
-                    </li>
-                  </ul>
+                  ) : stats ? (
+                    <span className="pill">Live</span>
+                  ) : null}
                 </div>
-              </div>
-
-              <div className="report-chart-row">
-                <div className="module-card report-card">
-                  <h4>Vote sentiment</h4>
-                  <div className="chart-frame chart-frame--short report-chart">
-                    <Doughnut
-                      data={{
-                        labels: ['Agree', 'Disagree', 'Pass'],
-                        datasets: [
-                          {
-                            data: [
-                              reportCharts?.voteTotals?.agree || 0,
-                              reportCharts?.voteTotals?.disagree || 0,
-                              reportCharts?.voteTotals?.pass || 0,
-                            ],
-                            backgroundColor: ['#22c55e', '#ef4444', '#94a3b8'],
-                            borderWidth: 0,
-                          },
-                        ],
-                      }}
-                      options={doughnutOptions}
-                    />
-                  </div>
-                  <p className="muted">Share of agree, disagree, and pass votes.</p>
+                <div className="report-metrics">
+                  {stats ? (
+                    <>
+                      <div className="report-metric">
+                        <span>Views</span>
+                        <strong>{stats.views}</strong>
+                        <span className="muted">Survey page visits</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Voters</span>
+                        <strong>{stats.voters}</strong>
+                        <span className="muted">Participants who voted</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Commenters</span>
+                        <strong>{stats.commenters}</strong>
+                        <span className="muted">Unique comment authors</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Votes per voter</span>
+                        <strong>{stats.votes_per_participant}</strong>
+                        <span className="muted">Average depth</span>
+                      </div>
+                    </>
+                  ) : null}
+                  {report ? (
+                    <>
+                      <div className="report-metric">
+                        <span>Participants</span>
+                        <strong>{report.metrics.total_participants}</strong>
+                        <span className="muted">Active in this survey</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Statements</span>
+                        <strong>{report.metrics.total_comments}</strong>
+                        <span className="muted">Included in analysis</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Votes</span>
+                        <strong>{report.metrics.total_votes}</strong>
+                        <span className="muted">Total cast</span>
+                      </div>
+                      <div className="report-metric">
+                        <span>Potential agreement</span>
+                        <strong>{report.potential_agreements?.length || 0}</strong>
+                        <span className="muted">Shared topics</span>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
-
-                <div className="module-card report-card">
-                  <h4>Cluster sizes</h4>
-                  <div className="chart-frame chart-frame--short report-chart">
-                    <Bar
-                      data={{
-                        labels: reportCharts?.clusterLabels || [],
-                        datasets: [
-                          {
-                            label: 'Participants',
-                            data: reportCharts?.clusterSizes || [],
-                            backgroundColor: '#60a5fa',
-                            borderRadius: 6,
-                          },
-                        ],
-                      }}
-                      options={verticalBarOptions}
-                    />
-                  </div>
-                  <p className="muted">Distribution of participants by cluster.</p>
-                </div>
-
                 <div className="module-card report-card">
                   <div className="card-header">
                     <div>
-                      <h4>{useMajority ? 'Majority statements' : 'Top consensus statements'}</h4>
+                      <h4>Statement discussion</h4>
                       <p className="muted">
-                        {useMajority
-                          ? 'Statements with strong majority agreement.'
-                          : 'Statements with the strongest consensus.'}
+                        Each statement card has its own comments directly below it.
                       </p>
                     </div>
-                    <div className="filter-row">
-                      <button
-                        className={useMajority ? 'button-secondary' : 'button'}
-                        type="button"
-                        onClick={() => setStatementMode('consensus')}
-                      >
-                        Consensus
-                      </button>
-                      <button
-                        className={useMajority ? 'button' : 'button-secondary'}
-                        type="button"
-                        onClick={() => setStatementMode('majority')}
-                      >
-                        Majority
-                      </button>
-                    </div>
                   </div>
-                  <div className="chart-frame chart-frame--tall report-chart">
-                    <Bar
-                      data={{
-                        labels: statementItems.map((row) => truncateText(row.text, 56)),
-                        datasets: [
-                          {
-                            label: statementScoreLabel,
-                            data: statementItems.map((row) =>
-                              useMajority
-                                ? Number(row?.agreement_ratio || 0)
-                                : Number(row?.consensus_score || 0),
-                            ),
-                            backgroundColor: useMajority ? '#38bdf8' : '#34d399',
-                            borderRadius: 6,
-                          },
-                        ],
-                      }}
-                      options={buildStatementChartOptions(statementItems, statementScoreLabel)}
-                    />
-                  </div>
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Top polarizing statements</h4>
-                  <div className="chart-frame chart-frame--tall report-chart">
-                    <Bar
-                      data={{
-                        labels: (reportCharts?.polarizingTop || []).map((row) =>
-                          truncateText(row.text, 56),
-                        ),
-                        datasets: [
-                          {
-                            label: 'Polarity score',
-                            data: (reportCharts?.polarizingTop || []).map((row) =>
-                              Number(row?.polarity_score || 0),
-                            ),
-                            backgroundColor: '#f97316',
-                            borderRadius: 6,
-                          },
-                        ],
-                      }}
-                      options={buildStatementChartOptions(
-                        reportCharts?.polarizingTop || [],
-                        'Polarity score',
-                      )}
-                    />
-                  </div>
-                  <p className="muted">Statements that split opinion the most.</p>
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Most important statements</h4>
-                  <div className="chart-frame chart-frame--tall report-chart">
-                    <Bar
-                      data={{
-                        labels: (reportCharts?.importantTop || []).map((row) =>
-                          truncateText(row.text, 56),
-                        ),
-                        datasets: [
-                          {
-                            label: 'Importance votes',
-                            data: (reportCharts?.importantTop || []).map((row) =>
-                              Number(row?.important_count || 0),
-                            ),
-                            backgroundColor: '#a855f7',
-                            borderRadius: 6,
-                          },
-                        ],
-                      }}
-                      options={buildStatementChartOptions(
-                        reportCharts?.importantTop || [],
-                        'Importance votes',
-                      )}
-                    />
-                  </div>
-                  <p className="muted">Statements marked as most important.</p>
-                </div>
-              </div>
-
-              {topicMap ? (
-                <details className="dashboard-detail">
-                  <summary>Advanced visualizations</summary>
-                  <div className="dashboard-detail__body">
-                    <div className="report-visual-grid">
-                      <div className="module-card report-card polis-card">
-                        <div className="polis-card__header">
-                          <h4>Advanced statistical analysis</h4>
-                          <span className="pill">Topic map</span>
-                        </div>
-                        <p className="muted">Layer 0 interactive visualization</p>
-                        <div className="polis-map">
-                          <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
-                            <rect
-                              x="8"
-                              y="8"
-                              width="344"
-                              height="244"
-                              rx="14"
-                              fill="#ffffff"
-                              stroke="#E2E8F0"
-                            />
-                            {topicMap.points.map((point, idx) => (
-                              <circle
-                                key={`${point.clusterId}-${idx}`}
-                                cx={point.x * 360}
-                                cy={point.y * 260}
-                                r="2.4"
-                                fill={clusterColor(
-                                  point.clusterId,
-                                  topicMap.colorById?.[point.clusterId] || idx + 1,
-                                )}
-                                opacity="0.75"
-                              />
-                            ))}
-                            {topicMap.clusters.map((cluster) => (
-                              <text
-                                key={`label-${cluster.id}`}
-                                x={cluster.centerX * 360}
-                                y={cluster.centerY * 260}
-                                textAnchor="middle"
-                                fontSize="10"
-                                fill="#334155"
-                              >
-                                {cluster.label}
-                              </text>
-                            ))}
-                          </svg>
-                        </div>
-                        <p className="muted">
-                          Go beyond opinion groups with topic maps and cluster overlays.
-                        </p>
+                  <div className="stack">
+                    {activeConvo?.is_open === false ? (
+                      <div className="module-alert">
+                        Conversation is closed. Reopen it in Overview to add statement comments or reactions.
                       </div>
-                      {statementLandscape ? (
-                        <div className="module-card report-card polis-card">
-                          <div className="polis-card__header">
-                            <h4>Statement landscape</h4>
-                            <span className="pill">Consensus vs divisive</span>
-                          </div>
-                          <div className="polis-map">
-                            <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
-                              <rect
-                                x="8"
-                                y="8"
-                                width="344"
-                                height="244"
-                                rx="14"
-                                fill="#ffffff"
-                                stroke="#E2E8F0"
-                              />
-                              <line x1="36" y1="220" x2="320" y2="220" stroke="#E2E8F0" />
-                              <line x1="36" y1="220" x2="36" y2="28" stroke="#E2E8F0" />
-                              {statementLandscape.points.map((point) => {
-                                const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
-                                const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
-                                const size = 3 + Math.min(5, point.participation / 12)
-                                const color =
-                                  point.polarity > point.consensus
-                                    ? '#f97316'
-                                    : point.consensus > 0.35
-                                      ? '#22c55e'
-                                      : '#94a3b8'
-                                return (
-                                  <circle
-                                    key={point.id}
-                                    cx={x}
-                                    cy={y}
-                                    r={size}
-                                    fill={color}
-                                    opacity="0.75"
-                                  />
-                                )
-                              })}
-                              {statementLandscape.labels.map((point) => {
-                                const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
-                                const y = 220 - Math.min(1, Math.max(0, point.consensus)) * 192
-                                return (
-                                  <text
-                                    key={`label-${point.id}`}
-                                    x={x}
-                                    y={y - 6}
-                                    textAnchor="middle"
-                                    fontSize="9"
-                                    fill="#0f172a"
-                                  >
-                                    {truncateText(point.text, 28)}
-                                  </text>
-                                )
-                              })}
-                              <text x="36" y="236" fontSize="9" fill="#64748b">
-                                Divisive →
-                              </text>
-                              <text x="10" y="32" fontSize="9" fill="#64748b">
-                                ↑ Consensus
-                              </text>
-                            </svg>
-                          </div>
-                          <p className="muted">
-                            See which statements build consensus versus spark polarization.
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="report-visual-grid">
-                      <div className="module-card report-card polis-card">
-                        <div className="polis-card__header">
-                          <h4>AI-generated reports</h4>
-                          <span className="pill">Summary</span>
-                        </div>
-                        <div className="polis-report-preview">
-                          <div className="polis-report-preview__header">
-                            <span className="polis-dot" />
-                            <span className="polis-dot" />
-                            <span className="polis-dot" />
-                            <span className="polis-report-preview__title">Report</span>
-                          </div>
-                          <div className="polis-report-preview__body">
-                            <div className="polis-report-preview__block" />
-                            <div className="polis-report-preview__block polis-report-preview__block--tall" />
-                            <div className="polis-report-preview__block" />
-                          </div>
-                        </div>
-                        <p className="muted">
-                          Let Survey and Consensus do the heavy lifting: generate summaries,
-                          consensus statements, and topic insights.
-                        </p>
-                        <ul className="polis-feature-list">
-                          <li>Conversation summaries</li>
-                          <li>Automated topic reporting</li>
-                          <li>Consensus statement identification</li>
-                          <li>Divisive comment analysis</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </details>
-              ) : null}
-
-              <details className="dashboard-detail">
-                <summary>How to read the visualization</summary>
-                <div className="dashboard-detail__body">
-                  <ul className="compact-list">
-                    <li>
-                      <span>Clusters</span>
-                      <strong>Groups of participants who vote similarly.</strong>
-                    </li>
-                    <li>
-                      <span>Consensus</span>
-                      <strong>Statements with broad agreement across clusters.</strong>
-                    </li>
-                    <li>
-                      <span>Polarizing</span>
-                      <strong>Statements where clusters disagree the most.</strong>
-                    </li>
-                    <li>
-                      <span>Early-stage caution</span>
-                      <strong>Low vote counts can make clusters unstable.</strong>
-                    </li>
-                  </ul>
-                </div>
-              </details>
-
-              {clusterCards.length || report.potential_agreements?.length || vennData ? (
-                <details className="dashboard-detail">
-                  <summary>Deep dive insights</summary>
-                  <div className="dashboard-detail__body">
-                    {clusterCards.length ? (
-                      <>
-                        <h4>Cluster profiles</h4>
-                        <div className="cluster-grid">
-                          {clusterCards.map((card) => (
-                            <div className="cluster-card" key={card.id}>
-                              <div className="cluster-card__header">
-                                <strong>{card.id}</strong>
-                                <span className="pill">{formatPercent(card.share)}</span>
+                    ) : null}
+                    {discussionStatementOptions.length === 0 ? (
+                      <p className="muted">No statements available yet. Run analysis first.</p>
+                    ) : (
+                      discussionStatementOptions.map((statement) => {
+                        const discussion = getDiscussionStateForStatement(statement.id)
+                        return (
+                          <article className="module-card" key={`statement-discussion-${statement.id}`}>
+                            <div className="card-header">
+                              <div>
+                                <h4>{truncateText(statement.text, 120)}</h4>
+                                <p className="muted">Statement ID: {statement.id}</p>
                               </div>
-                              <p className="muted">{card.summary}</p>
-                              <div className="cluster-tags">
-                                {card.agreeTopics.map((topic) => (
-                                  <span
-                                    className="cluster-tag cluster-tag--agree"
-                                    key={`${card.id}-a-${topic}`}
-                                  >
-                                    {truncateText(topic, 36)}
-                                  </span>
-                                ))}
-                                {card.disagreeTopics.map((topic) => (
-                                  <span
-                                    className="cluster-tag cluster-tag--disagree"
-                                    key={`${card.id}-d-${topic}`}
-                                  >
-                                    {truncateText(topic, 36)}
-                                  </span>
-                                ))}
+                              <div className="filter-row">
+                                <span className="pill">{discussion.comments.length} comments</span>
+                                <button
+                                  className="button-secondary"
+                                  type="button"
+                                  onClick={() => loadStatementDiscussionComments(statement.id)}
+                                  disabled={discussion.loading}
+                                >
+                                  {discussion.loading ? 'Refreshing…' : 'Refresh'}
+                                </button>
                               </div>
-                              {card.statements?.length ? (
-                                <div className="cluster-carousel">
-                                  <span className="label">Representative statements</span>
-                                  <div className="cluster-carousel__card">
-                                    <span
-                                      className={`pill ${
-                                        card.statements[
-                                          clusterStatementIndex[card.id] || 0
-                                        ]?.sentiment === 'agree'
-                                          ? 'pill--success'
-                                          : 'pill--warning'
-                                      }`}
-                                    >
-                                      {card.statements[
-                                        clusterStatementIndex[card.id] || 0
-                                      ]?.sentiment === 'agree'
-                                        ? 'Agree'
-                                        : 'Disagree'}
+                            </div>
+                            {discussion.error ? <div className="module-alert">{discussion.error}</div> : null}
+                            <div className="module-footer">
+                              <span>
+                                <strong>Participation:</strong> {statement.participation || 0}
+                              </span>
+                              <span>
+                                <strong>Agreement:</strong>{' '}
+                                {Math.round(Number(statement.agreement_ratio || 0) * 100)}%
+                              </span>
+                              <span>
+                                <strong>Consensus:</strong>{' '}
+                                {Math.round(Number(statement.consensus_score || 0) * 100)}
+                              </span>
+                              <span>
+                                <strong>Polarity:</strong>{' '}
+                                {Math.round(Number(statement.polarity_score || 0) * 100)}
+                              </span>
+                            </div>
+                            {discussion.comments.length === 0 ? (
+                              <p className="muted">No comments yet for this statement.</p>
+                            ) : (
+                              discussion.comments.map((item) => (
+                                <div className="module-card" key={item.id}>
+                                  <p>{item.text}</p>
+                                  <div className="module-footer">
+                                    <span className="muted">{item.created_at || 'Live'}</span>
+                                    <span>
+                                      <strong>Like</strong> {item.like_count || 0}
                                     </span>
-                                    <p>
-                                      {truncateText(
-                                        card.statements[
-                                          clusterStatementIndex[card.id] || 0
-                                        ]?.text,
-                                        140,
-                                      )}
-                                    </p>
+                                    <span>
+                                      <strong>Agree</strong> {item.agree_count || 0}
+                                    </span>
+                                    <span>
+                                      <strong>Disagree</strong> {item.disagree_count || 0}
+                                    </span>
+                                    <span>
+                                      <strong>Insightful</strong> {item.insightful_count || 0}
+                                    </span>
+                                    {item.my_reaction ? (
+                                      <span>
+                                        <strong>Your reaction:</strong> {item.my_reaction}
+                                      </span>
+                                    ) : null}
                                   </div>
                                   <div className="filter-row">
                                     <button
-                                      className="button-secondary button-secondary--small"
+                                      className="button-secondary"
                                       type="button"
                                       onClick={() =>
-                                        setClusterStatementIndex((prev) => {
-                                          const total = card.statements.length
-                                          const current = prev[card.id] || 0
-                                          return {
-                                            ...prev,
-                                            [card.id]: (current - 1 + total) % total,
-                                          }
-                                        })
+                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'like')
                                       }
+                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
                                     >
-                                      Prev
+                                      👍 Like
                                     </button>
                                     <button
-                                      className="button-secondary button-secondary--small"
+                                      className="button-secondary"
                                       type="button"
                                       onClick={() =>
-                                        setClusterStatementIndex((prev) => {
-                                          const total = card.statements.length
-                                          const current = prev[card.id] || 0
-                                          return {
-                                            ...prev,
-                                            [card.id]: (current + 1) % total,
-                                          }
-                                        })
+                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'agree')
                                       }
+                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
                                     >
-                                      Next
+                                      ✅ Agree
+                                    </button>
+                                    <button
+                                      className="button-secondary"
+                                      type="button"
+                                      onClick={() =>
+                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'disagree')
+                                      }
+                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
+                                    >
+                                      ❌ Disagree
+                                    </button>
+                                    <button
+                                      className="button-secondary"
+                                      type="button"
+                                      onClick={() =>
+                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'insightful')
+                                      }
+                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
+                                    >
+                                      💡 Insightful
                                     </button>
                                   </div>
                                 </div>
-                              ) : null}
+                              ))
+                            )}
+                            <div className="stack">
+                              <textarea
+                                className="textarea"
+                                value={discussion.draft}
+                                onChange={(event) =>
+                                  setDiscussionDraftByStatement((prev) => ({
+                                    ...prev,
+                                    [statement.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Write a comment on this statement"
+                                disabled={activeConvo?.is_open === false}
+                              />
+                              <button
+                                className="button"
+                                type="button"
+                                onClick={() => handleCreateStatementDiscussionComment(statement.id)}
+                                disabled={discussion.saving || activeConvo?.is_open === false}
+                              >
+                                {discussion.saving ? 'Posting…' : 'Post comment'}
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
+                          </article>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
-                    {report.potential_agreements?.length ? (
-                      <div className="module-card report-card">
-                        <h4>Potential agreement topics</h4>
-                        <div className="cluster-tags">
-                          {report.potential_agreements.map((topic) => (
-                            <span className="cluster-tag" key={topic}>
-                              {truncateText(sanitizeStatement(topic), 50)}
-                            </span>
-                          ))}
+              {(statsSeries || reportCharts || topicMap || vennData) ? (
+                <details className="dashboard-detail">
+                  <summary>Charts & visualizations</summary>
+                  <div className="dashboard-detail__body">
+                    {statsSeries ? (
+                      <div className="report-chart-row">
+                          <div className="module-card report-card">
+                            <h4>Votes over time</h4>
+                            <div className="chart-frame chart-frame--short report-chart">
+                              <Line
+                                data={{
+                                  labels: statsSeries.votes.labels,
+                                  datasets: [
+                                    {
+                                      label: 'Votes',
+                                      data: statsSeries.votes.data,
+                                      borderColor: '#2563eb',
+                                      backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                                      tension: 0.3,
+                                    },
+                                  ],
+                                }}
+                                options={lineOptions}
+                              />
+                            </div>
+                          </div>
+                          <div className="module-card report-card">
+                            <h4>Comments over time</h4>
+                            <div className="chart-frame chart-frame--short report-chart">
+                              <Line
+                                data={{
+                                  labels: statsSeries.comments.labels,
+                                  datasets: [
+                                    {
+                                      label: 'Comments',
+                                      data: statsSeries.comments.data,
+                                      borderColor: '#16a34a',
+                                      backgroundColor: 'rgba(22, 163, 74, 0.2)',
+                                      tension: 0.3,
+                                    },
+                                  ],
+                                }}
+                                options={lineOptions}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                    ) : null}
+                    {reportCharts ? (
+                      <div className="report-chart-row">
+                    <div className="module-card report-card">
+                      <h4>Vote sentiment</h4>
+                      <div className="chart-frame chart-frame--short report-chart">
+                        <Doughnut
+                          data={{
+                            labels: ['Agree', 'Disagree', 'Pass'],
+                            datasets: [
+                              {
+                                data: [
+                                  reportCharts?.voteTotals?.agree || 0,
+                                  reportCharts?.voteTotals?.disagree || 0,
+                                  reportCharts?.voteTotals?.pass || 0,
+                                ],
+                                backgroundColor: ['#22c55e', '#ef4444', '#94a3b8'],
+                                borderWidth: 0,
+                              },
+                            ],
+                          }}
+                          options={doughnutOptions}
+                        />
+                      </div>
+                      <p className="muted">Share of agree, disagree, and pass votes.</p>
+                    </div>
+
+                    <div className="module-card report-card">
+                      <h4>Cluster sizes</h4>
+                      <div className="chart-frame chart-frame--short report-chart">
+                        <Bar
+                          data={{
+                            labels: reportCharts?.clusterLabels || [],
+                            datasets: [
+                              {
+                                label: 'Participants',
+                                data: reportCharts?.clusterSizes || [],
+                                backgroundColor: '#60a5fa',
+                                borderRadius: 6,
+                              },
+                            ],
+                          }}
+                          options={verticalBarOptions}
+                        />
+                      </div>
+                      <p className="muted">Distribution of participants by cluster.</p>
+                    </div>
+
+                    <div className="module-card report-card">
+                      <div className="card-header">
+                        <div>
+                          <h4>{useMajority ? 'Majority statements' : 'Top consensus statements'}</h4>
+                          <p className="muted">
+                            {useMajority
+                              ? 'Statements with strong majority agreement.'
+                              : 'Statements with the strongest consensus.'}
+                          </p>
+                        </div>
+                        <div className="filter-row">
+                          <button
+                            className={useMajority ? 'button-secondary' : 'button'}
+                            type="button"
+                            onClick={() => setStatementMode('consensus')}
+                          >
+                            Consensus
+                          </button>
+                          <button
+                            className={useMajority ? 'button' : 'button-secondary'}
+                            type="button"
+                            onClick={() => setStatementMode('majority')}
+                          >
+                            Majority
+                          </button>
+                        </div>
+                      </div>
+                      <div className="chart-frame chart-frame--tall report-chart">
+                        <Bar
+                          data={{
+                            labels: statementItems.map((row) => truncateText(row.text, 56)),
+                            datasets: [
+                              {
+                                label: statementScoreLabel,
+                                data: statementItems.map((row) =>
+                                  useMajority
+                                    ? Number(row?.agreement_ratio || 0)
+                                    : Number(row?.consensus_score || 0),
+                                ),
+                                backgroundColor: useMajority ? '#38bdf8' : '#34d399',
+                                borderRadius: 6,
+                              },
+                            ],
+                          }}
+                          options={buildStatementChartOptions(statementItems, statementScoreLabel)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="module-card report-card">
+                      <h4>Top polarizing statements</h4>
+                      <div className="chart-frame chart-frame--tall report-chart">
+                        <Bar
+                          data={{
+                            labels: (reportCharts?.polarizingTop || []).map((row) =>
+                              truncateText(row.text, 56),
+                            ),
+                            datasets: [
+                              {
+                                label: 'Polarity score',
+                                data: (reportCharts?.polarizingTop || []).map((row) =>
+                                  Number(row?.polarity_score || 0),
+                                ),
+                                backgroundColor: '#f97316',
+                                borderRadius: 6,
+                              },
+                            ],
+                          }}
+                          options={buildStatementChartOptions(
+                            reportCharts?.polarizingTop || [],
+                            'Polarity score',
+                          )}
+                        />
+                      </div>
+                      <p className="muted">Statements that split opinion the most.</p>
+                    </div>
+
+                      </div>
+                    ) : null}
+                    {topicMap ? (
+                      <div className="stack">
+                        <div className="report-visual-grid">
+                          <div className="module-card report-card polis-card">
+                            <div className="polis-card__header">
+                              <h4>Topic map</h4>
+                              <span className="pill">Topic map</span>
+                            </div>
+                            <p className="muted">Layer 0 interactive visualization</p>
+                            <div className="polis-map">
+                              <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
+                                <rect
+                                  x="8"
+                                  y="8"
+                                  width="344"
+                                  height="244"
+                                  rx="14"
+                                  fill="#ffffff"
+                                  stroke="#E2E8F0"
+                                />
+                                {topicMap.points.map((point, idx) => (
+                                  <circle
+                                    key={`${point.clusterId}-${idx}`}
+                                    cx={point.x * 360}
+                                    cy={point.y * 260}
+                                    r="2.4"
+                                    fill={clusterColor(
+                                      point.clusterId,
+                                      topicMap.colorById?.[point.clusterId] || idx + 1,
+                                    )}
+                                    opacity="0.75"
+                                  />
+                                ))}
+                                {topicMap.clusters.map((cluster) => (
+                                  <text
+                                    key={`label-${cluster.id}`}
+                                    x={cluster.centerX * 360}
+                                    y={cluster.centerY * 260}
+                                    textAnchor="middle"
+                                    fontSize="10"
+                                    fill="#334155"
+                                  >
+                                    {cluster.label}
+                                  </text>
+                                ))}
+                              </svg>
+                            </div>
+                            <p className="muted">
+                              Go beyond opinion groups with topic maps and cluster overlays.
+                            </p>
+                          </div>
+                          {statementLandscape ? (
+                            <div className="module-card report-card polis-card">
+                              <div className="polis-card__header">
+                                <h4>Statement landscape</h4>
+                                <span className="pill">Consensus vs divisive</span>
+                              </div>
+                              <div className="polis-map">
+                                <svg viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg">
+                                  <rect
+                                    x="8"
+                                    y="8"
+                                    width="344"
+                                    height="244"
+                                    rx="14"
+                                    fill="#ffffff"
+                                    stroke="#E2E8F0"
+                                  />
+                                  <line x1="36" y1="220" x2="320" y2="220" stroke="#E2E8F0" />
+                                  <line x1="36" y1="220" x2="36" y2="28" stroke="#E2E8F0" />
+                                  {statementLandscape.points.map((point) => {
+                                    const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                                    const y =
+                                      220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                                    const size = 3 + Math.min(5, point.participation / 12)
+                                    const color =
+                                      point.polarity > point.consensus
+                                        ? '#f97316'
+                                        : point.consensus > 0.35
+                                          ? '#22c55e'
+                                          : '#94a3b8'
+                                    return (
+                                      <circle
+                                        key={point.id}
+                                        cx={x}
+                                        cy={y}
+                                        r={size}
+                                        fill={color}
+                                        opacity="0.75"
+                                      />
+                                    )
+                                  })}
+                                  {statementLandscape.labels.map((point) => {
+                                    const x = 36 + Math.min(1, Math.max(0, point.polarity)) * 284
+                                    const y =
+                                      220 - Math.min(1, Math.max(0, point.consensus)) * 192
+                                    return (
+                                      <text
+                                        key={`label-${point.id}`}
+                                        x={x}
+                                        y={y - 6}
+                                        textAnchor="middle"
+                                        fontSize="9"
+                                        fill="#0f172a"
+                                      >
+                                        {truncateText(point.text, 28)}
+                                      </text>
+                                    )
+                                  })}
+                                  <text x="36" y="236" fontSize="9" fill="#64748b">
+                                    Divisive →
+                                  </text>
+                                  <text x="10" y="32" fontSize="9" fill="#64748b">
+                                    ↑ Consensus
+                                  </text>
+                                </svg>
+                              </div>
+                              <p className="muted">
+                                See which statements build consensus versus spark polarization.
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ) : null}
-
                     {vennData ? (
                       <div className="report-visual-grid">
                         <div className="module-card report-card">
                           <h4>Shared agreement topics</h4>
-                          {vennSelected.length < 2 ? (
-                            <p className="muted">
-                              Need at least two clusters with agreement topics.
-                            </p>
-                          ) : !vennData.hasOverlap ? (
-                            <p className="muted">No overlapping agreement topics yet.</p>
-                          ) : (
-                            <div className="venn-wrap">
-                              <svg viewBox="0 0 360 260" className="venn-diagram">
-                                <rect x="0" y="0" width="360" height="260" rx="16" fill="#f8fafc" />
-                                {vennSelected.length >= 2 ? (
-                                  <>
+                            {vennSelected.length < 2 ? (
+                              <p className="muted">
+                                Need at least two clusters with agreement topics.
+                              </p>
+                            ) : !vennData.hasOverlap ? (
+                              <p className="muted">No overlapping agreement topics yet.</p>
+                            ) : (
+                              <div className="venn-wrap">
+                                <svg viewBox="0 0 360 260" className="venn-diagram">
+                                  <rect x="0" y="0" width="360" height="260" rx="16" fill="#f8fafc" />
+                                  {vennSelected.length >= 2 ? (
+                                    <>
+                                      <circle
+                                        cx={vennSelected.length >= 3 ? 140 : 150}
+                                        cy={vennSelected.length >= 3 ? 120 : 130}
+                                        r="90"
+                                        fill={clusterColor(vennSelected[0]?.cluster_id, 1)}
+                                        opacity="0.28"
+                                      />
+                                      <circle
+                                        cx={vennSelected.length >= 3 ? 220 : 210}
+                                        cy={vennSelected.length >= 3 ? 120 : 130}
+                                        r="90"
+                                        fill={clusterColor(vennSelected[1]?.cluster_id, 2)}
+                                        opacity="0.28"
+                                      />
+                                    </>
+                                  ) : null}
+                                  {vennSelected.length >= 3 ? (
                                     <circle
-                                      cx={vennSelected.length >= 3 ? 140 : 150}
-                                      cy={vennSelected.length >= 3 ? 120 : 130}
+                                      cx="180"
+                                      cy="200"
                                       r="90"
-                                      fill={clusterColor(vennSelected[0]?.cluster_id, 1)}
+                                      fill={clusterColor(vennSelected[2]?.cluster_id, 3)}
                                       opacity="0.28"
                                     />
-                                    <circle
-                                      cx={vennSelected.length >= 3 ? 220 : 210}
-                                      cy={vennSelected.length >= 3 ? 120 : 130}
-                                      r="90"
-                                      fill={clusterColor(vennSelected[1]?.cluster_id, 2)}
-                                      opacity="0.28"
-                                    />
-                                  </>
-                                ) : null}
-                                {vennSelected.length >= 3 ? (
-                                  <circle
-                                    cx="180"
-                                    cy="200"
-                                    r="90"
-                                    fill={clusterColor(vennSelected[2]?.cluster_id, 3)}
-                                    opacity="0.28"
-                                  />
-                                ) : null}
+                                  ) : null}
 
-                                {vennSelected.length >= 2 ? (
-                                  <>
-                                    <text x="110" y="130" textAnchor="middle" className="venn-count">
-                                      {vennAOnly.size}
-                                    </text>
-                                    <text x="250" y="130" textAnchor="middle" className="venn-count">
-                                      {vennBOnly.size}
-                                    </text>
-                                    <text x="180" y="130" textAnchor="middle" className="venn-count">
-                                      {vennSelected.length >= 3 ? vennABOnly.size : vennAB.size}
-                                    </text>
-                                  </>
-                                ) : null}
-                                {vennSelected.length >= 3 ? (
-                                  <>
-                                    <text x="180" y="220" textAnchor="middle" className="venn-count">
-                                      {vennCOnly.size}
-                                    </text>
-                                    <text x="145" y="175" textAnchor="middle" className="venn-count">
-                                      {vennACOnly.size}
-                                    </text>
-                                    <text x="215" y="175" textAnchor="middle" className="venn-count">
-                                      {vennBCOnly.size}
-                                    </text>
-                                    <text x="180" y="155" textAnchor="middle" className="venn-count">
-                                      {vennABC.size}
-                                    </text>
-                                  </>
-                                ) : null}
-                              </svg>
-                              <div className="venn-legend">
-                                {vennSelected.map((item, idx) => (
-                                  <span className="venn-legend__item" key={item.cluster_id || idx}>
-                                    <span
-                                      className="venn-legend__dot"
-                                      style={{ background: clusterColor(item.cluster_id, idx + 1) }}
-                                    />
-                                    {item.cluster_id} ({item.size || 0})
-                                  </span>
-                                ))}
+                                  {vennSelected.length >= 2 ? (
+                                    <>
+                                      <text x="110" y="130" textAnchor="middle" className="venn-count">
+                                        {vennAOnly.size}
+                                      </text>
+                                      <text x="250" y="130" textAnchor="middle" className="venn-count">
+                                        {vennBOnly.size}
+                                      </text>
+                                      <text x="180" y="130" textAnchor="middle" className="venn-count">
+                                        {vennSelected.length >= 3 ? vennABOnly.size : vennAB.size}
+                                      </text>
+                                    </>
+                                  ) : null}
+                                  {vennSelected.length >= 3 ? (
+                                    <>
+                                      <text x="180" y="220" textAnchor="middle" className="venn-count">
+                                        {vennCOnly.size}
+                                      </text>
+                                      <text x="145" y="175" textAnchor="middle" className="venn-count">
+                                        {vennACOnly.size}
+                                      </text>
+                                      <text x="215" y="175" textAnchor="middle" className="venn-count">
+                                        {vennBCOnly.size}
+                                      </text>
+                                      <text x="180" y="155" textAnchor="middle" className="venn-count">
+                                        {vennABC.size}
+                                      </text>
+                                    </>
+                                  ) : null}
+                                </svg>
+                                <div className="venn-legend">
+                                  {vennSelected.map((item, idx) => (
+                                    <span className="venn-legend__item" key={item.cluster_id || idx}>
+                                      <span
+                                        className="venn-legend__dot"
+                                        style={{
+                                          background: clusterColor(item.cluster_id, idx + 1),
+                                        }}
+                                      />
+                                      {item.cluster_id} ({item.size || 0})
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
                       </div>
                     ) : null}
                   </div>
                 </details>
               ) : null}
-
-              <details className="dashboard-detail">
-                <summary>Consensus statements ({report.metrics.consensus.length})</summary>
-                <div className="dashboard-detail__body">
-                  <div className="table">
-                    <div className="table-row table-head">
-                      <span>Text</span>
-                      <span>Consensus</span>
-                      <span>Participation</span>
-                      <span>Status</span>
-                    </div>
-                    {report.metrics.consensus.map((row) => (
-                      <div
-                        className="table-row"
-                        key={row.id}
-                        title={buildStatementTooltipRows(row).join('\n')}
-                      >
-                        <span>{sanitizeStatement(row.text)}</span>
-                        <span>{row.consensus_score?.toFixed?.(2) ?? row.consensus_score}</span>
-                        <span>{row.participation}</span>
-                        <span>{row.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </details>
-
-              <details className="dashboard-detail">
-                <summary>Polarizing statements ({report.metrics.polarizing.length})</summary>
-                <div className="dashboard-detail__body">
-                  <div className="table">
-                    <div className="table-row table-head">
-                      <span>Text</span>
-                      <span>Polarity</span>
-                      <span>Participation</span>
-                      <span>Status</span>
-                    </div>
-                    {report.metrics.polarizing.map((row) => (
-                      <div
-                        className="table-row"
-                        key={row.id}
-                        title={buildStatementTooltipRows(row).join('\n')}
-                      >
-                        <span>{sanitizeStatement(row.text)}</span>
-                        <span>{row.polarity_score?.toFixed?.(2) ?? row.polarity_score}</span>
-                        <span>{row.participation}</span>
-                        <span>{row.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </details>
-
-                </div>
-              ) : (
-                <p className="muted">Run analysis or load a report to view insights.</p>
-              )}
-              <div className="report-admin-grid">
-                <div className="module-card report-card">
-                  <h4>Async exports</h4>
-                  <p className="muted">
-                    Kick off an export job for large surveys. Download when ready.
-                  </p>
-                  <div className="filter-row">
-                    <button className="button" type="button" onClick={handleCreateExportJob}>
-                      Start export job
-                    </button>
-                    {exportJob?.status === 'completed' ? (
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={handleDownloadExportJob}
-                      >
-                        Download export
-                      </button>
-                    ) : null}
-                  </div>
-                  {exportJob ? (
-                    <p className="muted">
-                      Job {exportJob.id}: {exportJob.status}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Theme manager</h4>
-                  <p className="muted">Tag statements into themes and review summaries.</p>
-                  <label className="label">Theme name</label>
-                  <input
-                    className="input"
-                    value={themeForm.name}
-                    onChange={(event) =>
-                      setThemeForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                  <label className="label">Description</label>
-                  <input
-                    className="input"
-                    value={themeForm.description}
-                    onChange={(event) =>
-                      setThemeForm((prev) => ({ ...prev, description: event.target.value }))
-                    }
-                  />
-                  <button className="button" type="button" onClick={handleCreateTheme}>
-                    Create theme
-                  </button>
-                  {themeError ? <p className="muted">{themeError}</p> : null}
-                  <div className="stack">
-                    {themes.map((theme) => (
-                      <div key={theme.id} className="split-row">
-                        <div>
-                          <strong>{theme.name}</strong>
-                          <p className="muted">
-                            {theme.comment_count} statements • {theme.description || '—'}
-                          </p>
-                        </div>
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleDeleteTheme(theme.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  {approvedComments.length && themes.length ? (
-                    <div className="card-divider">
-                      <h5>Assign themes to a statement</h5>
-                      <select
-                        className="select"
-                        value={themeAssign.commentId}
-                        onChange={(event) =>
-                          setThemeAssign((prev) => ({
-                            ...prev,
-                            commentId: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">Select statement</option>
-                        {approvedComments.map((comment) => (
-                          <option key={comment.id} value={comment.id}>
-                            {truncateText(comment.text, 60)}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="theme-checkboxes">
-                        {themes.map((theme) => (
-                          <label className="checkbox" key={theme.id}>
-                            <input
-                              type="checkbox"
-                              checked={themeAssign.themeIds.includes(theme.id)}
-                              onChange={(event) =>
-                                setThemeAssign((prev) => ({
-                                  ...prev,
-                                  themeIds: event.target.checked
-                                    ? [...prev.themeIds, theme.id]
-                                    : prev.themeIds.filter((id) => id !== theme.id),
-                                }))
-                              }
-                            />
-                            {theme.name}
-                          </label>
-                        ))}
-                      </div>
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={handleAssignThemes}
-                      >
-                        Save theme tags
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Theme summaries</h4>
-                  {themeSummary?.themes?.length ? (
-                    <div className="stack">
-                      {themeSummary.themes.map((theme) => (
-                        <div key={theme.id} className="card-divider">
-                          <strong>{theme.name}</strong>
-                          <p className="muted">{theme.comment_count} statements</p>
-                          <ul className="compact-list">
-                            <li>
-                              <span>Top consensus</span>
-                              <strong>
-                                {theme.top_consensus?.[0]?.text
-                                  ? truncateText(theme.top_consensus[0].text, 70)
-                                  : '—'}
-                              </strong>
-                            </li>
-                            <li>
-                              <span>Top important</span>
-                              <strong>
-                                {theme.top_important?.[0]?.text
-                                  ? truncateText(theme.top_important[0].text, 70)
-                                  : '—'}
-                              </strong>
-                            </li>
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">Add themes to see summaries.</p>
-                  )}
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Public report builder</h4>
-                  <label className="label">Report name</label>
-                  <input
-                    className="input"
-                    value={reportBuilder.name}
-                    onChange={(event) =>
-                      setReportBuilder((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                  <div className="theme-checkboxes">
-                    {themes.map((theme) => (
-                      <label className="checkbox" key={`report-${theme.id}`}>
-                        <input
-                          type="checkbox"
-                          checked={reportBuilder.themeIds.includes(theme.id)}
-                          onChange={(event) =>
-                            setReportBuilder((prev) => ({
-                              ...prev,
-                              themeIds: event.target.checked
-                                ? [...prev.themeIds, theme.id]
-                                : prev.themeIds.filter((id) => id !== theme.id),
-                            }))
-                          }
-                        />
-                        {theme.name}
-                      </label>
-                    ))}
-                  </div>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={reportBuilder.includeUnassigned}
-                      onChange={(event) =>
-                        setReportBuilder((prev) => ({
-                          ...prev,
-                          includeUnassigned: event.target.checked,
-                        }))
-                      }
-                    />
-                    Include unassigned statements
-                  </label>
-                  <button className="button" type="button" onClick={handleCreateReport}>
-                    Generate public report
-                  </button>
-                  {reportLinks.length ? (
-                    <div className="stack">
-                      {reportLinks.map((item) => (
-                        <div className="split-row" key={item.link}>
-                          <span>{item.name}</span>
-                          <button
-                            className="button-secondary button-secondary--small"
-                            type="button"
-                            onClick={() => handleCopy(item.link, 'Report link')}
-                          >
-                            Copy link
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Decision support tools</h4>
-                  <p className="muted">
-                    Use simple tradeoff and multi-criteria calculators to inform decisions.
-                  </p>
-                  <div className="card-divider">
-                    <h5>Budget tradeoff</h5>
-                    <label className="label">Total budget</label>
-                    <input
-                      className="input"
-                      type="number"
-                      value={budgetTotal}
-                      onChange={(event) => setBudgetTotal(event.target.value)}
-                    />
-                    <label className="label">Items (name,cost,impact)</label>
-                    <textarea
-                      className="textarea"
-                      value={budgetInput}
-                      onChange={(event) => setBudgetInput(event.target.value)}
-                    />
-                    <p className="muted">
-                      Selected: {budgetPlan.selected.length} • Remaining:{' '}
-                      {budgetPlan.remaining}
-                    </p>
-                  </div>
-                  <div className="card-divider">
-                    <h5>Multi-criteria scoring</h5>
-                    <label className="label">Criteria (name,weight)</label>
-                    <textarea
-                      className="textarea"
-                      value={criteriaInput}
-                      onChange={(event) => setCriteriaInput(event.target.value)}
-                    />
-                    <label className="label">Options (name,score,score,...)</label>
-                    <textarea
-                      className="textarea"
-                      value={optionsInput}
-                      onChange={(event) => setOptionsInput(event.target.value)}
-                    />
-                    <div className="stack">
-                      {decisionScores.options.map((option) => (
-                        <div key={option.name} className="split-row">
-                          <span>{option.name}</span>
-                          <strong>{option.weighted.toFixed(2)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="module-card report-card">
-                  <h4>Moderation audit log</h4>
-                  {moderationLogError ? <p className="muted">{moderationLogError}</p> : null}
-                  {moderationLog.length ? (
-                    <div className="stack">
-                      {moderationLog.slice(0, 10).map((entry) => (
-                        <div key={entry.id} className="split-row">
-                          <div>
-                            <strong>{entry.action}</strong>
-                            <p className="muted">
-                              {entry.status} • {entry.comment_id || '—'}
-                            </p>
-                          </div>
-                          <span className="muted">{entry.created_at}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">No moderation actions yet.</p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>
       )}
 
-      {activeTab === 'participate' && (
-        <div className="module-card module-card__wide">
-          <h3>Participate</h3>
-          {questionnaireLink ? (
-            <div className="module-alert module-alert--success">
-              Use the swipe experience:{' '}
-              <a href={questionnaireLink} target="_blank" rel="noreferrer">
-                Open participant view
-              </a>
-            </div>
-          ) : null}
-          {approvedComments.length === 0 ? (
-            <p className="muted">No approved comments yet.</p>
-          ) : (
-            approvedComments.map((comment) => (
-              <div key={comment.id} className="comment-row">
-                <p>{comment.text}</p>
-                <div className="table-actions">
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleVote(comment.id, 1)}
-                  >
-                    Agree
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleVote(comment.id, -1)}
-                  >
-                    Disagree
-                  </button>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleVote(comment.id, 0)}
-                  >
-                    Pass
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-          <div className="card-divider">
-            <h4>Submit comment</h4>
-          </div>
-          <textarea
-            className="textarea"
-            value={commentText}
-            onChange={(event) => setCommentText(event.target.value)}
-          />
-          <button className="button" type="button" onClick={handleSubmitComment}>
-            Submit comment
-          </button>
-        </div>
-      )}
 
       <div className="module-footer">
         <span>Backend scope:</span>

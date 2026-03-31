@@ -11,7 +11,8 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 const DEFAULT_URL = 'https://www.hubspot.com/sitemap.xml'
 const DEFAULT_LOCALE = 'en'
 const DEFAULT_LANGUAGE_PRESET = 'en'
-const VIEWS = ['overview', 'pages', 'segments', 'clusters', 'messaging', 'metrics']
+const VIEWS = ['overview', 'segments', 'evidence', 'messaging']
+const EVIDENCE_VIEWS = ['pages', 'clusters']
 const SUGGESTED_LINKS = [
   'https://freedomsquare.ge/wp-content/uploads/2025/02/FS_PROGRAM.pdf',
   'https://freedomsquare.ge',
@@ -28,6 +29,7 @@ export function AudienceDiscoveryPage({
   activeViewOverride,
   onViewChange,
   showTabs = true,
+  showIntro = true,
 }) {
   const translate = t || ((key) => key)
   const [targetUrl, setTargetUrl] = useState(DEFAULT_URL)
@@ -57,16 +59,47 @@ export function AudienceDiscoveryPage({
   const [status, setStatus] = useState(null)
   const getViewFromUrl = () => {
     const search = new URLSearchParams(window.location.search)
-    return search.get('audience_view')
+    const view = search.get('audience_view')
+    if (view === 'pages' || view === 'clusters') return 'evidence'
+    if (view === 'metrics') return 'overview'
+    return view
+  }
+  const getEvidenceViewFromUrl = () => {
+    const search = new URLSearchParams(window.location.search)
+    const view = search.get('audience_view')
+    const evidenceView = search.get('audience_evidence')
+    if (view === 'clusters' || evidenceView === 'clusters') return 'clusters'
+    if (view === 'pages' || evidenceView === 'pages') return 'pages'
+    return 'pages'
   }
   const [activeView, setActiveView] = useState(() => {
     const fromUrl = getViewFromUrl()
     return VIEWS.includes(fromUrl) ? fromUrl : 'overview'
   })
+  const [evidenceView, setEvidenceView] = useState(() => {
+    const fromUrl = getEvidenceViewFromUrl()
+    return EVIDENCE_VIEWS.includes(fromUrl) ? fromUrl : 'pages'
+  })
   const applyActiveView = (nextView) => {
     if (!nextView) return
+    if (nextView === 'metrics') {
+      setActiveView('overview')
+      if (onViewChange) onViewChange('overview')
+      return
+    }
+    if (nextView === 'pages' || nextView === 'clusters') {
+      setEvidenceView(nextView)
+      setActiveView('evidence')
+      if (onViewChange) onViewChange('evidence')
+      return
+    }
     setActiveView(nextView)
     if (onViewChange) onViewChange(nextView)
+  }
+  const applyEvidenceView = (nextView) => {
+    const targetView = EVIDENCE_VIEWS.includes(nextView) ? nextView : 'pages'
+    setEvidenceView(targetView)
+    applyActiveView('evidence')
   }
   const [exportStatus, setExportStatus] = useState('')
   const [runNotice, setRunNotice] = useState('')
@@ -83,12 +116,28 @@ export function AudienceDiscoveryPage({
   useEffect(() => {
     if (!VIEWS.includes(activeView)) return
     const url = new URL(window.location.href)
-    url.searchParams.set('audience_view', activeView)
+    if (activeView === 'evidence') {
+      url.searchParams.set('audience_view', 'evidence')
+      url.searchParams.set('audience_evidence', evidenceView)
+    } else {
+      url.searchParams.set('audience_view', activeView)
+      url.searchParams.delete('audience_evidence')
+    }
     window.history.replaceState({}, '', url)
-  }, [activeView])
+  }, [activeView, evidenceView])
 
   useEffect(() => {
-    if (activeViewOverride && activeViewOverride !== activeView) {
+    if (!activeViewOverride || activeViewOverride === activeView) return
+    if (activeViewOverride === 'metrics') {
+      setActiveView('overview')
+      return
+    }
+    if (activeViewOverride === 'pages' || activeViewOverride === 'clusters') {
+      setEvidenceView(activeViewOverride)
+      setActiveView('evidence')
+      return
+    }
+    if (VIEWS.includes(activeViewOverride)) {
       setActiveView(activeViewOverride)
     }
   }, [activeViewOverride, activeView])
@@ -590,17 +639,20 @@ export function AudienceDiscoveryPage({
 
   useEffect(() => {
     if (!analysis?.runId) return
-    if (activeView === 'pages' && !pages.length) {
+    if (activeView === 'overview' && !analysis?.summary) {
+      fetchViewData('metrics', analysis.runId)
+    }
+    if (activeView === 'overview' && !segments.length) {
+      fetchViewData('segments', analysis.runId)
+    }
+    if (activeView === 'evidence' && evidenceView === 'pages' && !pages.length) {
       fetchViewData('pages', analysis.runId)
+    }
+    if (activeView === 'evidence' && evidenceView === 'clusters' && !clusters.length) {
+      fetchViewData('clusters', analysis.runId)
     }
     if (activeView === 'segments' && !segments.length) {
       fetchViewData('segments', analysis.runId)
-    }
-    if (activeView === 'clusters' && !clusters.length) {
-      fetchViewData('clusters', analysis.runId)
-    }
-    if (activeView === 'metrics' && !analysis?.summary) {
-      fetchViewData('metrics', analysis.runId)
     }
     if (activeView === 'messaging' && !messaging.length) {
       fetchViewData('messaging', analysis.runId)
@@ -609,6 +661,7 @@ export function AudienceDiscoveryPage({
     activeView,
     analysis?.runId,
     analysis?.summary,
+    evidenceView,
     pages.length,
     segments.length,
     clusters.length,
@@ -617,6 +670,20 @@ export function AudienceDiscoveryPage({
 
   return (
     <section className="module">
+      {showIntro ? (
+        <div className="module-card module-card__wide section-intro">
+          <div className="card-header">
+            <div>
+              <h3>{translate('module.audienceDiscovery')}</h3>
+              <p className="muted">{translate('module.audienceDiscovery.desc')}</p>
+            </div>
+            <div className="pill">Audience</div>
+          </div>
+        </div>
+      ) : null}
+
+      <StatusMessage tone="error" message={error} />
+
       <CivicStatGrid
         title="Discovery pulse"
         description="Quality, coverage, and scale of the latest audience run."
@@ -637,11 +704,9 @@ export function AudienceDiscoveryPage({
         <div className="subtabs">
           {[
             { id: 'overview', label: 'Overview' },
-            { id: 'pages', label: 'Pages' },
             { id: 'segments', label: 'Segments' },
-            { id: 'clusters', label: 'Clusters' },
+            { id: 'evidence', label: 'Evidence' },
             { id: 'messaging', label: 'Messaging' },
-            { id: 'metrics', label: 'Metrics' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -654,7 +719,6 @@ export function AudienceDiscoveryPage({
           ))}
         </div>
       ) : null}
-      <StatusMessage tone="error" message={error} />
 
       {activeView === 'overview' && (
         <div className="dashboard-layout">
@@ -1057,6 +1121,55 @@ export function AudienceDiscoveryPage({
               </div>
             ) : null}
 
+            {analysis?.summary ? (
+              <>
+                <div className="module-card module-card__wide">
+                  <div className="card-header">
+                    <div>
+                      <h3>Run quality</h3>
+                      <p className="muted">Coverage, explainability, and evidence health.</p>
+                    </div>
+                  </div>
+                  <div className="report-metrics">
+                    {metrics.map((metric) => (
+                      <div className="report-metric" key={metric.label}>
+                        <span>{metric.label}</span>
+                        <strong>{metric.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {metricsChart ? (
+                  <div className="module-card module-card__wide chart-frame chart-frame--short">
+                    <Bar data={metricsChart.data} options={metricsChart.options} />
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {analysis?.runId && !analysis?.summary ? (
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>Run quality pending</h3>
+                    <p className="muted">
+                      Quality metrics appear once the run completes. Refresh to check again.
+                    </p>
+                  </div>
+                </div>
+                <div className="filter-row">
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => refreshRunData(analysis.runId)}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? 'Refreshing...' : 'Refresh results'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {analysis?.runId && !segments.length ? (
               <div className="module-card module-card__wide">
                 <div className="card-header">
@@ -1128,19 +1241,6 @@ export function AudienceDiscoveryPage({
           </div>
 
           <aside className="dashboard-sidebar">
-            <div className="sidebar-card sidebar-card--accent">
-              <h4>Predictive Intelligence lens</h4>
-              <p className="muted">
-                Build future-ready audience profiles by combining evidence, clustering, and
-                messaging intent.
-              </p>
-              <ul className="polis-feature-list">
-                <li>Stakeholder priorities and policy narratives.</li>
-                <li>Signals that map to beliefs, needs, and objections.</li>
-                <li>Messaging angles tailored to each segment.</li>
-              </ul>
-            </div>
-
             {analysis?.runId ? (
               <div className="sidebar-card">
                 <h4>Run snapshot</h4>
@@ -1194,21 +1294,21 @@ export function AudienceDiscoveryPage({
                     <button
                       className="button-secondary"
                       type="button"
-                    onClick={() => applyActiveView('segments')}
+                      onClick={() => applyActiveView('segments')}
                     >
                       Review segments
                     </button>
                     <button
                       className="button-secondary"
                       type="button"
-                    onClick={() => applyActiveView('metrics')}
+                      onClick={() => applyEvidenceView('pages')}
                     >
-                      View metrics
+                      Browse evidence
                     </button>
                     <button
                       className="button-secondary"
                       type="button"
-                    onClick={() => applyActiveView('messaging')}
+                      onClick={() => applyActiveView('messaging')}
                     >
                       Messaging
                     </button>
@@ -1284,92 +1384,43 @@ export function AudienceDiscoveryPage({
         </div>
       )}
 
-      {activeView === 'metrics' && metrics.length ? (
-        <div className="stack">
-          <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
-                <h3>Run summary</h3>
-                <p className="muted">Key metrics for the current run.</p>
-              </div>
-            </div>
-            <div className="filter-row">
-              <div>
-                <span className="label">Run ID</span>
-                <p>{analysis?.runId || '—'}</p>
-              </div>
-              <div>
-                <span className="label">Created at</span>
-                <p>{analysis?.createdAt || '—'}</p>
-              </div>
-            </div>
-          </div>
-          <div className="report-metrics">
-            {metrics.map((metric) => (
-              <div className="report-metric" key={metric.label}>
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-              </div>
-            ))}
-          </div>
-          {metricsChart ? (
-            <div className="module-card module-card__wide chart-frame chart-frame--short">
-              <Bar data={metricsChart.data} options={metricsChart.options} />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeView === 'metrics' && !metrics.length
-        ? renderEmptyState(
-            analysis?.runId ? 'Metrics not ready' : 'No analysis yet',
-            analysis?.runId
-              ? 'Metrics will appear once the run completes. You can also refresh results.'
-              : 'Run analysis in Overview to see metrics.',
-            'metrics',
-          )
-        : null}
-
-      {activeView === 'metrics' && analysis?.runId ? (
+      {activeView === 'evidence' ? (
         <div className="module-card module-card__wide">
           <div className="card-header">
             <div>
-              <h3>Exports</h3>
-              <p className="muted">Download JSON or CSV for this run.</p>
+              <h3>Evidence library</h3>
+              <p className="muted">Switch between source pages and clustered themes.</p>
             </div>
           </div>
           <div className="filter-row">
             <button
-              className="button-secondary"
+              className={evidenceView === 'pages' ? 'button' : 'button-secondary'}
               type="button"
-              onClick={() =>
-                (window.open(
-                  `${API_BASE}/audience-discovery/analysis/${analysis.runId}/export/json`,
-                  '_blank',
-                ),
-                setExportStatus('Opened JSON export in a new tab.'))
-              }
+              onClick={() => setEvidenceView('pages')}
             >
-              Export JSON
+              Pages
             </button>
             <button
-              className="button-secondary"
+              className={evidenceView === 'clusters' ? 'button' : 'button-secondary'}
               type="button"
-              onClick={() =>
-                (window.open(
-                  `${API_BASE}/audience-discovery/analysis/${analysis.runId}/export/csv`,
-                  '_blank',
-                ),
-                setExportStatus('Opened CSV export in a new tab.'))
-              }
+              onClick={() => setEvidenceView('clusters')}
             >
-              Export CSV
+              Themes
             </button>
+            {analysis?.runId ? (
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => refreshRunData(analysis.runId)}
+                disabled={refreshing}
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh results'}
+              </button>
+            ) : null}
           </div>
-          {exportStatus ? <p className="muted">{exportStatus}</p> : null}
         </div>
       ) : null}
-      {activeView === 'pages' && pages.length ? (
+      {activeView === 'evidence' && evidenceView === 'pages' && pages.length ? (
         <div className="module-card module-card__wide">
           <div className="card-header">
             <div>
@@ -1443,7 +1494,7 @@ export function AudienceDiscoveryPage({
         </div>
       ) : null}
 
-      {activeView === 'pages' && !pages.length
+      {activeView === 'evidence' && evidenceView === 'pages' && !pages.length
         ? renderEmptyState(
             analysis?.runId ? 'No pages detected' : 'No analysis yet',
             analysis?.runId
@@ -1453,7 +1504,7 @@ export function AudienceDiscoveryPage({
           )
         : null}
 
-      {activeView === 'clusters' && clusters.length ? (
+      {activeView === 'evidence' && evidenceView === 'clusters' && clusters.length ? (
         <div className="module-card module-card__wide">
           <div className="card-header">
             <div>
@@ -1526,7 +1577,7 @@ export function AudienceDiscoveryPage({
         </div>
       ) : null}
 
-      {activeView === 'clusters' && !clusters.length
+      {activeView === 'evidence' && evidenceView === 'clusters' && !clusters.length
         ? renderEmptyState(
             analysis?.runId ? 'No clusters yet' : 'No analysis yet',
             analysis?.runId

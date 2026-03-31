@@ -1,0 +1,8 @@
+window.__FS_RUNTIME_CONFIG__ = {
+  API_BASE_URL: 'http://localhost:8010',
+  AUTH_ENABLED: false,
+  AUTH_MODE: 'bearer',
+  AUTH_TOKEN: '',
+  AUTH_API_KEY: '',
+  AUTH_HEADER_NAME: 'X-FS-API-Key',
+}
