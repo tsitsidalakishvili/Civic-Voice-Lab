@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { IconChartDots, IconSpeakerphone, IconTarget, IconUsers } from '@tabler/icons-react'
+import { useTextTranslations } from '../../hooks/useTextTranslations'
 import { getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, LanguageSelect, StatusMessage } from '../../ui'
 
@@ -104,6 +105,41 @@ export function PublicCampaignPage({
     })
     return sorted
   }, [campaigns, filters])
+  const campaignTexts = useMemo(() => {
+    const values = []
+    const push = (...items) => {
+      items.forEach((item) => {
+        if (typeof item === 'string' && item.trim()) values.push(item)
+      })
+    }
+    publicCampaigns.forEach((item) => {
+      push(item?.name, item?.status, item?.problemTitle, item?.objective, item?.campaignCategory)
+    })
+    push(
+      campaign?.name,
+      campaign?.status,
+      campaign?.problemTitle,
+      campaign?.objective,
+      campaign?.problemDescription,
+    )
+    auditEvents.forEach((item) => push(item?.summary))
+    milestones.forEach((item) => push(item?.title, item?.status))
+    approvedExpenses.forEach((item) => push(item?.category))
+    proofArtifacts.forEach((item) => push(item?.artifactType, item?.caption))
+    partners.forEach((item) => push(item?.name, item?.role))
+    return Array.from(new Set(values))
+  }, [
+    approvedExpenses,
+    auditEvents,
+    campaign,
+    milestones,
+    partners,
+    proofArtifacts,
+    publicCampaigns,
+  ])
+  const { translateText: translateCampaignText } = useTextTranslations(campaignTexts, language, {
+    enabled: Boolean(campaignTexts.length && language),
+  })
 
   useEffect(() => {
     if (isDetail) return
@@ -320,7 +356,7 @@ export function PublicCampaignPage({
                 .filter(Boolean)
                 .map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    {translateCampaignText(status)}
                   </option>
                 ))}
             </select>
@@ -340,7 +376,7 @@ export function PublicCampaignPage({
                 .filter(Boolean)
                 .map((category) => (
                   <option key={category} value={category}>
-                    {category}
+                    {translateCampaignText(category)}
                   </option>
                 ))}
             </select>
@@ -385,11 +421,11 @@ export function PublicCampaignPage({
                 rel="noreferrer"
               >
                 <div className="module-tile__header">
-                  <h3>{item.name}</h3>
-                  <span className="pill">{item.status || 'Funding'}</span>
+                  <h3>{translateCampaignText(item.name)}</h3>
+                  <span className="pill">{translateCampaignText(item.status) || 'Funding'}</span>
                 </div>
                 <p className="muted">
-                  {item.problemTitle || item.objective || 'Local problem solving'}
+                  {translateCampaignText(item.problemTitle || item.objective) || 'Local problem solving'}
                 </p>
                 <div className="questionnaire-progress">
                   <div className="questionnaire-progress__track">
@@ -522,12 +558,12 @@ export function PublicCampaignPage({
         <div className="stack">
           <header className="public-campaign__header">
             <div>
-              <h1>{campaign.name}</h1>
+              <h1>{translateCampaignText(campaign.name)}</h1>
               <p className="muted">
-                {campaign.problemTitle || campaign.objective}
+                {translateCampaignText(campaign.problemTitle || campaign.objective)}
               </p>
             </div>
-            <span className="pill">{campaign.status || 'Funding'}</span>
+            <span className="pill">{translateCampaignText(campaign.status) || 'Funding'}</span>
           </header>
 
           <div className="module-card">
@@ -595,8 +631,7 @@ export function PublicCampaignPage({
                 <div className="module-card">
                   <h3>{t?.('campaign.public.problem') || 'Problem statement'}</h3>
                   <p className="muted">
-                    {campaign.problemDescription ||
-                      campaign.objective ||
+                    {translateCampaignText(campaign.problemDescription || campaign.objective) ||
                       'Campaign problem statement not yet defined.'}
                   </p>
                   <div className="metric-row">
@@ -1009,7 +1044,7 @@ export function PublicCampaignPage({
                   <ul className="compact-list">
                     {auditEvents.slice(0, 8).map((event, idx) => (
                       <li key={`${event.eventType}-${idx}`}>
-                        {event.summary}
+                        {translateCampaignText(event.summary)}
                       </li>
                     ))}
                   </ul>
@@ -1027,7 +1062,8 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {milestones.map((milestone) => (
                         <li key={milestone.milestoneId}>
-                          {milestone.title} — {milestone.status}
+                          {translateCampaignText(milestone.title)} —{' '}
+                          {translateCampaignText(milestone.status)}
                         </li>
                       ))}
                     </ul>
@@ -1043,7 +1079,7 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {approvedExpenses.map((expense) => (
                         <li key={expense.expenseId}>
-                          {expense.category} — {expense.amount} {expense.currency}
+                          {translateCampaignText(expense.category)} — {expense.amount} {expense.currency}
                         </li>
                       ))}
                     </ul>
@@ -1062,7 +1098,8 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {proofArtifacts.map((artifact) => (
                         <li key={artifact.proofId}>
-                          {artifact.artifactType} — {artifact.caption || artifact.url}
+                          {translateCampaignText(artifact.artifactType)} —{' '}
+                          {translateCampaignText(artifact.caption) || artifact.url}
                         </li>
                       ))}
                     </ul>
@@ -1078,7 +1115,8 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {partners.map((partner) => (
                         <li key={partner.partnerId}>
-                          {partner.name} — {partner.role || 'Partner'}
+                          {translateCampaignText(partner.name)} —{' '}
+                          {translateCampaignText(partner.role) || 'Partner'}
                         </li>
                       ))}
                     </ul>

@@ -1,7 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTextTranslations } from '../hooks/useTextTranslations'
 import { getJson, requestJson } from '../services/api'
 import { LanguageSelect, StatusMessage } from '../ui'
 import { parseLocalArray } from '../utils/deck'
+
+const QUESTIONNAIRE_DISCUSSION_COPY = {
+  en: {
+    identityRequired: 'Login is required to vote in this conversation.',
+    importantFlag: 'This is important to me',
+    commentsTitle: 'Comments on this statement',
+    commentsLoading: 'Loading comments...',
+    commentsEmpty: 'No comments yet for this statement.',
+    yourReaction: 'Your reaction',
+    addCommentPlaceholder: 'Add your comment on this statement',
+    refreshComments: 'Refresh comments',
+    refreshingComments: 'Refreshing...',
+    postComment: 'Post statement comment',
+    postingComment: 'Posting...',
+  },
+  ka: {
+    identityRequired: 'ამ საუბარში ხმის მისაცემად ავტორიზაცია საჭიროა.',
+    importantFlag: 'ეს ჩემთვის მნიშვნელოვანია',
+    commentsTitle: 'კომენტარები ამ განცხადებაზე',
+    commentsLoading: 'კომენტარები იტვირთება...',
+    commentsEmpty: 'ამ განცხადებაზე კომენტარები ჯერ არ არის.',
+    yourReaction: 'თქვენი რეაქცია',
+    addCommentPlaceholder: 'დაამატეთ თქვენი კომენტარი ამ განცხადებაზე',
+    refreshComments: 'კომენტარების განახლება',
+    refreshingComments: 'ახლდება...',
+    postComment: 'კომენტარის გამოქვეყნება',
+    postingComment: 'იგზავნება...',
+  },
+}
 
 export function DeliberationQuestionnaire({
   conversationId,
@@ -11,6 +41,7 @@ export function DeliberationQuestionnaire({
   onLanguageChange,
 }) {
   const translate = t || ((key, vars) => key)
+  const discussionCopy = QUESTIONNAIRE_DISCUSSION_COPY[language] || QUESTIONNAIRE_DISCUSSION_COPY.en
   const [error, setError] = useState('')
   const [comments, setComments] = useState([])
   const [statementDiscussionById, setStatementDiscussionById] = useState({})
@@ -219,6 +250,15 @@ export function DeliberationQuestionnaire({
   const currentStatementDiscussionError = currentCommentId
     ? statementDiscussionErrorById[currentCommentId] || ''
     : ''
+  const discussionTexts = useMemo(
+    () => [currentText, ...currentStatementDiscussion.map((item) => item?.text || '')],
+    [currentStatementDiscussion, currentText],
+  )
+  const { translateText: translateDiscussionText } = useTextTranslations(
+    discussionTexts,
+    language,
+    { enabled: Boolean(discussionTexts.length && language) },
+  )
   const identityRequired = conversation?.identity_mode === 'xid_required' && !xid
   const votingDisabled =
     (conversation && conversation.allow_voting === false) || identityRequired
@@ -640,7 +680,9 @@ export function DeliberationQuestionnaire({
                       total: totalComments,
                     })}
                   </div>
-                  <div className="questionnaire-card__text">{currentText}</div>
+                  <div className="questionnaire-card__text">
+                    {translateDiscussionText(currentText)}
+                  </div>
                   <div className="questionnaire-card__footer">
                     {translate('questionnaire.footer')}
                   </div>
@@ -675,7 +717,7 @@ export function DeliberationQuestionnaire({
             </div>
           </div>
           {identityRequired ? (
-            <p className="muted">Login is required to vote in this conversation.</p>
+            <p className="muted">{discussionCopy.identityRequired}</p>
           ) : null}
           <div className="questionnaire-importance">
             <label className="checkbox">
@@ -685,7 +727,7 @@ export function DeliberationQuestionnaire({
                 onChange={(event) => setImportantFlag(event.target.checked)}
                 disabled={!currentCommentId || pendingVote || votingDisabled}
               />
-              This is important to me
+              {discussionCopy.importantFlag}
             </label>
           </div>
           <div className="questionnaire-controls">
@@ -717,20 +759,20 @@ export function DeliberationQuestionnaire({
           {currentCommentId ? (
             <div className="questionnaire-add">
               <div className="card-divider">
-                <h4>Comments on this statement</h4>
+                <h4>{discussionCopy.commentsTitle}</h4>
               </div>
               {currentStatementDiscussionError ? (
                 <div className="module-alert">{currentStatementDiscussionError}</div>
               ) : null}
               {currentStatementDiscussionLoading ? (
-                <p className="muted">Loading comments...</p>
+                <p className="muted">{discussionCopy.commentsLoading}</p>
               ) : currentStatementDiscussion.length === 0 ? (
-                <p className="muted">No comments yet for this statement.</p>
+                <p className="muted">{discussionCopy.commentsEmpty}</p>
               ) : (
                 <div className="stack">
                   {currentStatementDiscussion.map((item) => (
                     <div className="module-card" key={item.id}>
-                      <p>{item.text}</p>
+                      <p>{translateDiscussionText(item.text)}</p>
                       <div className="module-footer">
                         <span className="muted">{item.created_at || 'Live'}</span>
                         <span>
@@ -741,7 +783,8 @@ export function DeliberationQuestionnaire({
                         </span>
                         {item.my_reaction ? (
                           <span>
-                            <strong>Your reaction</strong> {item.my_reaction === 'disagree' ? 'dislike' : item.my_reaction}
+                            <strong>{discussionCopy.yourReaction}</strong>{' '}
+                            {item.my_reaction === 'disagree' ? 'dislike' : item.my_reaction}
                           </span>
                         ) : null}
                       </div>
@@ -776,7 +819,7 @@ export function DeliberationQuestionnaire({
                     [currentCommentId]: event.target.value,
                   }))
                 }
-                placeholder="Add your comment on this statement"
+                placeholder={discussionCopy.addCommentPlaceholder}
               />
               <div className="filter-row">
                 <button
@@ -785,7 +828,9 @@ export function DeliberationQuestionnaire({
                   onClick={() => loadStatementDiscussion(currentCommentId)}
                   disabled={currentStatementDiscussionLoading}
                 >
-                  {currentStatementDiscussionLoading ? 'Refreshing...' : 'Refresh comments'}
+                  {currentStatementDiscussionLoading
+                    ? discussionCopy.refreshingComments
+                    : discussionCopy.refreshComments}
                 </button>
                 <button
                   className="button"
@@ -793,7 +838,9 @@ export function DeliberationQuestionnaire({
                   onClick={handleSubmitStatementDiscussion}
                   disabled={currentStatementDiscussionSaving}
                 >
-                  {currentStatementDiscussionSaving ? 'Posting...' : 'Post statement comment'}
+                  {currentStatementDiscussionSaving
+                    ? discussionCopy.postingComment
+                    : discussionCopy.postComment}
                 </button>
               </div>
             </div>

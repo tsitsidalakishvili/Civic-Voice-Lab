@@ -11,3 +11,6 @@ PyPDF2
 python-multipart
 reportlab
 beautifulsoup4
+torch
+transformers
+sentencepiece

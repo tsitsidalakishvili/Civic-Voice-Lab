@@ -164,22 +164,32 @@ export function CRMPage({
   const [selectedEmail, setSelectedEmail] = useState('')
   const [supporterInviteStats, setSupporterInviteStats] = useState(null)
   const [supporterInvites, setSupporterInvites] = useState([])
+  const [pendingSupporterSignups, setPendingSupporterSignups] = useState([])
   const [supporterInviteLoading, setSupporterInviteLoading] = useState(false)
   const [supporterInviteError, setSupporterInviteError] = useState('')
   const [supporterInviteStatus, setSupporterInviteStatus] = useState('')
+  const [invitePipelineFilter, setInvitePipelineFilter] = useState('all')
   const [supporterReminderSendingCode, setSupporterReminderSendingCode] = useState('')
+  const [supporterApprovalProcessingEmail, setSupporterApprovalProcessingEmail] = useState('')
   const [supporterSignupVideoUrl, setSupporterSignupVideoUrl] = useState('')
   const [supporterThankYouVideoUrl, setSupporterThankYouVideoUrl] = useState('')
   const [supporterSignupVideoSaving, setSupporterSignupVideoSaving] = useState(false)
+  const [supporterInviteGroupsConfig, setSupporterInviteGroupsConfig] = useState({
+    everyoneGroupEmail: '',
+    verifiedGroupEmail: '',
+    registeredGroupEmail: '',
+  })
   const [supporterInviteForm, setSupporterInviteForm] = useState({
     recipientName: '',
     recipientEmail: '',
     recipientPhone: '',
-    channel: 'manual',
+    channel: 'email',
+    inviteAudience: 'individual',
     supporterType: 'Supporter',
     notes: '',
   })
   const [latestSupporterInviteLink, setLatestSupporterInviteLink] = useState('')
+  const [latestSupporterInviteType, setLatestSupporterInviteType] = useState('Supporter')
 
   const normalizeTab = (tabId) => {
     return normalizeCrmTab(tabId)
@@ -406,37 +416,176 @@ export function CRMPage({
       })
   }
 
-  const buildSupporterInviteLink = (inviteCode) => {
+  const normalizeSupporterTypeLabel = (value) =>
+    String(value || '')
+      .toLowerCase()
+      .includes('member')
+      ? 'Member'
+      : 'Supporter'
+
+  const buildSupporterInviteLink = (inviteCode, supporterType) => {
     if (!supporterSignupBaseLink) return ''
     const url = new URL(supporterSignupBaseLink)
     if (inviteCode) {
       url.searchParams.set('invite_code', inviteCode)
+    }
+    const normalizedType = normalizeSupporterTypeLabel(supporterType)
+    if (normalizedType) {
+      url.searchParams.set('supporter_type', normalizedType.toLowerCase())
     }
     return url.toString()
   }
 
   const buildSupporterReminderMessage = (invite) => {
     const name = invite?.recipientName || 'there'
-    const link = buildSupporterInviteLink(invite?.inviteCode || '')
+    const link = buildSupporterInviteLink(invite?.inviteCode || '', invite?.supporterType || 'Supporter')
     return `Hi ${name}, just a reminder to complete your supporter/member registration:\n${link}`
+  }
+
+  const getInviteAudienceLabel = (audience) => {
+    if (audience === 'everyone') return 'Everyone'
+    if (audience === 'verified') return 'Verified users'
+    if (audience === 'registered') return 'Registered users'
+    return 'Single recipient'
+  }
+
+  const getInviteAudienceGroupEmail = (audience) => {
+    if (audience === 'everyone') return supporterInviteGroupsConfig.everyoneGroupEmail || ''
+    if (audience === 'verified') return supporterInviteGroupsConfig.verifiedGroupEmail || ''
+    if (audience === 'registered') return supporterInviteGroupsConfig.registeredGroupEmail || ''
+    return ''
+  }
+
+  const setInviteAudienceGroupEmail = (audience, value) => {
+    if (audience === 'everyone') {
+      setSupporterInviteGroupsConfig((prev) => ({ ...prev, everyoneGroupEmail: value }))
+      return
+    }
+    if (audience === 'verified') {
+      setSupporterInviteGroupsConfig((prev) => ({ ...prev, verifiedGroupEmail: value }))
+      return
+    }
+    if (audience === 'registered') {
+      setSupporterInviteGroupsConfig((prev) => ({ ...prev, registeredGroupEmail: value }))
+    }
+  }
+
+  const buildSupporterInviteShareMessage = (
+    inviteLink,
+    inviteType,
+    recipientName = '',
+    inviteAudience = 'individual',
+  ) => {
+    const typeLabel = normalizeSupporterTypeLabel(inviteType).toLowerCase()
+    if (inviteAudience && inviteAudience !== 'individual') {
+      return `Hi team, here is the Freedom Square ${typeLabel} signup form for ${getInviteAudienceLabel(inviteAudience)}:\n${inviteLink}`
+    }
+    const name = recipientName || 'there'
+    return `Hi ${name}, here is your Freedom Square ${typeLabel} signup form:\n${inviteLink}`
+  }
+
+  const openExternalShareLink = (url) => {
+    if (!url || typeof window === 'undefined') return
+    const popup = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!popup) {
+      window.location.href = url
+    }
+  }
+
+  const handleShareSupporterInviteByChannel = async ({
+    channel,
+    inviteAudience,
+    inviteLink,
+    inviteType,
+    recipientName,
+    recipientEmail,
+    recipientPhone,
+  }) => {
+    if (!inviteLink) return
+    const normalizedChannel = String(channel || '').toLowerCase()
+    const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
+    const message = buildSupporterInviteShareMessage(
+      inviteLink,
+      inviteType,
+      recipientName,
+      normalizedAudience,
+    )
+    if (normalizedChannel === 'email') {
+      const audienceGroupEmail = getInviteAudienceGroupEmail(normalizedAudience)
+      const targetEmail =
+        normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
+      if (!targetEmail) {
+        if (normalizedAudience === 'individual') {
+          setSupporterInviteError('Recipient email is required for single-recipient email sends.')
+        } else {
+          setSupporterInviteError(
+            `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
+          )
+        }
+        return
+      }
+      const subject = encodeURIComponent(
+        `Freedom Square ${normalizeSupporterTypeLabel(inviteType)} signup form (${getInviteAudienceLabel(normalizedAudience)})`,
+      )
+      const body = encodeURIComponent(message)
+      openExternalShareLink(`mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`)
+      setSupporterInviteStatus('Invite link created and email draft opened.')
+      return
+    }
+    if (normalizedChannel === 'whatsapp') {
+      const text = encodeURIComponent(message)
+      const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
+      const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
+      openExternalShareLink(whatsappUrl)
+      setSupporterInviteStatus('Invite link created and WhatsApp share opened.')
+      return
+    }
+    if (normalizedChannel === 'slack') {
+      if (!navigator?.clipboard) {
+        setSupporterInviteError('Clipboard unavailable in this browser.')
+        return
+      }
+      try {
+        await navigator.clipboard.writeText(message)
+        setSupporterInviteStatus('Invite link created and Slack message copied.')
+      } catch (err) {
+        setSupporterInviteError('Invite created, but unable to copy Slack message.')
+      }
+      return
+    }
+    setSupporterInviteStatus('Invite link created.')
   }
 
   const loadSupporterInvites = () => {
     setSupporterInviteLoading(true)
     setSupporterInviteError('')
-    Promise.all([
+    Promise.allSettled([
       getJson('/crm/supporter-invites/stats'),
       getJson('/crm/supporter-invites?limit=50'),
+      getJson('/crm/supporter-signups/pending?limit=100'),
       getJson('/crm/supporter-signup-config'),
+      getJson('/crm/supporter-invite-groups-config'),
     ])
-      .then(([statsPayload, invitesPayload, configPayload]) => {
+      .then(([statsResult, invitesResult, pendingResult, configResult, groupsConfigResult]) => {
+        const statsPayload = statsResult.status === 'fulfilled' ? statsResult.value : null
+        const invitesPayload = invitesResult.status === 'fulfilled' ? invitesResult.value : []
+        const pendingPayload = pendingResult.status === 'fulfilled' ? pendingResult.value : []
+        const configPayload = configResult.status === 'fulfilled' ? configResult.value : null
+        const groupsConfigPayload =
+          groupsConfigResult.status === 'fulfilled' ? groupsConfigResult.value : null
         setSupporterInviteStats(statsPayload || null)
         setSupporterInvites(Array.isArray(invitesPayload) ? invitesPayload : [])
+        setPendingSupporterSignups(Array.isArray(pendingPayload) ? pendingPayload : [])
         setSupporterSignupVideoUrl(configPayload?.welcomeVideoUrl || '')
         setSupporterThankYouVideoUrl(configPayload?.thankYouVideoUrl || '')
-      })
-      .catch((err) => {
-        setSupporterInviteError(err.message || 'Unable to load supporter invite metrics.')
+        setSupporterInviteGroupsConfig({
+          everyoneGroupEmail: groupsConfigPayload?.everyoneGroupEmail || '',
+          verifiedGroupEmail: groupsConfigPayload?.verifiedGroupEmail || '',
+          registeredGroupEmail: groupsConfigPayload?.registeredGroupEmail || '',
+        })
+        if (statsResult.status === 'rejected' || invitesResult.status === 'rejected') {
+          setSupporterInviteError('Unable to load invite metrics right now.')
+        }
       })
       .finally(() => {
         setSupporterInviteLoading(false)
@@ -541,21 +690,49 @@ export function CRMPage({
     event.preventDefault()
     setSupporterInviteError('')
     setSupporterInviteStatus('')
+    const recipientName = supporterInviteForm.recipientName.trim()
+    const recipientEmail = supporterInviteForm.recipientEmail.trim()
+    const recipientPhone = supporterInviteForm.recipientPhone.trim()
+    const selectedChannel = supporterInviteForm.channel
+    const selectedAudience = supporterInviteForm.inviteAudience || 'individual'
     try {
+      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+        await requestJson('/crm/supporter-invite-groups-config', {
+          method: 'PATCH',
+          payload: {
+            everyoneGroupEmail: supporterInviteGroupsConfig.everyoneGroupEmail.trim(),
+            verifiedGroupEmail: supporterInviteGroupsConfig.verifiedGroupEmail.trim(),
+            registeredGroupEmail: supporterInviteGroupsConfig.registeredGroupEmail.trim(),
+          },
+        })
+      }
       const payload = await requestJson('/crm/supporter-invites', {
         method: 'POST',
         payload: {
-          recipientName: supporterInviteForm.recipientName.trim(),
-          recipientEmail: supporterInviteForm.recipientEmail.trim(),
-          recipientPhone: supporterInviteForm.recipientPhone.trim(),
-          channel: supporterInviteForm.channel,
+          recipientName,
+          recipientEmail,
+          recipientPhone,
+          channel: selectedChannel,
+          inviteAudience: selectedAudience,
           supporterType: supporterInviteForm.supporterType,
           notes: supporterInviteForm.notes.trim(),
         },
       })
-      const link = buildSupporterInviteLink(payload?.inviteCode || '')
+      const inviteType = normalizeSupporterTypeLabel(
+        payload?.supporterType || supporterInviteForm.supporterType,
+      )
+      const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType)
       setLatestSupporterInviteLink(link)
-      setSupporterInviteStatus('Invite link created.')
+      setLatestSupporterInviteType(inviteType)
+      await handleShareSupporterInviteByChannel({
+        channel: selectedChannel,
+        inviteAudience: selectedAudience,
+        inviteLink: link,
+        inviteType,
+        recipientName: payload?.recipientName || recipientName,
+        recipientEmail: payload?.recipientEmail || recipientEmail,
+        recipientPhone: payload?.recipientPhone || recipientPhone,
+      })
       setSupporterInviteForm((prev) => ({
         ...prev,
         recipientName: '',
@@ -636,6 +813,33 @@ export function CRMPage({
       setSupporterInviteError(err.message || 'Unable to send reminder.')
     } finally {
       setSupporterReminderSendingCode('')
+    }
+  }
+
+  const handleApprovePendingSupporterSignup = async (person) => {
+    const email = person?.email || ''
+    const signupId = person?.signupId || ''
+    if (!email && !signupId) return
+    setSupporterInviteError('')
+    setSupporterInviteStatus('')
+    const approveKey = signupId || email
+    setSupporterApprovalProcessingEmail(approveKey)
+    try {
+      if (signupId) {
+        await requestJson(`/crm/supporter-signups/by-id/${encodeURIComponent(signupId)}/approve`, {
+          method: 'POST',
+        })
+      } else {
+        await requestJson(`/crm/supporter-signups/${encodeURIComponent(email)}/approve`, {
+          method: 'POST',
+        })
+      }
+      setSupporterInviteStatus(`Approved ${email || signupId} for Network.`)
+      loadSupporterInvites()
+    } catch (err) {
+      setSupporterInviteError(err.message || 'Unable to approve supporter/member.')
+    } finally {
+      setSupporterApprovalProcessingEmail('')
     }
   }
 
@@ -1317,8 +1521,11 @@ export function CRMPage({
     },
   }
 
-  const crmPulseStats = useMemo(
-    () => [
+  const crmPulseStats = useMemo(() => {
+    const rate = Number(supporterInviteStats?.conversionRate ?? 0)
+    const conversionDisplay =
+      supporterInviteStats == null ? '—' : `${Number.isFinite(rate) ? rate.toFixed(1) : '0.0'}%`
+    return [
       {
         label: 'Total people',
         value: summary?.total_people ?? people.length ?? '—',
@@ -1338,14 +1545,128 @@ export function CRMPage({
         note: 'Core base',
       },
       {
-        label: 'Segments',
-        value: segments.length,
+        label: 'Conversion rate',
+        value: conversionDisplay,
         icon: <IconTarget size={18} />,
-        note: 'Ready to activate',
+        note: 'Supporter invite form',
       },
-    ],
-    [people.length, segments.length, summary],
+    ]
+  }, [people.length, summary, supporterInviteStats])
+  const conversionInvitesSent = Number(supporterInviteStats?.sent || 0)
+  const conversionRegisteredCount = Number(supporterInviteStats?.converted || 0)
+  const conversionPendingCount = Number(supporterInviteStats?.pending || 0)
+  const conversionRateValue = Number(supporterInviteStats?.conversionRate || 0)
+  const memberConversionCount = supporterInvites.reduce((acc, invite) => {
+    const isConverted = String(invite?.status || '').toLowerCase() === 'converted'
+    const type = normalizeSupporterTypeLabel(invite?.supporterType || '')
+    return isConverted && type === 'Member' ? acc + 1 : acc
+  }, 0)
+  const conversionSentBaseline = Math.max(conversionInvitesSent, 1)
+  const supporterStageRatio = Math.min(
+    100,
+    Math.max(14, Math.round((conversionRegisteredCount / conversionSentBaseline) * 100)),
   )
+  const memberStageRatio = Math.min(
+    supporterStageRatio,
+    Math.max(8, Math.round((memberConversionCount / conversionSentBaseline) * 100)),
+  )
+  const pendingByInviteCode = useMemo(() => {
+    const map = new Map()
+    pendingSupporterSignups.forEach((person) => {
+      const inviteCode = String(person?.inviteCode || '').trim()
+      if (inviteCode) {
+        map.set(inviteCode, person)
+      }
+    })
+    return map
+  }, [pendingSupporterSignups])
+  const invitePipelineAllRows = useMemo(() => {
+    const toMillis = (value) => {
+      const ms = Date.parse(value || '')
+      return Number.isFinite(ms) ? ms : 0
+    }
+    const inviteRows = supporterInvites.map((invite) => {
+      const email = String(
+        invite?.recipientEmail || invite?.convertedEmail || invite?.submittedEmail || '',
+      )
+        .trim()
+        .toLowerCase()
+      const inviteCode = String(invite?.inviteCode || '').trim()
+      const pendingPerson = inviteCode ? pendingByInviteCode.get(inviteCode) : null
+      const rawStatus = String(invite?.status || 'sent').toLowerCase()
+      const isConverted = rawStatus === 'converted'
+      const isPendingApproval = !!pendingPerson
+      let pipelineStatus = 'sent'
+      if (isConverted) pipelineStatus = 'converted'
+      else if (isPendingApproval) pipelineStatus = 'pending'
+      return {
+        key: `invite-${invite?.inviteId || invite?.inviteCode || email || Math.random()}`,
+        source: 'invite',
+        recipient:
+          invite?.recipientName || pendingPerson?.firstName || pendingPerson?.email || 'Recipient',
+        email: invite?.recipientEmail || pendingPerson?.email || invite?.convertedEmail || '—',
+        audience: getInviteAudienceLabel(invite?.inviteAudience || 'individual'),
+        channel: invite?.channel || 'manual',
+        supporterType: invite?.supporterType || pendingPerson?.supporterType || 'Supporter',
+        status: pipelineStatus,
+        statusLabel:
+          pipelineStatus === 'converted'
+            ? 'Converted'
+            : pipelineStatus === 'pending'
+              ? 'Pending approval'
+              : 'Sent',
+        reminderCount: invite?.reminderCount ?? 0,
+        createdAt: invite?.createdAt || pendingPerson?.createdAt || '—',
+        convertedAt: invite?.convertedAt || '—',
+        sortAt: Math.max(toMillis(invite?.createdAt), toMillis(pendingPerson?.createdAt)),
+        invite,
+        pendingPerson,
+      }
+    })
+    const seenPendingSignupIds = new Set(
+      inviteRows.map((row) => String(row?.pendingPerson?.signupId || '')).filter(Boolean),
+    )
+    const orphanPendingRows = pendingSupporterSignups
+      .filter((person) => !seenPendingSignupIds.has(String(person?.signupId || '')))
+      .map((person) => ({
+        key: `pending-${person?.signupId || person?.email}`,
+        source: 'pending',
+        recipient: `${person?.firstName || ''} ${person?.lastName || ''}`.trim() || person?.email || 'Pending form',
+        email: person?.email || '—',
+        audience: 'Single recipient',
+        channel: '—',
+        supporterType: person?.supporterType || 'Supporter',
+        status: 'pending',
+        statusLabel: 'Pending approval',
+        reminderCount: 0,
+        createdAt: person?.createdAt || '—',
+        convertedAt: '—',
+        sortAt: toMillis(person?.createdAt),
+        invite: null,
+        pendingPerson: person,
+      }))
+    return [...inviteRows, ...orphanPendingRows].sort((a, b) => b.sortAt - a.sortAt)
+  }, [supporterInvites, pendingSupporterSignups, pendingByInviteCode, getInviteAudienceLabel])
+  const invitePipelineRows = useMemo(() => {
+    const merged = [...invitePipelineAllRows]
+    if (invitePipelineFilter === 'pending') {
+      return merged.filter((row) => row.status === 'pending')
+    }
+    if (invitePipelineFilter === 'sent') {
+      return merged.filter((row) => row.status === 'sent')
+    }
+    if (invitePipelineFilter === 'converted') {
+      return merged.filter((row) => row.status === 'converted')
+    }
+    return merged
+  }, [invitePipelineAllRows, invitePipelineFilter])
+  const invitePipelinePendingCount = pendingSupporterSignups.length
+  const fallbackInviteType = normalizeSupporterTypeLabel(
+    latestSupporterInviteType || supporterInviteForm.supporterType || 'Supporter',
+  )
+  const fallbackOpenFormLink = buildSupporterInviteLink('', fallbackInviteType)
+  const openFormButtonLabel =
+    fallbackInviteType === 'Member' ? 'Open form (New member)' : 'Open form (New supporter)'
 
   return (
     <section className="module module--crm-radical">
@@ -1365,7 +1686,7 @@ export function CRMPage({
 
       <CivicStatGrid
         title="Network pulse"
-        description="Live health checks for supporters, segments, and outreach readiness."
+        description="Live health checks for supporters, conversion, and outreach readiness."
         items={crmPulseStats}
       />
 
@@ -1623,13 +1944,7 @@ export function CRMPage({
 
       {activeTab === 'intake' && (
         <div className="stack">
-          <div className="module-card module-card__wide">
-            <h3>New supporters & members</h3>
-            <p className="muted">
-              Start by generating an invite link. The same full form is available below as an example.
-            </p>
-          </div>
-          <div className="module-card module-card__wide panel">
+          <div className="module-card module-card__wide panel intake-flow">
             <div className="card-header">
               <div>
                 <h3>Invite links & conversion tracking</h3>
@@ -1643,152 +1958,152 @@ export function CRMPage({
             {supporterInviteStatus ? (
               <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
             ) : null}
-            <form className="form-grid" onSubmit={handleCreateSupporterInvite}>
-              <input
-                className="input"
-                placeholder="Recipient name"
-                value={supporterInviteForm.recipientName}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    recipientName: event.target.value,
-                  }))
-                }
-              />
-              <input
-                className="input"
-                type="email"
-                placeholder="Recipient email"
-                value={supporterInviteForm.recipientEmail}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    recipientEmail: event.target.value,
-                  }))
-                }
-              />
-              <input
-                className="input"
-                placeholder="Recipient phone"
-                value={supporterInviteForm.recipientPhone}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    recipientPhone: event.target.value,
-                  }))
-                }
-              />
-              <select
-                className="select"
-                value={supporterInviteForm.supporterType}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    supporterType: event.target.value,
-                  }))
-                }
-              >
-                <option value="Supporter">Supporter form</option>
-                <option value="Member">Member form</option>
-              </select>
-              <select
-                className="select"
-                value={supporterInviteForm.channel}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    channel: event.target.value,
-                  }))
-                }
-              >
-                <option value="manual">Manual</option>
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="slack">Slack</option>
-              </select>
-              <input
-                className="input"
-                placeholder="Notes (optional)"
-                value={supporterInviteForm.notes}
-                onChange={(event) =>
-                  setSupporterInviteForm((prev) => ({
-                    ...prev,
-                    notes: event.target.value,
-                  }))
-                }
-              />
-              <div className="form-grid__full filter-row">
-                <button className="button" type="submit" disabled={supporterInviteLoading}>
-                  {supporterInviteLoading ? 'Creating…' : 'Create invite link'}
-                </button>
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={loadSupporterInvites}
-                  disabled={supporterInviteLoading}
-                >
-                  Refresh conversion
-                </button>
+            <div className="module-card intake-tile intake-order-create">
+              <div className="intake-section-heading">
+                <h4 className="intake-section-title">Create and send invite signup form</h4>
+                <p className="muted intake-section-subtitle">
+                  Fill recipient details, generate an invite link, and share the supporter/member
+                  signup form.
+                </p>
               </div>
-            </form>
-            <div className="stack">
-              <label className="label">Welcome video (YouTube)</label>
-              <input
-                className="input"
-                placeholder="https://www.youtube.com/watch?v=..."
-                value={supporterSignupVideoUrl}
-                onChange={(event) => setSupporterSignupVideoUrl(event.target.value)}
-              />
-              <label className="label">Thank you video (YouTube)</label>
-              <input
-                className="input"
-                placeholder="https://www.youtube.com/watch?v=..."
-                value={supporterThankYouVideoUrl}
-                onChange={(event) => setSupporterThankYouVideoUrl(event.target.value)}
-              />
-              <div className="filter-row">
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={handleSaveSupporterSignupVideo}
-                  disabled={supporterSignupVideoSaving}
+              <form className="form-grid" onSubmit={handleCreateSupporterInvite}>
+                <select
+                  className="select"
+                  value={supporterInviteForm.inviteAudience}
+                  onChange={(event) =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      inviteAudience: event.target.value,
+                    }))
+                  }
                 >
-                  {supporterSignupVideoSaving ? 'Saving…' : 'Save videos'}
-                </button>
-              </div>
-              {supporterSignupVideoEmbedUrl ? (
-                <div className="card-divider">
-                  <iframe
-                    src={supporterSignupVideoEmbedUrl}
-                    title="Supporter welcome video"
-                    style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+                  <option value="individual">Single recipient</option>
+                  <option value="everyone">Everyone</option>
+                  <option value="verified">Verified users</option>
+                  <option value="registered">Registered users</option>
+                </select>
+                {supporterInviteForm.inviteAudience === 'individual' ? (
+                  <>
+                    <input
+                      className="input"
+                      placeholder="Recipient name"
+                      value={supporterInviteForm.recipientName}
+                      onChange={(event) =>
+                        setSupporterInviteForm((prev) => ({
+                          ...prev,
+                          recipientName: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      type="email"
+                      placeholder="Recipient email"
+                      value={supporterInviteForm.recipientEmail}
+                      onChange={(event) =>
+                        setSupporterInviteForm((prev) => ({
+                          ...prev,
+                          recipientEmail: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Recipient phone"
+                      value={supporterInviteForm.recipientPhone}
+                      onChange={(event) =>
+                        setSupporterInviteForm((prev) => ({
+                          ...prev,
+                          recipientPhone: event.target.value,
+                        }))
+                      }
+                    />
+                  </>
+                ) : supporterInviteForm.channel === 'email' ? (
+                  <div className="form-grid__full">
+                    <label className="label">Group email list</label>
+                    <input
+                      className="input"
+                      type="email"
+                      list="supporter-invite-group-options"
+                      placeholder="group@googlegroups.com"
+                      value={getInviteAudienceGroupEmail(supporterInviteForm.inviteAudience)}
+                      onChange={(event) =>
+                        setInviteAudienceGroupEmail(
+                          supporterInviteForm.inviteAudience,
+                          event.target.value,
+                        )
+                      }
+                    />
+                    <datalist id="supporter-invite-group-options">
+                      {[...new Set(Object.values(supporterInviteGroupsConfig).filter(Boolean))].map(
+                        (groupEmail) => (
+                          <option key={groupEmail} value={groupEmail} />
+                        ),
+                      )}
+                    </datalist>
+                    <p className="muted">
+                      Outlook opens with this group email in To: field for{' '}
+                      {getInviteAudienceLabel(supporterInviteForm.inviteAudience)}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="form-grid__full muted">
+                    Audience group lists are used when channel is Email.
+                  </div>
+                )}
+                <select
+                  className="select"
+                  value={supporterInviteForm.supporterType}
+                  onChange={(event) =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      supporterType: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="Supporter">Supporter form</option>
+                  <option value="Member">Member form</option>
+                </select>
+                <select
+                  className="select"
+                  value={supporterInviteForm.channel}
+                  onChange={(event) =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      channel: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="email">Email</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="slack">Slack</option>
+                </select>
+                <input
+                  className="input"
+                  placeholder="Notes (optional)"
+                  value={supporterInviteForm.notes}
+                  onChange={(event) =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
+                <div className="form-grid__full filter-row">
+                  <button className="button" type="submit" disabled={supporterInviteLoading}>
+                    {supporterInviteLoading ? 'Creating…' : 'Send invite link'}
+                  </button>
                 </div>
-              ) : (
-                <p className="muted">Add a YouTube link to show a welcome message on the signup form.</p>
-              )}
-              {supporterThankYouVideoEmbedUrl ? (
-                <div className="card-divider">
-                  <iframe
-                    src={supporterThankYouVideoEmbedUrl}
-                    title="Supporter thank you video"
-                    style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              ) : (
-                <p className="muted">Add a second YouTube link for the post-signup thank you section.</p>
-              )}
+              </form>
             </div>
-            <div className="stack">
+            <div className="module-card intake-tile stack intake-order-latest">
+              <h4 className="intake-section-title">Latest invite link</h4>
               <label className="label">Latest invite link</label>
               <input
                 className="input"
                 readOnly
-                value={latestSupporterInviteLink || supporterSignupBaseLink}
+                value={latestSupporterInviteLink || fallbackOpenFormLink}
                 placeholder="Invite link appears here"
               />
               <div className="filter-row">
@@ -1796,18 +2111,18 @@ export function CRMPage({
                   className="button-secondary"
                   type="button"
                   onClick={() =>
-                    handleCopySupporterInviteLink(latestSupporterInviteLink || supporterSignupBaseLink)
+                    handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
                   }
                 >
                   Copy link
                 </button>
                 <a
                   className="button-secondary"
-                  href={latestSupporterInviteLink || supporterSignupBaseLink || '#'}
+                  href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Open same form
+                  {openFormButtonLabel}
                 </a>
               </div>
               <div className="module-footer">
@@ -1815,61 +2130,238 @@ export function CRMPage({
                   <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
                 </span>
                 <span>
-                  <strong>Registered:</strong> {supporterInviteStats?.converted ?? 0}
+                  <strong>Approved and added to Network:</strong>{' '}
+                  {supporterInviteStats?.converted ?? 0}
                 </span>
                 <span>
-                  <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
+                  <strong>Forms pending approval:</strong> {supporterInviteStats?.pending ?? 0}
                 </span>
                 <span>
                   <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
                 </span>
                 <span>
-                  <strong>Conversion rate:</strong> {supporterInviteStats?.conversionRate ?? 0}%
+                  <strong>Conversion rate (approved after invite):</strong>{' '}
+                  {supporterInviteStats?.conversionRate ?? 0}%
                 </span>
               </div>
             </div>
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Recipient</span>
-                <span>Channel</span>
-                <span>Type</span>
-                <span>Status</span>
-                <span>Reminders</span>
-                <span>Sent</span>
-                <span>Converted</span>
-                <span>Action</span>
+            <div className="module-card intake-tile stack intake-order-pending">
+              <div className="card-header">
+                <h4 className="intake-section-title">Invite pipeline</h4>
               </div>
-              {supporterInvites.length === 0 && !supporterInviteLoading ? (
-                <div className="table-row empty">No supporter invites yet.</div>
-              ) : null}
-              {supporterInvites.map((invite) => (
-                <div className="table-row" key={invite.inviteId || invite.inviteCode}>
-                  <span>{invite.recipientName || invite.recipientEmail || '—'}</span>
-                  <span>{invite.channel || 'manual'}</span>
-                  <span>{invite.supporterType || 'Supporter'}</span>
-                  <span>{invite.status || 'sent'}</span>
-                  <span>{invite.reminderCount ?? 0}</span>
-                  <span>{invite.createdAt || '—'}</span>
-                  <span>{invite.convertedAt || '—'}</span>
-                  <span>
-                    <button
-                      className="button-secondary button-secondary--small"
-                      type="button"
-                      onClick={() => handleSendSupporterReminder(invite)}
-                      disabled={
-                        invite.status === 'converted' ||
-                        supporterReminderSendingCode === invite.inviteCode
-                      }
-                    >
-                      {supporterReminderSendingCode === invite.inviteCode
-                        ? 'Sending...'
-                        : invite.status === 'converted'
-                          ? 'Converted'
-                          : 'Send reminder'}
-                    </button>
-                  </span>
+              <div className="form-grid" style={{ marginTop: 0 }}>
+                <div className="filter-row">
+                  <button
+                    className="button-secondary button-secondary--small"
+                    type="button"
+                    onClick={loadSupporterInvites}
+                    disabled={supporterInviteLoading}
+                  >
+                    {supporterInviteLoading
+                      ? 'Refreshing…'
+                      : `Refresh (${invitePipelinePendingCount})`}
+                  </button>
                 </div>
-              ))}
+                <div className="filter-row" style={{ justifyContent: 'flex-end' }}>
+                  <select
+                    className="select input--compact"
+                    value={invitePipelineFilter}
+                    onChange={(event) => setInvitePipelineFilter(event.target.value)}
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="pending">Pending approval</option>
+                    <option value="sent">Sent</option>
+                    <option value="converted">Converted</option>
+                  </select>
+                </div>
+              </div>
+              <div className="table">
+                <div className="table-row table-head">
+                  <span>Recipient</span>
+                  <span>Email</span>
+                  <span>Audience</span>
+                  <span>Channel</span>
+                  <span>Type</span>
+                  <span>Status</span>
+                  <span>Sent / submitted</span>
+                  <span>Reminders</span>
+                  <span>Action</span>
+                </div>
+                {supporterInviteLoading ? (
+                  <div className="table-row empty">Loading invite pipeline...</div>
+                ) : null}
+                {invitePipelineRows.length === 0 && !supporterInviteLoading ? (
+                  <div className="table-row empty">No invite pipeline rows.</div>
+                ) : null}
+                {invitePipelineRows.map((row) => (
+                  <div className="table-row" key={row.key}>
+                    <span>{row.recipient || '—'}</span>
+                    <span>{row.email || '—'}</span>
+                    <span>{row.audience || '—'}</span>
+                    <span>{row.channel || '—'}</span>
+                    <span>{row.supporterType || 'Supporter'}</span>
+                    <span>{row.statusLabel}</span>
+                    <span>{row.createdAt || '—'}</span>
+                    <span>{row.reminderCount ?? 0}</span>
+                    <span className="filter-row">
+                      {row.status === 'pending' ? (
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() =>
+                            handleApprovePendingSupporterSignup(
+                              row.pendingPerson || {
+                                email: row.email,
+                              },
+                            )
+                          }
+                          disabled={
+                            (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
+                            supporterApprovalProcessingEmail ===
+                              (row.pendingPerson?.signupId || row.email)
+                          }
+                        >
+                          {supporterApprovalProcessingEmail ===
+                          (row.pendingPerson?.signupId || row.email)
+                            ? 'Approving...'
+                            : 'Approve'}
+                        </button>
+                      ) : null}
+                      {row.invite && row.status === 'sent' ? (
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() => handleSendSupporterReminder(row.invite)}
+                          disabled={
+                            supporterReminderSendingCode === row.invite.inviteCode
+                          }
+                        >
+                          {supporterReminderSendingCode === row.invite.inviteCode
+                            ? 'Sending...'
+                            : 'Send reminder'}
+                        </button>
+                      ) : null}
+                      {row.status === 'converted' ? <span className="pill">Converted</span> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="module-card module-card__wide conversion-visual intake-order-conversion">
+              <div className="card-header">
+                <div>
+                  <h3 className="intake-section-title">Conversion funnel</h3>
+                  <p className="muted">
+                    Visual flow from invitations to approved supporter/member records.
+                  </p>
+                </div>
+                <div className="filter-row">
+                  <button
+                    className="button-secondary button-secondary--small"
+                    type="button"
+                    onClick={loadSupporterInvites}
+                    disabled={supporterInviteLoading}
+                  >
+                    {supporterInviteLoading ? 'Refreshing…' : 'Refresh conversion'}
+                  </button>
+                  <div className="pill">Live</div>
+                </div>
+              </div>
+              <div className="conversion-visual__layout">
+                <div className="conversion-funnel">
+                  <div className="conversion-funnel__segment conversion-funnel__segment--sent" style={{ width: '100%' }}>
+                    <span className="conversion-funnel__value">{conversionInvitesSent}</span>
+                  </div>
+                  <div
+                    className="conversion-funnel__segment conversion-funnel__segment--supporter"
+                    style={{ width: `${supporterStageRatio}%` }}
+                  >
+                    <span className="conversion-funnel__value">{conversionRegisteredCount}</span>
+                  </div>
+                  <div
+                    className="conversion-funnel__segment conversion-funnel__segment--member"
+                    style={{ width: `${memberStageRatio}%` }}
+                  >
+                    <span className="conversion-funnel__value">{memberConversionCount}</span>
+                  </div>
+                </div>
+                <div className="conversion-visual__legend">
+                  <div className="conversion-legend-row">
+                    <span>Invites sent</span>
+                    <strong>{conversionInvitesSent}</strong>
+                  </div>
+                  <div className="conversion-legend-row">
+                    <span>Become supporter</span>
+                    <strong>{conversionRegisteredCount}</strong>
+                  </div>
+                  <div className="conversion-legend-row">
+                    <span>Members</span>
+                    <strong>{memberConversionCount}</strong>
+                  </div>
+                  <div className="conversion-legend-row conversion-legend-row--rate">
+                    <span>Conversion rate</span>
+                    <strong>{conversionRateValue.toFixed(1)}%</strong>
+                  </div>
+                  <p className="muted">Share = stage count / invites sent</p>
+                </div>
+              </div>
+            </div>
+            <div className="module-card intake-tile intake-order-videos">
+              <div className="card-header">
+                <h4 className="intake-section-title">Signup videos</h4>
+              </div>
+              <div className="stack">
+                  <label className="label">Welcome video (YouTube)</label>
+                  <input
+                    className="input"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={supporterSignupVideoUrl}
+                    onChange={(event) => setSupporterSignupVideoUrl(event.target.value)}
+                  />
+                  <label className="label">Thank you video (YouTube)</label>
+                  <input
+                    className="input"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={supporterThankYouVideoUrl}
+                    onChange={(event) => setSupporterThankYouVideoUrl(event.target.value)}
+                  />
+                  <div className="filter-row">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleSaveSupporterSignupVideo}
+                      disabled={supporterSignupVideoSaving}
+                    >
+                      {supporterSignupVideoSaving ? 'Saving…' : 'Save videos'}
+                    </button>
+                  </div>
+                  {supporterSignupVideoEmbedUrl ? (
+                    <div className="card-divider">
+                      <iframe
+                        src={supporterSignupVideoEmbedUrl}
+                        title="Supporter welcome video"
+                        style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <p className="muted">Add a YouTube link to show a welcome message on the signup form.</p>
+                  )}
+                  {supporterThankYouVideoEmbedUrl ? (
+                    <div className="card-divider">
+                      <iframe
+                        src={supporterThankYouVideoEmbedUrl}
+                        title="Supporter thank you video"
+                        style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <p className="muted">Add a second YouTube link for the post-signup thank you section.</p>
+                  )}
+              </div>
             </div>
           </div>
         </div>
@@ -2406,10 +2898,6 @@ export function CRMPage({
               </div>
         </div>
       )}
-      <div className="module-footer">
-        <span>Backend scope:</span>
-        <strong>Survey API + /crm routes</strong>
-      </div>
     </section>
   )
 }

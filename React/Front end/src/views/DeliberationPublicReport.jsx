@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTextTranslations } from '../hooks/useTextTranslations'
 import { getJson } from '../services/api'
 import { LanguageSelect, StatusMessage } from '../ui'
 import { Line, Doughnut, Bar } from 'react-chartjs-2'
@@ -29,8 +30,153 @@ ChartJS.register(
 
 const REFRESH_INTERVAL_MS = 30000
 
-const formatCompactNumber = (value) =>
-  new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(
+const REPORT_COPY = {
+  en: {
+    liveDashboard: 'Live public dashboard',
+    refreshing: 'Refreshing every 30s',
+    surveySummary: 'Survey summary',
+    heroDescription:
+      'Public view of live survey participation, trend signals, consensus areas, and points of disagreement.',
+    lastRefresh: 'Last refresh',
+    participation: 'Participation',
+    visitorsToVoters: 'Visitors who became voters',
+    largestCluster: 'Largest cluster',
+    participants: 'participants',
+    waitingForData: 'Waiting for data',
+    conversation: 'Conversation',
+    highlightedStatements: 'highlighted statements',
+    views: 'Views',
+    surveyVisits: 'Survey page visits',
+    participantsLabel: 'Participants',
+    peopleWhoVoted: 'People who cast votes',
+    comments: 'Comments',
+    uniqueCommenters: 'unique commenters',
+    voteDepth: 'Vote depth',
+    totalVotes: 'total votes',
+    voteDepthHint:
+      'Average statement votes per person who voted (total votes ÷ participants).',
+    participationTrend: 'Participation trend',
+    participationTrendHint: 'Traffic, voting, and comment activity over time.',
+    liveSeries: 'Live series',
+    engagementSnapshot: 'Engagement snapshot',
+    engagementSnapshotHint: 'How many visitors become participants and commenters.',
+    viewToVoter: 'View to voter conversion',
+    voterToCommenter: 'Voter to commenter conversion',
+    potentialAgreements: 'Potential agreements',
+    noBridgeStatements: 'No standout bridge statements yet.',
+    mostAgreed: 'Most agreed',
+    waitingConsensus: 'Waiting for stronger consensus',
+    mostContested: 'Most contested',
+    noMajorSplit: 'No major split yet',
+    clusterRelationships: 'Cluster relationships',
+    clusterRelationshipsHint: 'Negative values signal stronger disagreement between groups.',
+    similarity: 'similarity',
+    latestViewSpike: 'Latest view spike',
+    noViewTrend: 'No view trend yet',
+    latestVoteSpike: 'Latest vote spike',
+    noVoteTrend: 'No vote trend yet',
+    clusterSizes: 'Cluster sizes',
+    clusterSizesHint: 'Relative size of opinion groups in the survey.',
+    consensusLeaders: 'Consensus leaders',
+    consensusLeadersHint: 'Statements that attracted the broadest agreement.',
+    ranked: 'ranked',
+    noConsensus: 'No consensus statements yet.',
+    debateHotspots: 'Debate hotspots',
+    debateHotspotsHint: 'Statements where participants are most split.',
+    hotspots: 'hotspots',
+    noHotspots: 'No polarizing statements yet.',
+    opinionClusters: 'Opinion clusters',
+    opinionClustersHint: 'Top agreement and disagreement signals by cluster.',
+    topAgree: 'Top agree',
+    noAgree: 'No standout agreement yet.',
+    topDisagree: 'Top disagree',
+    noDisagree: 'No standout disagreement yet.',
+    consensus: 'Consensus',
+    polarizing: 'Polarizing',
+    responses: 'responses',
+    agreement: 'Agreement',
+    consensusScore: 'Consensus score',
+    polarityScore: 'Polarity score',
+    agree: 'Agree',
+    disagree: 'Disagree',
+    pass: 'Pass',
+    live: 'Live',
+  },
+  ka: {
+    liveDashboard: 'ცოცხალი საჯარო დაფა',
+    refreshing: 'განახლება ყოველ 30 წამში',
+    surveySummary: 'გამოკითხვის შეჯამება',
+    heroDescription:
+      'საჯარო ხედი გამოკითხვის ცოცხალ მონაწილეობაზე, ტრენდებზე, კონსენსუსის ზონებსა და აზრთა სხვადასხვაობაზე.',
+    lastRefresh: 'ბოლო განახლება',
+    participation: 'მონაწილეობა',
+    visitorsToVoters: 'ვიზიტორებიდან ამომრჩევლებად ქცეული',
+    largestCluster: 'ყველაზე დიდი კლასტერი',
+    participants: 'მონაწილე',
+    waitingForData: 'ველოდებით მონაცემებს',
+    conversation: 'საუბარი',
+    highlightedStatements: 'გამოკვეთილი განცხადება',
+    views: 'ნახვები',
+    surveyVisits: 'გამოკითხვის გვერდის ვიზიტები',
+    participantsLabel: 'მონაწილეები',
+    peopleWhoVoted: 'ხმის მიმცემი ადამიანები',
+    comments: 'კომენტარები',
+    uniqueCommenters: 'უნიკალური კომენტატორი',
+    voteDepth: 'ხმის მიცემის სიღრმე',
+    totalVotes: 'სულ ხმები',
+    voteDepthHint:
+      'საშუალო ხმები თითო ამომრჩეველზე, რომელმაც მონაწილეობა მიიღო (სულ ხმები ÷ მონაწილეები).',
+    participationTrend: 'მონაწილეობის ტრენდი',
+    participationTrendHint: 'დროში ტრაფიკი, ხმის მიცემა და კომენტარების აქტივობა.',
+    liveSeries: 'ცოცხალი სერია',
+    engagementSnapshot: 'ჩართულობის სურათი',
+    engagementSnapshotHint: 'რამდენი ვიზიტორი ხდება მონაწილე და კომენტატორი.',
+    viewToVoter: 'ნახვიდან ხმის მიცემამდე კონვერსია',
+    voterToCommenter: 'ამომრჩევლიდან კომენტატორამდე კონვერსია',
+    potentialAgreements: 'შესაძლო შეთანხმებები',
+    noBridgeStatements: 'გამორჩეული დამაკავშირებელი განცხადებები ჯერ არ ჩანს.',
+    mostAgreed: 'ყველაზე მეტად შეთანხმებული',
+    waitingConsensus: 'უფრო ძლიერი კონსენსუსის მოლოდინში',
+    mostContested: 'ყველაზე სადავო',
+    noMajorSplit: 'მნიშვნელოვანი გაყოფა ჯერ არ ჩანს',
+    clusterRelationships: 'კლასტერებს შორის კავშირები',
+    clusterRelationshipsHint: 'უარყოფითი მნიშვნელობები ჯგუფებს შორის უფრო ძლიერ უთანხმოებას ნიშნავს.',
+    similarity: 'მსგავსება',
+    latestViewSpike: 'ბოლო ნახვების პიკი',
+    noViewTrend: 'ნახვების ტრენდი ჯერ არ არის',
+    latestVoteSpike: 'ბოლო ხმების პიკი',
+    noVoteTrend: 'ხმების ტრენდი ჯერ არ არის',
+    clusterSizes: 'კლასტერების ზომები',
+    clusterSizesHint: 'გამოკითხვაში აზრის ჯგუფების შედარებითი ზომა.',
+    consensusLeaders: 'კონსენსუსის ლიდერები',
+    consensusLeadersHint: 'განცხადებები, რომლებმაც ყველაზე ფართო თანხმობა მოიზიდა.',
+    ranked: 'რეიტინგში',
+    noConsensus: 'კონსენსუსის განცხადებები ჯერ არ არის.',
+    debateHotspots: 'დებატის ცხელი წერტილები',
+    debateHotspotsHint: 'განცხადებები, რომლებზეც მონაწილეები ყველაზე მეტად იყოფიან.',
+    hotspots: 'ცხელი წერტილი',
+    noHotspots: 'პოლარიზებული განცხადებები ჯერ არ არის.',
+    opinionClusters: 'აზრის კლასტერები',
+    opinionClustersHint: 'კლასტერების მიხედვით თანხმობისა და უთანხმოების მთავარი სიგნალები.',
+    topAgree: 'უმაღლესი თანხმობა',
+    noAgree: 'გამორჩეული თანხმობა ჯერ არ არის.',
+    topDisagree: 'უმაღლესი უთანხმოება',
+    noDisagree: 'გამორჩეული უთანხმოება ჯერ არ არის.',
+    consensus: 'კონსენსუსი',
+    polarizing: 'პოლარიზებული',
+    responses: 'პასუხი',
+    agreement: 'თანხმობა',
+    consensusScore: 'კონსენსუსის ქულა',
+    polarityScore: 'პოლარობის ქულა',
+    agree: 'ვეთანხმები',
+    disagree: 'არ ვეთანხმები',
+    pass: 'გავატარებ',
+    live: 'ცოცხლად',
+  },
+}
+
+const formatCompactNumber = (value, language = 'en') =>
+  new Intl.NumberFormat(language || 'en', { notation: 'compact', maximumFractionDigits: 1 }).format(
     Number(value || 0),
   )
 
@@ -118,38 +264,59 @@ const doughnutOptions = {
   plugins: { legend: { display: false } },
 }
 
-function MetricCard({ label, value, detail, tone = 'default' }) {
+const collectReportTexts = (report) => {
+  const values = []
+  const push = (...items) => {
+    items.forEach((item) => {
+      if (typeof item === 'string' && item.trim()) values.push(item)
+    })
+  }
+  push(report?.name)
+  push(...(report?.potential_agreements || []))
+  ;(report?.metrics?.consensus || []).forEach((item) => push(item?.text))
+  ;(report?.metrics?.polarizing || []).forEach((item) => push(item?.text))
+  ;(report?.clusters || []).forEach((cluster) => {
+    push(...(cluster?.top_agree || []))
+    push(...(cluster?.top_disagree || []))
+  })
+  return Array.from(new Set(values))
+}
+
+function MetricCard({ label, value, detail, hint, tone = 'default' }) {
   return (
     <div className={`public-dashboard__metric public-dashboard__metric--${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       <span className="muted">{detail}</span>
+      {hint ? <p className="public-dashboard__metric-hint">{hint}</p> : null}
     </div>
   )
 }
 
-function StatementCard({ item, tone }) {
+function StatementCard({ item, tone, copy, translateReportText }) {
   const sentimentClass = tone === 'consensus' ? 'success' : 'warning'
   return (
     <article className={`public-dashboard__statement public-dashboard__statement--${tone}`}>
       <div className="public-dashboard__statement-head">
         <span className={`pill pill--${sentimentClass}`}>
-          {tone === 'consensus' ? 'Consensus' : 'Polarizing'}
+          {tone === 'consensus' ? copy.consensus : copy.polarizing}
         </span>
-        <span className="muted">{item.participation || 0} responses</span>
+        <span className="muted">
+          {item.participation || 0} {copy.responses}
+        </span>
       </div>
-      <h4>{item.text}</h4>
+      <h4>{translateReportText(item.text)}</h4>
       <div className="public-dashboard__statement-meters">
         <div>
-          <span>Agreement</span>
+          <span>{copy.agreement}</span>
           <strong>{formatPercent(item.agreement_ratio)}</strong>
         </div>
         <div>
-          <span>Consensus score</span>
+          <span>{copy.consensusScore}</span>
           <strong>{Math.round((item.consensus_score || 0) * 100)}</strong>
         </div>
         <div>
-          <span>Polarity score</span>
+          <span>{copy.polarityScore}</span>
           <strong>{Math.round((item.polarity_score || 0) * 100)}</strong>
         </div>
       </div>
@@ -157,9 +324,15 @@ function StatementCard({ item, tone }) {
         <Doughnut data={buildStatementChart(item)} options={doughnutOptions} />
       </div>
       <div className="public-dashboard__vote-split">
-        <span>Agree {item.agree_count || 0}</span>
-        <span>Disagree {item.disagree_count || 0}</span>
-        <span>Pass {item.pass_count || 0}</span>
+        <span>
+          {copy.agree} {item.agree_count || 0}
+        </span>
+        <span>
+          {copy.disagree} {item.disagree_count || 0}
+        </span>
+        <span>
+          {copy.pass} {item.pass_count || 0}
+        </span>
       </div>
     </article>
   )
@@ -177,6 +350,7 @@ function HeroStamp({ label, value, detail }) {
 
 export function DeliberationPublicReport({ shareId, t, language, languages, onLanguageChange }) {
   const translate = t || ((key) => key)
+  const copy = REPORT_COPY[language] || REPORT_COPY.en
   const [report, setReport] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -219,6 +393,10 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
   const consensus = report?.metrics?.consensus || []
   const polarizing = report?.metrics?.polarizing || []
   const stats = report?.stats || {}
+  const reportTexts = useMemo(() => collectReportTexts(report), [report])
+  const { translateText: translateReportText } = useTextTranslations(reportTexts, language, {
+    enabled: Boolean(reportTexts.length && language),
+  })
   const activitySeries = useMemo(() => combineActivitySeries(stats), [stats])
   const activityData = useMemo(
     () => ({
@@ -296,37 +474,38 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
       <header className="public-report__header public-dashboard__hero">
         <div className="public-dashboard__hero-copy">
           <div className="public-dashboard__hero-meta">
-            <span className="pill">Live public dashboard</span>
+            <span className="pill">{copy.liveDashboard}</span>
             <span className="public-dashboard__live-dot">
               <span className="public-dashboard__live-pulse" />
-              Refreshing every 30s
+              {copy.refreshing}
             </span>
           </div>
-          <h2>{report?.name || 'Survey summary'}</h2>
-          <p>
-            Public view of live survey participation, trend signals, consensus areas, and points of
-            disagreement.
-          </p>
+          <h2>{translateReportText(report?.name, copy.surveySummary) || copy.surveySummary}</h2>
+          <p>{copy.heroDescription}</p>
         </div>
         <div className="public-dashboard__hero-side">
           <HeroStamp
-            label="Last refresh"
+            label={copy.lastRefresh}
             value={formatTimestamp(lastRefreshAt || report?.generated_at)}
           />
           <HeroStamp
-            label="Participation"
+            label={copy.participation}
             value={formatPercent(participationRate)}
-            detail="Visitors who became voters"
+            detail={copy.visitorsToVoters}
           />
           <HeroStamp
-            label="Largest cluster"
-            value={largestCluster ? `${largestCluster.cluster_id}` : 'Live'}
-            detail={largestCluster ? `${largestCluster.size} participants` : 'Waiting for data'}
+            label={copy.largestCluster}
+            value={largestCluster ? `${largestCluster.cluster_id}` : copy.live}
+            detail={
+              largestCluster
+                ? `${largestCluster.size} ${copy.participants}`
+                : copy.waitingForData
+            }
           />
           <HeroStamp
-            label="Conversation"
-            value={report?.conversation_id?.slice(0, 8) || 'Live'}
-            detail={`${consensus.length + polarizing.length} highlighted statements`}
+            label={copy.conversation}
+            value={report?.conversation_id?.slice(0, 8) || copy.live}
+            detail={`${consensus.length + polarizing.length} ${copy.highlightedStatements}`}
           />
         </div>
       </header>
@@ -341,27 +520,28 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
         <div className="stack report-stack public-dashboard__stack">
           <div className="public-dashboard__metrics">
             <MetricCard
-              label="Views"
-              value={formatCompactNumber(stats.views)}
-              detail="Survey page visits"
+              label={copy.views}
+              value={formatCompactNumber(stats.views, language)}
+              detail={copy.surveyVisits}
               tone="sky"
             />
             <MetricCard
-              label="Participants"
-              value={formatCompactNumber(stats.voters)}
-              detail="People who cast votes"
+              label={copy.participantsLabel}
+              value={formatCompactNumber(stats.voters, language)}
+              detail={copy.peopleWhoVoted}
               tone="blue"
             />
             <MetricCard
-              label="Comments"
-              value={formatCompactNumber(stats.comments)}
-              detail={`${formatCompactNumber(stats.commenters)} unique commenters`}
+              label={copy.comments}
+              value={formatCompactNumber(stats.comments, language)}
+              detail={`${formatCompactNumber(stats.commenters, language)} ${copy.uniqueCommenters}`}
               tone="amber"
             />
             <MetricCard
-              label="Vote depth"
+              label={copy.voteDepth}
               value={stats.votes_per_participant ?? 0}
-              detail={`${formatCompactNumber(stats.votes)} total votes`}
+              detail={`${formatCompactNumber(stats.votes, language)} ${copy.totalVotes}`}
+              hint={copy.voteDepthHint}
               tone="violet"
             />
           </div>
@@ -370,10 +550,10 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--trend">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Participation trend</h3>
-                  <p className="muted">Traffic, voting, and comment activity over time.</p>
+                  <h3>{copy.participationTrend}</h3>
+                  <p className="muted">{copy.participationTrendHint}</p>
                 </div>
-                <div className="pill">Live series</div>
+                <div className="pill">{copy.liveSeries}</div>
               </div>
               <div className="public-dashboard__chart public-dashboard__chart--lg">
                 <Line data={activityData} options={activityChartOptions} />
@@ -383,8 +563,8 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--snapshot">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Engagement snapshot</h3>
-                  <p className="muted">How many visitors become participants and commenters.</p>
+                  <h3>{copy.engagementSnapshot}</h3>
+                  <p className="muted">{copy.engagementSnapshotHint}</p>
                 </div>
               </div>
               <div className="public-dashboard__mini-meters">
@@ -394,7 +574,7 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
                   </div>
                   <div className="public-dashboard__mini-meter-meta">
                     <strong>{formatPercent(participationRate)}</strong>
-                    <span className="muted">View to voter conversion</span>
+                    <span className="muted">{copy.viewToVoter}</span>
                   </div>
                 </div>
                 <div className="public-dashboard__mini-meter">
@@ -403,30 +583,32 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
                   </div>
                   <div className="public-dashboard__mini-meter-meta">
                     <strong>{formatPercent(commentRate)}</strong>
-                    <span className="muted">Voter to commenter conversion</span>
+                    <span className="muted">{copy.voterToCommenter}</span>
                   </div>
                 </div>
               </div>
               <div className="public-dashboard__key-points">
-                <h4>Potential agreements</h4>
+                <h4>{copy.potentialAgreements}</h4>
                 {report?.potential_agreements?.length ? (
                   <ul className="report-list">
                     {report.potential_agreements.slice(0, 5).map((item) => (
-                      <li key={item}>{item}</li>
+                      <li key={item}>{translateReportText(item)}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="muted">No standout bridge statements yet.</p>
+                  <p className="muted">{copy.noBridgeStatements}</p>
                 )}
               </div>
               <div className="public-dashboard__snapshot-notes">
                 <div className="public-dashboard__snapshot-note">
-                  <span>Most agreed</span>
-                  <strong>{topConsensus?.text || 'Waiting for stronger consensus'}</strong>
+                  <span>{copy.mostAgreed}</span>
+                  <strong>
+                    {translateReportText(topConsensus?.text, copy.waitingConsensus) || copy.waitingConsensus}
+                  </strong>
                 </div>
                 <div className="public-dashboard__snapshot-note">
-                  <span>Most contested</span>
-                  <strong>{topPolarizing?.text || 'No major split yet'}</strong>
+                  <span>{copy.mostContested}</span>
+                  <strong>{translateReportText(topPolarizing?.text, copy.noMajorSplit) || copy.noMajorSplit}</strong>
                 </div>
               </div>
             </div>
@@ -434,8 +616,8 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--relationships">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Cluster relationships</h3>
-                  <p className="muted">Negative values signal stronger disagreement between groups.</p>
+                  <h3>{copy.clusterRelationships}</h3>
+                  <p className="muted">{copy.clusterRelationshipsHint}</p>
                 </div>
               </div>
               <div className="public-dashboard__similarity-list">
@@ -447,7 +629,9 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
                         <strong>
                           {item.cluster_a} vs {item.cluster_b}
                         </strong>
-                        <span className="muted">{Number(item.similarity || 0).toFixed(2)} similarity</span>
+                        <span className="muted">
+                          {Number(item.similarity || 0).toFixed(2)} {copy.similarity}
+                        </span>
                       </div>
                       <div className="public-dashboard__similarity-bar">
                         <span style={{ width: `${Math.max(intensity, 8)}%` }} />
@@ -458,19 +642,19 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
               </div>
               <div className="public-dashboard__activity-footer">
                 <div>
-                  <span>Latest view spike</span>
+                  <span>{copy.latestViewSpike}</span>
                   <strong>
                     {latestViewsEntry
                       ? `${normalizeDateLabel(latestViewsEntry.date)} · ${latestViewsEntry.count}`
-                      : 'No view trend yet'}
+                      : copy.noViewTrend}
                   </strong>
                 </div>
                 <div>
-                  <span>Latest vote spike</span>
+                  <span>{copy.latestVoteSpike}</span>
                   <strong>
                     {latestVotesEntry
                       ? `${normalizeDateLabel(latestVotesEntry.date)} · ${latestVotesEntry.count}`
-                      : 'No vote trend yet'}
+                      : copy.noVoteTrend}
                   </strong>
                 </div>
               </div>
@@ -479,8 +663,8 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--sizes">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Cluster sizes</h3>
-                  <p className="muted">Relative size of opinion groups in the survey.</p>
+                  <h3>{copy.clusterSizes}</h3>
+                  <p className="muted">{copy.clusterSizesHint}</p>
                 </div>
               </div>
               <div className="public-dashboard__chart">
@@ -491,18 +675,24 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--section">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Consensus leaders</h3>
-                  <p className="muted">Statements that attracted the broadest agreement.</p>
+                  <h3>{copy.consensusLeaders}</h3>
+                  <p className="muted">{copy.consensusLeadersHint}</p>
                 </div>
-                <div className="pill pill--success">{consensus.length} ranked</div>
+                <div className="pill pill--success">{consensus.length} {copy.ranked}</div>
               </div>
               <div className="public-dashboard__statement-grid">
                 {consensus.length ? (
                   consensus.slice(0, 2).map((item) => (
-                    <StatementCard key={item.id} item={item} tone="consensus" />
+                    <StatementCard
+                      key={item.id}
+                      item={item}
+                      tone="consensus"
+                      copy={copy}
+                      translateReportText={translateReportText}
+                    />
                   ))
                 ) : (
-                  <p className="muted">No consensus statements yet.</p>
+                  <p className="muted">{copy.noConsensus}</p>
                 )}
               </div>
             </div>
@@ -510,18 +700,24 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--section">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Debate hotspots</h3>
-                  <p className="muted">Statements where participants are most split.</p>
+                  <h3>{copy.debateHotspots}</h3>
+                  <p className="muted">{copy.debateHotspotsHint}</p>
                 </div>
-                <div className="pill pill--warning">{polarizing.length} hotspots</div>
+                <div className="pill pill--warning">{polarizing.length} {copy.hotspots}</div>
               </div>
               <div className="public-dashboard__statement-grid">
                 {polarizing.length ? (
                   polarizing.slice(0, 2).map((item) => (
-                    <StatementCard key={item.id} item={item} tone="polarizing" />
+                    <StatementCard
+                      key={item.id}
+                      item={item}
+                      tone="polarizing"
+                      copy={copy}
+                      translateReportText={translateReportText}
+                    />
                   ))
                 ) : (
-                  <p className="muted">No polarizing statements yet.</p>
+                  <p className="muted">{copy.noHotspots}</p>
                 )}
               </div>
             </div>
@@ -529,8 +725,8 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
             <div className="module-card public-dashboard__card public-dashboard__card--full">
               <div className="public-dashboard__section-head">
                 <div>
-                  <h3>Opinion clusters</h3>
-                  <p className="muted">Top agreement and disagreement signals by cluster.</p>
+                  <h3>{copy.opinionClusters}</h3>
+                  <p className="muted">{copy.opinionClustersHint}</p>
                 </div>
               </div>
               <div className="public-dashboard__cluster-grid">
@@ -541,27 +737,31 @@ export function DeliberationPublicReport({ shareId, t, language, languages, onLa
                       <span className="pill">{cluster.size} participants</span>
                     </div>
                     <div>
-                      <span className="public-dashboard__list-label">Top agree</span>
+                      <span className="public-dashboard__list-label">{copy.topAgree}</span>
                       {cluster.top_agree?.length ? (
                         <ul className="report-list">
                           {cluster.top_agree.slice(0, 3).map((item) => (
-                            <li key={`${cluster.cluster_id}-agree-${item}`}>{item}</li>
+                            <li key={`${cluster.cluster_id}-agree-${item}`}>
+                              {translateReportText(item)}
+                            </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="muted">No standout agreement yet.</p>
+                        <p className="muted">{copy.noAgree}</p>
                       )}
                     </div>
                     <div>
-                      <span className="public-dashboard__list-label">Top disagree</span>
+                      <span className="public-dashboard__list-label">{copy.topDisagree}</span>
                       {cluster.top_disagree?.length ? (
                         <ul className="report-list">
                           {cluster.top_disagree.slice(0, 3).map((item) => (
-                            <li key={`${cluster.cluster_id}-disagree-${item}`}>{item}</li>
+                            <li key={`${cluster.cluster_id}-disagree-${item}`}>
+                              {translateReportText(item)}
+                            </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="muted">No standout disagreement yet.</p>
+                        <p className="muted">{copy.noDisagree}</p>
                       )}
                     </div>
                   </article>

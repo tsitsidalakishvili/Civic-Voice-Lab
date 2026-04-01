@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Checkbox, MultiSelect, Select, TextInput } from '@mantine/core'
 import { getJson, requestJson } from '../services/api'
+import { useTextTranslations } from '../hooks/useTextTranslations'
 import { Field, FormSection, LanguageSelect, StatusMessage } from '../ui'
 
 const toYouTubeEmbedUrl = (rawUrl) => {
@@ -86,12 +87,17 @@ export function PublicSupporterSignup({
   onLanguageChange,
 }) {
   const translate = t || ((key) => key)
+  const getInitialSupporterType = () => {
+    if (typeof window === 'undefined') return 'Supporter'
+    const raw = new URLSearchParams(window.location.search).get('supporter_type') || ''
+    return raw.toLowerCase().includes('member') ? 'Member' : 'Supporter'
+  }
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    supporterType: 'Supporter',
+    supporterType: getInitialSupporterType(),
     gender: '',
     age: '',
     timeAvailability: 'Unspecified',
@@ -178,6 +184,15 @@ export function PublicSupporterSignup({
         isFallback: true,
       })),
     [translate],
+  )
+  const recommendedConversationTexts = useMemo(
+    () => recommendedConversations.map((conversation) => conversation?.topic || ''),
+    [recommendedConversations],
+  )
+  const { translateText: translateConversationText } = useTextTranslations(
+    recommendedConversationTexts,
+    language,
+    { enabled: Boolean(recommendedConversationTexts.length && language) },
   )
   const buildConversationLink = (conversationId) => {
     if (!conversationId || typeof window === 'undefined') return ''
@@ -578,12 +593,20 @@ export function PublicSupporterSignup({
                             target="_blank"
                             rel="noreferrer"
                           >
-                            {conversation.topic ||
+                            {translateConversationText(
+                              conversation.topic,
+                              translate('supporter.signup.success.conversationFallback'),
+                            )
+                            ||
                               translate('supporter.signup.success.conversationFallback')}
                           </a>
                         ) : (
                           <span className="supporter-thankyou-card__topic-link">
-                            {conversation.topic ||
+                            {translateConversationText(
+                              conversation.topic,
+                              translate('supporter.signup.success.conversationFallback'),
+                            )
+                            ||
                               translate('supporter.signup.success.conversationFallback')}
                           </span>
                         )}

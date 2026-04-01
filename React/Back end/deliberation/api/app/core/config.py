@@ -33,6 +33,7 @@ DEFAULT_AUTH_PUBLIC_RULES = (
     "*:/openapi.json",
     "*:/redoc",
     "*:/platform/auth/status",
+    "POST:/platform/translate",
     "GET:/reports/public/*",
     "GET:/crm/events/detail",
     "POST:/crm/events/*/register",
@@ -63,6 +64,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw in TRUTHY
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.getenv(name, "")).strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _split_csv(value: str | None) -> tuple[str, ...]:
     if not value:
         return ()
@@ -80,6 +91,12 @@ class Settings:
     auth_api_key: str
     auth_header_name: str
     auth_public_rules: tuple[str, ...]
+    translation_enabled: bool
+    translation_en_ka_model: str
+    translation_ka_en_model: str
+    translation_worker_url: str
+    translation_max_texts: int
+    translation_max_chars: int
 
     @property
     def auth_secret_configured(self) -> bool:
@@ -112,4 +129,25 @@ def get_settings() -> Settings:
         auth_header_name=str(os.getenv("FS_AUTH_HEADER_NAME", "X-FS-API-Key")).strip()
         or "X-FS-API-Key",
         auth_public_rules=auth_public_rules,
+        translation_enabled=_env_bool("FS_TRANSLATION_ENABLED", default=True),
+        translation_en_ka_model=str(
+            os.getenv(
+                "FS_TRANSLATION_EN_KA_MODEL",
+                "Helsinki-NLP/opus-mt-synthetic-en-ka",
+            )
+        ).strip()
+        or "Helsinki-NLP/opus-mt-synthetic-en-ka",
+        translation_ka_en_model=str(
+            os.getenv(
+                "FS_TRANSLATION_KA_EN_MODEL",
+                "Helsinki-NLP/opus-mt-ka-en",
+            )
+        ).strip()
+        or "Helsinki-NLP/opus-mt-ka-en",
+        translation_worker_url=str(
+            os.getenv("FS_TRANSLATION_WORKER_URL", "http://127.0.0.1:8011")
+        ).strip()
+        or "http://127.0.0.1:8011",
+        translation_max_texts=max(1, _env_int("FS_TRANSLATION_MAX_TEXTS", 64)),
+        translation_max_chars=max(120, _env_int("FS_TRANSLATION_MAX_CHARS", 2200)),
     )

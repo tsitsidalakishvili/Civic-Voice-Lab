@@ -345,6 +345,7 @@ export function DeliberationPage({
   const [slackChannelMode, setSlackChannelMode] = useState('default')
   const [slackChannelValue, setSlackChannelValue] = useState('')
   const [sendingSlack, setSendingSlack] = useState(false)
+  const [shareAudience, setShareAudience] = useState('verified')
   const [whatsappGroups, setWhatsappGroups] = useState([])
   const [whatsappGroupId, setWhatsappGroupId] = useState('')
   const [whatsappMessage, setWhatsappMessage] = useState('')
@@ -969,6 +970,39 @@ export function DeliberationPage({
     () => buildQuestionnaireLink('deliberation', 'participant'),
     [activeId, language],
   )
+  const getShareAudienceLabel = (audience) => {
+    if (audience === 'unverified') return 'Unverified users'
+    if (audience === 'registered') return 'Registered users'
+    return 'Verified users'
+  }
+  const audienceQuestionnaireLink = useMemo(() => {
+    if (!questionnaireLink) return ''
+    try {
+      const url = new URL(questionnaireLink)
+      url.searchParams.set('audience', shareAudience)
+      return url.toString()
+    } catch {
+      return questionnaireLink
+    }
+  }, [questionnaireLink, shareAudience])
+  const verifiedQuestionnaireLink = useMemo(() => {
+    if (!questionnaireLink) return ''
+    const url = new URL(questionnaireLink)
+    url.searchParams.set('audience', 'verified')
+    return url.toString()
+  }, [questionnaireLink])
+  const unverifiedQuestionnaireLink = useMemo(() => {
+    if (!questionnaireLink) return ''
+    const url = new URL(questionnaireLink)
+    url.searchParams.set('audience', 'unverified')
+    return url.toString()
+  }, [questionnaireLink])
+  const registeredQuestionnaireLink = useMemo(() => {
+    if (!questionnaireLink) return ''
+    const url = new URL(questionnaireLink)
+    url.searchParams.set('audience', 'registered')
+    return url.toString()
+  }, [questionnaireLink])
 
   const adminQuestionnaireLink = useMemo(
     () => buildQuestionnaireLink('deliberation_admin', 'admin'),
@@ -996,24 +1030,24 @@ export function DeliberationPage({
   }, [activeId, language])
 
   useEffect(() => {
-    if (!activeId || !questionnaireLink) {
+    if (!activeId || !audienceQuestionnaireLink) {
       setSlackMessage('')
       setWhatsappMessage('')
       return
     }
-    const message = `Survey questionnaire: ${
+    const message = `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
       activeConvo?.topic || 'Conversation'
-    }\n\n${questionnaireLink}`
+    }\n\n${audienceQuestionnaireLink}`
     setSlackMessage(message)
     setWhatsappMessage(message)
     setSlackStatus('')
     setSlackError('')
     setWhatsappStatus('')
     setWhatsappError('')
-  }, [activeId, questionnaireLink, activeConvo?.topic])
+  }, [activeId, audienceQuestionnaireLink, activeConvo?.topic, shareAudience])
 
   const handleSendSlack = async () => {
-    if (!questionnaireLink) {
+    if (!audienceQuestionnaireLink) {
       setSlackError('Select a conversation first.')
       return
     }
@@ -1023,7 +1057,9 @@ export function DeliberationPage({
     }
     const message =
       slackMessage ||
-      `Survey questionnaire: ${activeConvo?.topic || 'Conversation'}\n\n${questionnaireLink}`
+      `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
+        activeConvo?.topic || 'Conversation'
+      }\n\n${audienceQuestionnaireLink}`
     setSlackError('')
     setSlackStatus('')
     setSendingSlack(true)
@@ -1045,7 +1081,7 @@ export function DeliberationPage({
   }
 
   const handleSendWhatsapp = async () => {
-    if (!questionnaireLink) {
+    if (!audienceQuestionnaireLink) {
       setWhatsappError('Select a conversation first.')
       return
     }
@@ -1055,7 +1091,9 @@ export function DeliberationPage({
     }
     const message =
       whatsappMessage ||
-      `Survey questionnaire: ${activeConvo?.topic || 'Conversation'}\n\n${questionnaireLink}`
+      `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
+        activeConvo?.topic || 'Conversation'
+      }\n\n${audienceQuestionnaireLink}`
     setWhatsappError('')
     setWhatsappStatus('')
     setSendingWhatsapp(true)
@@ -2831,14 +2869,24 @@ export function DeliberationPage({
             <>
               <div className="module-card module-card__wide">
                 <h3>Share survey link</h3>
-                <p className="muted">This link opens the swipe experience.</p>
+                <p className="muted">Choose audience and send the matching survey link.</p>
                 {questionnaireLink ? (
                   <div className="stack">
-                    <input className="input" value={questionnaireLink} readOnly />
+                    <label className="label">Audience</label>
+                    <select
+                      className="select"
+                      value={shareAudience}
+                      onChange={(event) => setShareAudience(event.target.value)}
+                    >
+                      <option value="verified">Verified users</option>
+                      <option value="unverified">Unverified users</option>
+                      <option value="registered">Registered users</option>
+                    </select>
+                    <input className="input" value={audienceQuestionnaireLink} readOnly />
                     <div className="filter-row">
                       <a
                         className="button"
-                        href={questionnaireLink}
+                        href={audienceQuestionnaireLink}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -2847,7 +2895,7 @@ export function DeliberationPage({
                       <button
                         className="button-secondary"
                         type="button"
-                        onClick={() => handleCopy(questionnaireLink, 'Participant link')}
+                        onClick={() => handleCopy(audienceQuestionnaireLink, 'Participant link')}
                       >
                         Copy link
                       </button>
@@ -2858,6 +2906,41 @@ export function DeliberationPage({
                       >
                         Edit setup
                       </button>
+                    </div>
+                    <div className="stack">
+                      <div className="metric-row">
+                        <span>Verified users</span>
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() => handleCopy(verifiedQuestionnaireLink, 'Verified audience link')}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <input className="input" value={verifiedQuestionnaireLink} readOnly />
+                      <div className="metric-row">
+                        <span>Unverified users</span>
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() => handleCopy(unverifiedQuestionnaireLink, 'Unverified audience link')}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <input className="input" value={unverifiedQuestionnaireLink} readOnly />
+                      <div className="metric-row">
+                        <span>Registered users</span>
+                        <button
+                          className="button-secondary button-secondary--small"
+                          type="button"
+                          onClick={() => handleCopy(registeredQuestionnaireLink, 'Registered audience link')}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <input className="input" value={registeredQuestionnaireLink} readOnly />
                     </div>
                   </div>
                 ) : (
@@ -2901,7 +2984,7 @@ export function DeliberationPage({
                       className="button"
                       type="button"
                       onClick={handleSendSlack}
-                      disabled={sendingSlack || !questionnaireLink}
+                      disabled={sendingSlack || !audienceQuestionnaireLink}
                     >
                       {sendingSlack ? 'Sending…' : 'Send to Slack'}
                     </button>
@@ -2938,7 +3021,7 @@ export function DeliberationPage({
                       className="button"
                       type="button"
                       onClick={handleSendWhatsapp}
-                      disabled={sendingWhatsapp || !questionnaireLink}
+                      disabled={sendingWhatsapp || !audienceQuestionnaireLink}
                     >
                       {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
                     </button>

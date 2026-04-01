@@ -10,3 +10,6 @@ reportlab
 requests
 PyPDF2
 beautifulsoup4
+torch
+transformers
+sentencepiece
