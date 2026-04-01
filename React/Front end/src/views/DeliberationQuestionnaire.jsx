@@ -69,6 +69,30 @@ export function DeliberationQuestionnaire({
     }),
     [inviteCode, participantId],
   )
+  const buildPublicReportLink = useCallback(
+    (shareId) => {
+      if (!shareId || typeof window === 'undefined') return ''
+      const origin = window.location.origin
+      const currentPath = window.location.pathname || '/'
+      const cleanPath = currentPath.replace(/\/index\.html$/, '/')
+      const basePath = cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`
+      const url = new URL(basePath, origin)
+      url.searchParams.set('report_share', shareId)
+      if (language) url.searchParams.set('lang', language)
+      return url.toString()
+    },
+    [language],
+  )
+  const reportShareId =
+    conversation?.report_share_id ||
+    conversation?.reportShareId ||
+    conversation?.report_share ||
+    conversation?.reportShare ||
+    ''
+  const publicReportLink = useMemo(
+    () => buildPublicReportLink(reportShareId),
+    [buildPublicReportLink, reportShareId],
+  )
 
   useEffect(() => {
     votedIdsRef.current = votedIds
@@ -634,6 +658,18 @@ export function DeliberationQuestionnaire({
                 <div className="questionnaire-card questionnaire-card--empty">
                   <h3>{translate('questionnaire.doneTitle')}</h3>
                   <p className="muted">{translate('questionnaire.doneBody')}</p>
+                  {publicReportLink ? (
+                    <div className="filter-row">
+                      <a
+                        className="button-secondary"
+                        href={publicReportLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {translate('questionnaire.viewResults')}
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>

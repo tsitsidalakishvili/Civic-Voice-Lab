@@ -4,7 +4,7 @@ import {
   requestForm,
   requestJson,
 } from '../../services/api'
-import { CivicStatGrid, ModuleFlow, PageHeader } from '../../ui'
+import { CivicStatGrid, PageHeader } from '../../ui'
 import { IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
 import {
@@ -91,11 +91,40 @@ const renderTemplate = (template, context) => {
   return template.replace(/\{(\w+)\}/g, (_, key) => context?.[key] ?? '')
 }
 
+const toYouTubeEmbedUrl = (rawUrl) => {
+  const value = String(rawUrl || '').trim()
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    const host = url.hostname.toLowerCase()
+    if (host.includes('youtube.com')) {
+      if (url.pathname === '/watch') {
+        const videoId = url.searchParams.get('v')
+        return videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+      }
+      if (url.pathname.startsWith('/embed/')) {
+        return value
+      }
+      if (url.pathname.startsWith('/shorts/')) {
+        const videoId = url.pathname.split('/').filter(Boolean)[1]
+        return videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+      }
+    }
+    if (host.includes('youtu.be')) {
+      const videoId = url.pathname.replace('/', '').trim()
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+    }
+  } catch (error) {
+    return ''
+  }
+  return ''
+}
+
 const CRM_TAB_STORAGE_KEY = 'fs.crm.activeTab'
 const CRM_DEFAULT_TAB = 'overview'
 const CRM_TASKS_ENABLED = false
 const CRM_PRIMARY_TABS = new Set(
-  ['overview', 'people', 'outreach', CRM_TASKS_ENABLED ? 'tasks' : null].filter(Boolean),
+  ['overview', 'intake', 'people', 'outreach', CRM_TASKS_ENABLED ? 'tasks' : null].filter(Boolean),
 )
 
 const normalizeCrmTab = (tabId) => {
@@ -133,6 +162,24 @@ export function CRMPage({
     return normalizeCrmTab(stored)
   })
   const [selectedEmail, setSelectedEmail] = useState('')
+  const [supporterInviteStats, setSupporterInviteStats] = useState(null)
+  const [supporterInvites, setSupporterInvites] = useState([])
+  const [supporterInviteLoading, setSupporterInviteLoading] = useState(false)
+  const [supporterInviteError, setSupporterInviteError] = useState('')
+  const [supporterInviteStatus, setSupporterInviteStatus] = useState('')
+  const [supporterReminderSendingCode, setSupporterReminderSendingCode] = useState('')
+  const [supporterSignupVideoUrl, setSupporterSignupVideoUrl] = useState('')
+  const [supporterThankYouVideoUrl, setSupporterThankYouVideoUrl] = useState('')
+  const [supporterSignupVideoSaving, setSupporterSignupVideoSaving] = useState(false)
+  const [supporterInviteForm, setSupporterInviteForm] = useState({
+    recipientName: '',
+    recipientEmail: '',
+    recipientPhone: '',
+    channel: 'manual',
+    supporterType: 'Supporter',
+    notes: '',
+  })
+  const [latestSupporterInviteLink, setLatestSupporterInviteLink] = useState('')
 
   const normalizeTab = (tabId) => {
     return normalizeCrmTab(tabId)
@@ -278,6 +325,21 @@ export function CRMPage({
     return params.toString()
   }, [peopleGroup, peopleQuery])
 
+  const supporterSignupBaseLink = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const url = new URL(window.location.pathname || '/', window.location.origin)
+    url.searchParams.set('supporter_signup', '1')
+    return url.toString()
+  }, [])
+  const supporterSignupVideoEmbedUrl = useMemo(
+    () => toYouTubeEmbedUrl(supporterSignupVideoUrl),
+    [supporterSignupVideoUrl],
+  )
+  const supporterThankYouVideoEmbedUrl = useMemo(
+    () => toYouTubeEmbedUrl(supporterThankYouVideoUrl),
+    [supporterThankYouVideoUrl],
+  )
+
   const furrySearchParams = useMemo(() => {
     const params = new URLSearchParams()
     if (furrySpecies !== 'All') {
@@ -344,9 +406,49 @@ export function CRMPage({
       })
   }
 
+  const buildSupporterInviteLink = (inviteCode) => {
+    if (!supporterSignupBaseLink) return ''
+    const url = new URL(supporterSignupBaseLink)
+    if (inviteCode) {
+      url.searchParams.set('invite_code', inviteCode)
+    }
+    return url.toString()
+  }
+
+  const buildSupporterReminderMessage = (invite) => {
+    const name = invite?.recipientName || 'there'
+    const link = buildSupporterInviteLink(invite?.inviteCode || '')
+    return `Hi ${name}, just a reminder to complete your supporter/member registration:\n${link}`
+  }
+
+  const loadSupporterInvites = () => {
+    setSupporterInviteLoading(true)
+    setSupporterInviteError('')
+    Promise.all([
+      getJson('/crm/supporter-invites/stats'),
+      getJson('/crm/supporter-invites?limit=50'),
+      getJson('/crm/supporter-signup-config'),
+    ])
+      .then(([statsPayload, invitesPayload, configPayload]) => {
+        setSupporterInviteStats(statsPayload || null)
+        setSupporterInvites(Array.isArray(invitesPayload) ? invitesPayload : [])
+        setSupporterSignupVideoUrl(configPayload?.welcomeVideoUrl || '')
+        setSupporterThankYouVideoUrl(configPayload?.thankYouVideoUrl || '')
+      })
+      .catch((err) => {
+        setSupporterInviteError(err.message || 'Unable to load supporter invite metrics.')
+      })
+      .finally(() => {
+        setSupporterInviteLoading(false)
+      })
+  }
+
   useEffect(() => {
-    if (activeTab !== 'people') return
-    loadPeople()
+    if (activeTab !== 'people' && activeTab !== 'intake') return
+    if (activeTab === 'people') {
+      loadPeople()
+    }
+    loadSupporterInvites()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, peopleGroup])
   const parseNumber = (value) => {
@@ -433,6 +535,108 @@ export function CRMPage({
   const handlePeopleSearch = (event) => {
     event.preventDefault()
     loadPeople()
+  }
+
+  const handleCreateSupporterInvite = async (event) => {
+    event.preventDefault()
+    setSupporterInviteError('')
+    setSupporterInviteStatus('')
+    try {
+      const payload = await requestJson('/crm/supporter-invites', {
+        method: 'POST',
+        payload: {
+          recipientName: supporterInviteForm.recipientName.trim(),
+          recipientEmail: supporterInviteForm.recipientEmail.trim(),
+          recipientPhone: supporterInviteForm.recipientPhone.trim(),
+          channel: supporterInviteForm.channel,
+          supporterType: supporterInviteForm.supporterType,
+          notes: supporterInviteForm.notes.trim(),
+        },
+      })
+      const link = buildSupporterInviteLink(payload?.inviteCode || '')
+      setLatestSupporterInviteLink(link)
+      setSupporterInviteStatus('Invite link created.')
+      setSupporterInviteForm((prev) => ({
+        ...prev,
+        recipientName: '',
+        recipientEmail: '',
+        recipientPhone: '',
+        notes: '',
+      }))
+      loadSupporterInvites()
+    } catch (err) {
+      setSupporterInviteError(err.message || 'Unable to create supporter invite.')
+    }
+  }
+
+  const handleCopySupporterInviteLink = async (value) => {
+    if (!value) return
+    setSupporterInviteStatus('')
+    if (!navigator?.clipboard) {
+      setSupporterInviteError('Clipboard unavailable in this browser.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      setSupporterInviteStatus('Link copied.')
+    } catch (err) {
+      setSupporterInviteError('Unable to copy invite link.')
+    }
+  }
+
+  const handleSaveSupporterSignupVideo = async () => {
+    setSupporterInviteError('')
+    setSupporterInviteStatus('')
+    const trimmedWelcome = supporterSignupVideoUrl.trim()
+    const trimmedThankYou = supporterThankYouVideoUrl.trim()
+    if (trimmedWelcome && !toYouTubeEmbedUrl(trimmedWelcome)) {
+      setSupporterInviteError('Please add a valid YouTube link.')
+      return
+    }
+    if (trimmedThankYou && !toYouTubeEmbedUrl(trimmedThankYou)) {
+      setSupporterInviteError('Please add a valid YouTube link.')
+      return
+    }
+    setSupporterSignupVideoSaving(true)
+    try {
+      await requestJson('/crm/supporter-signup-config', {
+        method: 'PATCH',
+        payload: { welcomeVideoUrl: trimmedWelcome, thankYouVideoUrl: trimmedThankYou },
+      })
+      setSupporterInviteStatus('Signup videos updated.')
+    } catch (err) {
+      setSupporterInviteError(err.message || 'Unable to save signup videos.')
+    } finally {
+      setSupporterSignupVideoSaving(false)
+    }
+  }
+
+  const handleSendSupporterReminder = async (invite) => {
+    if (!invite?.inviteCode) return
+    setSupporterInviteError('')
+    setSupporterInviteStatus('')
+    setSupporterReminderSendingCode(invite.inviteCode)
+    try {
+      await requestJson(`/crm/supporter-invites/${encodeURIComponent(invite.inviteCode)}/remind`, {
+        method: 'POST',
+        payload: {
+          channel: invite.channel || 'manual',
+          note: 'Manual reminder sent from People directory.',
+        },
+      })
+      const reminderText = buildSupporterReminderMessage(invite)
+      if (navigator?.clipboard) {
+        await navigator.clipboard.writeText(reminderText)
+        setSupporterInviteStatus('Reminder logged and message copied.')
+      } else {
+        setSupporterInviteStatus('Reminder logged.')
+      }
+      loadSupporterInvites()
+    } catch (err) {
+      setSupporterInviteError(err.message || 'Unable to send reminder.')
+    } finally {
+      setSupporterReminderSendingCode('')
+    }
   }
 
   const loadProfile = (email) => {
@@ -1116,7 +1320,7 @@ export function CRMPage({
   const crmPulseStats = useMemo(
     () => [
       {
-        label: 'Network size',
+        label: 'Total people',
         value: summary?.total_people ?? people.length ?? '—',
         icon: <IconUsers size={18} />,
         badge: 'Active',
@@ -1126,6 +1330,12 @@ export function CRMPage({
         value: summary?.supporters ?? '—',
         icon: <IconUsers size={18} />,
         note: 'Community reach',
+      },
+      {
+        label: 'Members',
+        value: summary?.members ?? '—',
+        icon: <IconUsers size={18} />,
+        note: 'Core base',
       },
       {
         label: 'Segments',
@@ -1163,6 +1373,7 @@ export function CRMPage({
         <div className="subtabs">
           {[
             { id: 'overview', label: 'Overview' },
+            { id: 'intake', label: 'New supporters/members' },
             { id: 'people', label: 'People directory' },
             { id: 'outreach', label: 'Outreach & events' },
             CRM_TASKS_ENABLED ? { id: 'tasks', label: 'Task board' } : null,
@@ -1179,7 +1390,7 @@ export function CRMPage({
         </div>
       ) : null}
 
-      {activeTab === 'overview' && <CRMOverviewTab onNavigate={applyActiveTab} />}
+      {activeTab === 'overview' && <CRMOverviewTab />}
 
       {activeTab === 'people' && (
         <div className="stack">
@@ -1400,6 +1611,7 @@ export function CRMPage({
                 </div>
               )}
               </div>
+
             </div>
           </div>
         </div>
@@ -1407,6 +1619,260 @@ export function CRMPage({
           <CRMVolunteersTab />
         </div>
       </div>
+      )}
+
+      {activeTab === 'intake' && (
+        <div className="stack">
+          <div className="module-card module-card__wide">
+            <h3>New supporters & members</h3>
+            <p className="muted">
+              Start by generating an invite link. The same full form is available below as an example.
+            </p>
+          </div>
+          <div className="module-card module-card__wide panel">
+            <div className="card-header">
+              <div>
+                <h3>Invite links & conversion tracking</h3>
+                <p className="muted">
+                  Send supporter/member signup links, manage reminders, and track conversion.
+                </p>
+              </div>
+              <div className="pill">Intake</div>
+            </div>
+            {supporterInviteError ? <div className="module-alert">{supporterInviteError}</div> : null}
+            {supporterInviteStatus ? (
+              <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
+            ) : null}
+            <form className="form-grid" onSubmit={handleCreateSupporterInvite}>
+              <input
+                className="input"
+                placeholder="Recipient name"
+                value={supporterInviteForm.recipientName}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    recipientName: event.target.value,
+                  }))
+                }
+              />
+              <input
+                className="input"
+                type="email"
+                placeholder="Recipient email"
+                value={supporterInviteForm.recipientEmail}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    recipientEmail: event.target.value,
+                  }))
+                }
+              />
+              <input
+                className="input"
+                placeholder="Recipient phone"
+                value={supporterInviteForm.recipientPhone}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    recipientPhone: event.target.value,
+                  }))
+                }
+              />
+              <select
+                className="select"
+                value={supporterInviteForm.supporterType}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    supporterType: event.target.value,
+                  }))
+                }
+              >
+                <option value="Supporter">Supporter form</option>
+                <option value="Member">Member form</option>
+              </select>
+              <select
+                className="select"
+                value={supporterInviteForm.channel}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    channel: event.target.value,
+                  }))
+                }
+              >
+                <option value="manual">Manual</option>
+                <option value="email">Email</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="slack">Slack</option>
+              </select>
+              <input
+                className="input"
+                placeholder="Notes (optional)"
+                value={supporterInviteForm.notes}
+                onChange={(event) =>
+                  setSupporterInviteForm((prev) => ({
+                    ...prev,
+                    notes: event.target.value,
+                  }))
+                }
+              />
+              <div className="form-grid__full filter-row">
+                <button className="button" type="submit" disabled={supporterInviteLoading}>
+                  {supporterInviteLoading ? 'Creating…' : 'Create invite link'}
+                </button>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={loadSupporterInvites}
+                  disabled={supporterInviteLoading}
+                >
+                  Refresh conversion
+                </button>
+              </div>
+            </form>
+            <div className="stack">
+              <label className="label">Welcome video (YouTube)</label>
+              <input
+                className="input"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={supporterSignupVideoUrl}
+                onChange={(event) => setSupporterSignupVideoUrl(event.target.value)}
+              />
+              <label className="label">Thank you video (YouTube)</label>
+              <input
+                className="input"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={supporterThankYouVideoUrl}
+                onChange={(event) => setSupporterThankYouVideoUrl(event.target.value)}
+              />
+              <div className="filter-row">
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={handleSaveSupporterSignupVideo}
+                  disabled={supporterSignupVideoSaving}
+                >
+                  {supporterSignupVideoSaving ? 'Saving…' : 'Save videos'}
+                </button>
+              </div>
+              {supporterSignupVideoEmbedUrl ? (
+                <div className="card-divider">
+                  <iframe
+                    src={supporterSignupVideoEmbedUrl}
+                    title="Supporter welcome video"
+                    style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <p className="muted">Add a YouTube link to show a welcome message on the signup form.</p>
+              )}
+              {supporterThankYouVideoEmbedUrl ? (
+                <div className="card-divider">
+                  <iframe
+                    src={supporterThankYouVideoEmbedUrl}
+                    title="Supporter thank you video"
+                    style={{ width: '100%', minHeight: 260, border: 0, borderRadius: 12 }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <p className="muted">Add a second YouTube link for the post-signup thank you section.</p>
+              )}
+            </div>
+            <div className="stack">
+              <label className="label">Latest invite link</label>
+              <input
+                className="input"
+                readOnly
+                value={latestSupporterInviteLink || supporterSignupBaseLink}
+                placeholder="Invite link appears here"
+              />
+              <div className="filter-row">
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() =>
+                    handleCopySupporterInviteLink(latestSupporterInviteLink || supporterSignupBaseLink)
+                  }
+                >
+                  Copy link
+                </button>
+                <a
+                  className="button-secondary"
+                  href={latestSupporterInviteLink || supporterSignupBaseLink || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open same form
+                </a>
+              </div>
+              <div className="module-footer">
+                <span>
+                  <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
+                </span>
+                <span>
+                  <strong>Registered:</strong> {supporterInviteStats?.converted ?? 0}
+                </span>
+                <span>
+                  <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
+                </span>
+                <span>
+                  <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
+                </span>
+                <span>
+                  <strong>Conversion rate:</strong> {supporterInviteStats?.conversionRate ?? 0}%
+                </span>
+              </div>
+            </div>
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Recipient</span>
+                <span>Channel</span>
+                <span>Type</span>
+                <span>Status</span>
+                <span>Reminders</span>
+                <span>Sent</span>
+                <span>Converted</span>
+                <span>Action</span>
+              </div>
+              {supporterInvites.length === 0 && !supporterInviteLoading ? (
+                <div className="table-row empty">No supporter invites yet.</div>
+              ) : null}
+              {supporterInvites.map((invite) => (
+                <div className="table-row" key={invite.inviteId || invite.inviteCode}>
+                  <span>{invite.recipientName || invite.recipientEmail || '—'}</span>
+                  <span>{invite.channel || 'manual'}</span>
+                  <span>{invite.supporterType || 'Supporter'}</span>
+                  <span>{invite.status || 'sent'}</span>
+                  <span>{invite.reminderCount ?? 0}</span>
+                  <span>{invite.createdAt || '—'}</span>
+                  <span>{invite.convertedAt || '—'}</span>
+                  <span>
+                    <button
+                      className="button-secondary button-secondary--small"
+                      type="button"
+                      onClick={() => handleSendSupporterReminder(invite)}
+                      disabled={
+                        invite.status === 'converted' ||
+                        supporterReminderSendingCode === invite.inviteCode
+                      }
+                    >
+                      {supporterReminderSendingCode === invite.inviteCode
+                        ? 'Sending...'
+                        : invite.status === 'converted'
+                          ? 'Converted'
+                          : 'Send reminder'}
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
       {CRM_TASKS_ENABLED && activeTab === 'tasks' && (
         <div className="module-layout">
@@ -1624,8 +2090,8 @@ export function CRMPage({
               >
                 {showNewSegmentForm ? 'Close new segment' : '+ New segment'}
               </button>
-            </div>
-            <div className="module-card">
+          </div>
+              <div className="module-card">
               <h4>Selected segment details</h4>
               {!selectedSegment ? (
                 <p className="muted">No segment selected.</p>
@@ -1643,120 +2109,120 @@ export function CRMPage({
                   <span>
                     <strong>ID:</strong> {selectedSegment.segmentId || '—'}
                   </span>
-                </div>
+                  </div>
               )}
-            </div>
+                </div>
             {showNewSegmentForm ? (
-              <form className="stack" onSubmit={handleCreateSegment}>
-                <input
-                  className="input"
-                  value={segmentName}
-                  onChange={(event) => setSegmentName(event.target.value)}
+                <form className="stack" onSubmit={handleCreateSegment}>
+                  <input
+                    className="input"
+                    value={segmentName}
+                    onChange={(event) => setSegmentName(event.target.value)}
                   placeholder="Segment name"
-                />
-                <input
-                  className="input"
-                  value={segmentDescription}
-                  onChange={(event) => setSegmentDescription(event.target.value)}
+                  />
+                  <input
+                    className="input"
+                    value={segmentDescription}
+                    onChange={(event) => setSegmentDescription(event.target.value)}
                   placeholder="Description"
-                />
-                <div className="filter-row">
-                  <select
-                    className="select"
-                    value={segmentGroup}
-                    onChange={(event) => setSegmentGroup(event.target.value)}
-                  >
-                    <option value="All">All groups</option>
-                    <option value="Supporter">Supporters</option>
-                    <option value="Member">Members</option>
-                  </select>
-                  <select
-                    className="select"
-                    value={segmentTimeAvailability}
-                    onChange={(event) => setSegmentTimeAvailability(event.target.value)}
-                  >
-                    <option value="All">Any availability</option>
-                    <option value="Weekends">Weekends</option>
-                    <option value="Evenings">Evenings</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Ad-hoc">Ad-hoc</option>
-                  </select>
-                </div>
-                <div className="filter-row">
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={segmentMinEffort}
-                    onChange={(event) => setSegmentMinEffort(event.target.value)}
-                    placeholder="Min effort hours"
                   />
-                  <input
-                    className="input"
-                    value={segmentNameContains}
-                    onChange={(event) => setSegmentNameContains(event.target.value)}
-                    placeholder="Name contains"
-                  />
-                  <input
-                    className="input"
-                    value={segmentAddressContains}
-                    onChange={(event) => setSegmentAddressContains(event.target.value)}
-                    placeholder="Address contains"
-                  />
-                </div>
-                <div className="filter-row">
-                  <select
-                    className="select"
-                    multiple
-                    value={segmentTags}
-                    onChange={(event) =>
-                      setSegmentTags(
-                        Array.from(event.target.selectedOptions, (opt) => opt.value),
-                      )
-                    }
-                  >
-                    {segmentTagOptions.map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="select"
-                    multiple
-                    value={segmentSkills}
-                    onChange={(event) =>
-                      setSegmentSkills(
-                        Array.from(event.target.selectedOptions, (opt) => opt.value),
-                      )
-                    }
-                  >
-                    {segmentSkillOptions.map((skill) => (
-                      <option key={skill} value={skill}>
-                        {skill}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button className="button" type="submit">
-                  Save segment
-                </button>
-              </form>
+                  <div className="filter-row">
+                    <select
+                      className="select"
+                      value={segmentGroup}
+                      onChange={(event) => setSegmentGroup(event.target.value)}
+                    >
+                      <option value="All">All groups</option>
+                      <option value="Supporter">Supporters</option>
+                      <option value="Member">Members</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={segmentTimeAvailability}
+                      onChange={(event) => setSegmentTimeAvailability(event.target.value)}
+                    >
+                      <option value="All">Any availability</option>
+                      <option value="Weekends">Weekends</option>
+                      <option value="Evenings">Evenings</option>
+                      <option value="Full-time">Full-time</option>
+                      <option value="Ad-hoc">Ad-hoc</option>
+                    </select>
+                  </div>
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={segmentMinEffort}
+                          onChange={(event) => setSegmentMinEffort(event.target.value)}
+                          placeholder="Min effort hours"
+                        />
+                        <input
+                          className="input"
+                          value={segmentNameContains}
+                          onChange={(event) => setSegmentNameContains(event.target.value)}
+                          placeholder="Name contains"
+                        />
+                        <input
+                          className="input"
+                          value={segmentAddressContains}
+                          onChange={(event) => setSegmentAddressContains(event.target.value)}
+                          placeholder="Address contains"
+                        />
+                      </div>
+                      <div className="filter-row">
+                        <select
+                          className="select"
+                          multiple
+                          value={segmentTags}
+                          onChange={(event) =>
+                            setSegmentTags(
+                              Array.from(event.target.selectedOptions, (opt) => opt.value),
+                            )
+                          }
+                        >
+                          {segmentTagOptions.map((tag) => (
+                            <option key={tag} value={tag}>
+                              {tag}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="select"
+                          multiple
+                          value={segmentSkills}
+                          onChange={(event) =>
+                            setSegmentSkills(
+                              Array.from(event.target.selectedOptions, (opt) => opt.value),
+                            )
+                          }
+                        >
+                          {segmentSkillOptions.map((skill) => (
+                            <option key={skill} value={skill}>
+                              {skill}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                  <button className="button" type="submit">
+                    Save segment
+                  </button>
+                </form>
             ) : null}
-          </div>
+                  </div>
 
           <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
+                <div className="card-header">
+                  <div>
                 <h3>2) Events: create or select</h3>
                 <p className="muted">Create an event for the selected segment or pick an existing event.</p>
-              </div>
+                  </div>
               <div className="pill">Events</div>
-            </div>
+                </div>
             {outreachEventsError ? <div className="module-alert">{outreachEventsError}</div> : null}
             {segmentEventStatusMessage ? <div className="module-alert">{segmentEventStatusMessage}</div> : null}
-            <div className="filter-row">
+                <div className="filter-row">
               <select
                 className="select"
                 value={outreachEventId}
@@ -1772,14 +2238,14 @@ export function CRMPage({
               <button className="button-secondary" type="button" onClick={loadOutreachEvents}>
                 Refresh events
               </button>
-              <button
-                className="button"
-                type="button"
+                  <button
+                    className="button"
+                    type="button"
                 onClick={() => setShowNewEventForm((prev) => !prev)}
-              >
+                  >
                 {showNewEventForm ? 'Close new event' : '+ New event'}
-              </button>
-            </div>
+                  </button>
+                </div>
             <input className="input" value={outreachPublicLink} readOnly placeholder="Event link" />
             <div className="module-card">
               <h4>Selected event details</h4>
@@ -1805,102 +2271,102 @@ export function CRMPage({
                   <span>
                     <strong>Location:</strong> {outreachSelectedEvent.location || '—'}
                   </span>
-                </div>
+                  </div>
               )}
-            </div>
+                    </div>
             {showNewEventForm ? (
-              <div className="stack">
-                <input
-                  className="input"
+                    <div className="stack">
+                      <input
+                        className="input"
                   readOnly
                   value={selectedSegment?.name || ''}
                   placeholder="Selected segment"
                 />
-                <input
-                  className="input"
-                  placeholder="Event name"
-                  value={segmentEventName}
-                  onChange={(event) => setSegmentEventName(event.target.value)}
-                />
-                <div className="filter-row">
-                  <input
-                    className="input"
-                    type="date"
-                    value={segmentEventStartDate}
-                    onChange={(event) => setSegmentEventStartDate(event.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="date"
-                    value={segmentEventEndDate}
-                    onChange={(event) => setSegmentEventEndDate(event.target.value)}
-                  />
+                      <input
+                        className="input"
+                        placeholder="Event name"
+                        value={segmentEventName}
+                        onChange={(event) => setSegmentEventName(event.target.value)}
+                      />
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="date"
+                          value={segmentEventStartDate}
+                          onChange={(event) => setSegmentEventStartDate(event.target.value)}
+                        />
+                        <input
+                          className="input"
+                          type="date"
+                          value={segmentEventEndDate}
+                          onChange={(event) => setSegmentEventEndDate(event.target.value)}
+                        />
+                      </div>
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          placeholder="Location"
+                          value={segmentEventLocation}
+                          onChange={(event) => setSegmentEventLocation(event.target.value)}
+                        />
+                        <select
+                          className="select"
+                          value={segmentEventStatus}
+                          onChange={(event) => setSegmentEventStatus(event.target.value)}
+                        >
+                          <option value="Planned">Planned</option>
+                          <option value="Scheduled">Scheduled</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <input
+                          className="input"
+                          type="number"
+                          placeholder="Capacity"
+                          value={segmentEventCapacity}
+                          onChange={(event) => setSegmentEventCapacity(event.target.value)}
+                        />
+                      </div>
+                      <input
+                        className="input"
+                        placeholder="Notes"
+                        value={segmentEventNotes}
+                        onChange={(event) => setSegmentEventNotes(event.target.value)}
+                      />
+                      <button className="button" type="button" onClick={handleCreateSegmentEvent}>
+                        Create event
+                      </button>
+                    </div>
+                ) : null}
                 </div>
-                <div className="filter-row">
-                  <input
-                    className="input"
-                    placeholder="Location"
-                    value={segmentEventLocation}
-                    onChange={(event) => setSegmentEventLocation(event.target.value)}
-                  />
-                  <select
-                    className="select"
-                    value={segmentEventStatus}
-                    onChange={(event) => setSegmentEventStatus(event.target.value)}
-                  >
-                    <option value="Planned">Planned</option>
-                    <option value="Scheduled">Scheduled</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                  <input
-                    className="input"
-                    type="number"
-                    placeholder="Capacity"
-                    value={segmentEventCapacity}
-                    onChange={(event) => setSegmentEventCapacity(event.target.value)}
-                  />
-                </div>
-                <input
-                  className="input"
-                  placeholder="Notes"
-                  value={segmentEventNotes}
-                  onChange={(event) => setSegmentEventNotes(event.target.value)}
-                />
-                <button className="button" type="button" onClick={handleCreateSegmentEvent}>
-                  Create event
-                </button>
-              </div>
-            ) : null}
-          </div>
 
           <div className="module-card module-card__wide">
-            <div className="card-header">
-              <div>
+                <div className="card-header">
+                  <div>
                 <h3>3) Distribution: select channel and send</h3>
                 <p className="muted">Use the selected event link and send it to WhatsApp or Slack.</p>
-              </div>
+                  </div>
               <div className="pill">Distribution</div>
-            </div>
-            {groupsError ? <div className="module-alert">{groupsError}</div> : null}
-            {sendError ? <div className="module-alert">{sendError}</div> : null}
+                </div>
+                {groupsError ? <div className="module-alert">{groupsError}</div> : null}
+                {sendError ? <div className="module-alert">{sendError}</div> : null}
             {channelSlackError ? <div className="module-alert">{channelSlackError}</div> : null}
             {channelSlackStatus ? (
               <div className="module-alert module-alert--success">{channelSlackStatus}</div>
             ) : null}
             <div className="filter-row">
-              <select
-                className="select"
-                value={sendGroupId}
-                onChange={(event) => setSendGroupId(event.target.value)}
-              >
+                  <select
+                    className="select"
+                    value={sendGroupId}
+                    onChange={(event) => setSendGroupId(event.target.value)}
+                  >
                 <option value="">WhatsApp group</option>
-                {groups.map((group) => (
-                  <option key={group.groupId} value={group.groupId}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
+                    {groups.map((group) => (
+                      <option key={group.groupId} value={group.groupId}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
               <select
                 className="select"
                 value={channelSlackMode}
@@ -1910,7 +2376,7 @@ export function CRMPage({
                 <option value="custom">Custom Slack channel</option>
               </select>
               {channelSlackMode === 'custom' ? (
-                <input
+                    <input
                   className="input"
                   value={channelSlackCustom}
                   onChange={(event) => setChannelSlackCustom(event.target.value)}
@@ -1920,9 +2386,9 @@ export function CRMPage({
             </div>
             <input className="input" value={outreachPublicLink} readOnly placeholder="Selected event link" />
             <div className="filter-row">
-              <button
-                className="button"
-                type="button"
+                  <button
+                    className="button"
+                    type="button"
                 onClick={handleSendEventWhatsApp}
                 disabled={sendingEventWhatsApp || groups.length === 0 || !outreachEventId}
               >
@@ -1935,9 +2401,9 @@ export function CRMPage({
                 disabled={sendingEventSlack || !outreachEventId}
               >
                 {sendingEventSlack ? 'Sending…' : 'Send to Slack'}
-              </button>
-            </div>
-          </div>
+                  </button>
+                </div>
+              </div>
         </div>
       )}
       <div className="module-footer">
@@ -1949,6 +2415,13 @@ export function CRMPage({
 }
 
 function CRMDataEntryTab() {
+  const defaultEducationOptions = [
+    'High School',
+    'Vocational',
+    'Bachelor',
+    'Master',
+    'Doctorate',
+  ]
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -1957,10 +2430,25 @@ function CRMDataEntryTab() {
     gender: '',
     age: '',
     phone: '',
+    timeAvailability: 'Unspecified',
     address: '',
     lat: '',
     lon: '',
+    effortHours: '',
+    eventsAttendedCount: '',
+    referralCount: '',
+    tasksCompleted: '',
+    educationLevels: [],
+    about: '',
+    tags: '',
+    skills: [],
+    involvementAreas: '',
+    agreesWithManifesto: false,
+    interestedInMembership: false,
+    facebookGroupMember: false,
   })
+  const [educationOptions, setEducationOptions] = useState(defaultEducationOptions)
+  const [skillOptions, setSkillOptions] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -1969,6 +2457,25 @@ function CRMDataEntryTab() {
   const [importStatus, setImportStatus] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+    Promise.all([
+      getJson('/crm/distinct-values?label=EducationLevel'),
+      getJson('/crm/distinct-values?label=Skill'),
+    ])
+      .then(([education, skills]) => {
+        if (!mounted) return
+        if (Array.isArray(education) && education.length) {
+          setEducationOptions(education)
+        }
+        setSkillOptions(Array.isArray(skills) ? skills : [])
+      })
+      .catch(() => null)
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleSave = async (event) => {
     event.preventDefault()
@@ -1990,13 +2497,41 @@ function CRMDataEntryTab() {
           gender: form.gender,
           age: form.age ? Number(form.age) : null,
           phone: form.phone.trim(),
+          timeAvailability: form.timeAvailability,
           address: form.address.trim(),
           lat: form.lat ? Number(form.lat) : null,
           lon: form.lon ? Number(form.lon) : null,
+          effortHours: form.effortHours ? Number(form.effortHours) : null,
+          eventsAttendedCount: form.eventsAttendedCount ? Number(form.eventsAttendedCount) : null,
+          referralCount: form.referralCount ? Number(form.referralCount) : null,
+          tasksCompleted: form.tasksCompleted ? Number(form.tasksCompleted) : null,
+          educationLevels: form.educationLevels,
+          about: form.about.trim(),
+          tags: form.tags
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          skills: form.skills,
+          involvementAreas: form.involvementAreas
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          agreesWithManifesto: !!form.agreesWithManifesto,
+          interestedInMembership: !!form.interestedInMembership,
+          facebookGroupMember: !!form.facebookGroupMember,
         },
       })
       setSuccess('Person saved.')
-      setForm((prev) => ({ ...prev, email: '', firstName: '', lastName: '' }))
+      setForm((prev) => ({
+        ...prev,
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        address: '',
+            educationLevels: [],
+            skills: [],
+      }))
     } catch (err) {
       setError(err.message || 'Unable to save person.')
     } finally {
@@ -2045,12 +2580,6 @@ function CRMDataEntryTab() {
 
   return (
     <div className="stack">
-      <details className="dashboard-detail">
-        <summary>Data entry</summary>
-        <div className="dashboard-detail__body">
-          <p className="muted">Add supporters and members manually or import them from CSV.</p>
-        </div>
-      </details>
       <div className="module-grid">
       <div className="module-card module-card__wide">
         <div className="card-header">
@@ -2128,6 +2657,19 @@ function CRMDataEntryTab() {
               setForm((prev) => ({ ...prev, phone: event.target.value }))
             }
           />
+          <select
+            className="select"
+            value={form.timeAvailability}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, timeAvailability: event.target.value }))
+            }
+          >
+            <option value="Unspecified">Unspecified availability</option>
+            <option value="Weekends">Weekends</option>
+            <option value="Evenings">Evenings</option>
+            <option value="Full-time">Full-time</option>
+            <option value="Ad-hoc">Ad-hoc</option>
+          </select>
           <input
             className="input"
             placeholder="Address"
@@ -2152,6 +2694,136 @@ function CRMDataEntryTab() {
               setForm((prev) => ({ ...prev, lon: event.target.value }))
             }
           />
+          <input
+            className="input"
+            type="number"
+            step="0.5"
+            placeholder="Effort hours"
+            value={form.effortHours}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, effortHours: event.target.value }))
+            }
+          />
+          <input
+            className="input"
+            type="number"
+            placeholder="Events attended count"
+            value={form.eventsAttendedCount}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, eventsAttendedCount: event.target.value }))
+            }
+          />
+          <input
+            className="input"
+            type="number"
+            placeholder="Referral count"
+            value={form.referralCount}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, referralCount: event.target.value }))
+            }
+          />
+          <input
+            className="input"
+            type="number"
+            placeholder="Tasks completed"
+            value={form.tasksCompleted}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, tasksCompleted: event.target.value }))
+            }
+          />
+          <select
+            className="select"
+            multiple
+            value={form.educationLevels}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                educationLevels: Array.from(event.target.selectedOptions, (opt) => opt.value),
+              }))
+            }
+          >
+            {educationOptions.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </select>
+          <input
+            className="input"
+            placeholder="Tags (comma separated)"
+            value={form.tags}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, tags: event.target.value }))
+            }
+          />
+          <select
+            className="select"
+            multiple
+            value={form.skills}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                skills: Array.from(event.target.selectedOptions, (opt) => opt.value),
+              }))
+            }
+          >
+            {skillOptions.length === 0 ? (
+              <option value="" disabled>
+                No skills yet (add via imports/profile updates)
+              </option>
+            ) : null}
+            {skillOptions.map((skill) => (
+              <option key={skill} value={skill}>
+                {skill}
+              </option>
+            ))}
+          </select>
+          <input
+            className="input"
+            placeholder="Involvement areas (comma separated)"
+            value={form.involvementAreas}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, involvementAreas: event.target.value }))
+            }
+          />
+          <textarea
+            className="textarea form-grid__full"
+            placeholder="About / notes"
+            value={form.about}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, about: event.target.value }))
+            }
+          />
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.agreesWithManifesto}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, agreesWithManifesto: event.target.checked }))
+              }
+            />
+            Agrees with manifesto
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.interestedInMembership}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, interestedInMembership: event.target.checked }))
+              }
+            />
+            Interested in membership
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.facebookGroupMember}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, facebookGroupMember: event.target.checked }))
+              }
+            />
+            Facebook group member
+          </label>
           <button className="button" type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save person'}
           </button>
@@ -2428,34 +3100,9 @@ function CRMDashboardTab() {
   )
 }
 
-function CRMOverviewTab({ onNavigate }) {
-  const steps = [
-    {
-      id: 'people',
-      label: 'People',
-      description: 'Search, segment, and update supporter profiles.',
-    },
-    {
-      id: 'outreach',
-      label: 'Outreach',
-      description: 'Plan outreach, messages, and event activation.',
-    },
-    CRM_TASKS_ENABLED
-      ? {
-          id: 'tasks',
-          label: 'Tasks',
-          description: 'Assign follow-ups and track progress.',
-        }
-      : null,
-  ].filter(Boolean)
+function CRMOverviewTab() {
   return (
     <div className="stack">
-      <ModuleFlow
-        title="Network workflow"
-        summary="Move from people insights to outreach and activation."
-        steps={steps}
-        onStepSelect={onNavigate}
-      />
       <CRMMapTab />
       <CRMDashboardTab />
     </div>
@@ -5032,114 +5679,114 @@ function CRMCampaignsTab() {
                   </p>
                 </div>
               ) : (
-                <div className="module-card">
-                  <h4>Execution tasks</h4>
-                  {campaignTaskError ? (
-                    <div className="module-alert">{campaignTaskError}</div>
-                  ) : null}
-                  {campaignTaskStatus ? (
-                    <div className="module-alert">{campaignTaskStatus}</div>
-                  ) : null}
-                  <form className="stack" onSubmit={handleCampaignTaskSubmit}>
+              <div className="module-card">
+                <h4>Execution tasks</h4>
+                {campaignTaskError ? (
+                  <div className="module-alert">{campaignTaskError}</div>
+                ) : null}
+                {campaignTaskStatus ? (
+                  <div className="module-alert">{campaignTaskStatus}</div>
+                ) : null}
+                <form className="stack" onSubmit={handleCampaignTaskSubmit}>
+                  <input
+                    className="input"
+                    placeholder="Task title"
+                    value={campaignTaskForm.title}
+                    onChange={(event) =>
+                      setCampaignTaskForm((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Task description"
+                    value={campaignTaskForm.description}
+                    onChange={(event) =>
+                      setCampaignTaskForm((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={campaignTaskForm.status}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          status: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="Open">Open</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
                     <input
                       className="input"
-                      placeholder="Task title"
-                      value={campaignTaskForm.title}
+                      type="date"
+                      value={campaignTaskForm.dueDate}
                       onChange={(event) =>
                         setCampaignTaskForm((prev) => ({
                           ...prev,
-                          title: event.target.value,
+                          dueDate: event.target.value,
                         }))
                       }
                     />
-                    <textarea
-                      className="textarea"
-                      placeholder="Task description"
-                      value={campaignTaskForm.description}
+                  </div>
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      placeholder="Assignee email"
+                      value={campaignTaskForm.assigneeEmail}
                       onChange={(event) =>
                         setCampaignTaskForm((prev) => ({
                           ...prev,
-                          description: event.target.value,
+                          assigneeEmail: event.target.value,
                         }))
                       }
                     />
-                    <div className="form-grid">
-                      <select
-                        className="select"
-                        value={campaignTaskForm.status}
-                        onChange={(event) =>
-                          setCampaignTaskForm((prev) => ({
-                            ...prev,
-                            status: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="Open">Open</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Done">Done</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                      <input
-                        className="input"
-                        type="date"
-                        value={campaignTaskForm.dueDate}
-                        onChange={(event) =>
-                          setCampaignTaskForm((prev) => ({
-                            ...prev,
-                            dueDate: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="form-grid">
-                      <input
-                        className="input"
-                        placeholder="Assignee email"
-                        value={campaignTaskForm.assigneeEmail}
-                        onChange={(event) =>
-                          setCampaignTaskForm((prev) => ({
-                            ...prev,
-                            assigneeEmail: event.target.value,
-                          }))
-                        }
-                      />
-                      <select
-                        className="select"
-                        value={campaignTaskForm.milestoneId}
-                        onChange={(event) =>
-                          setCampaignTaskForm((prev) => ({
-                            ...prev,
-                            milestoneId: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">Link to milestone</option>
-                        {milestones.map((milestone) => (
-                          <option
-                            key={`task-${milestone.milestoneId}`}
-                            value={milestone.milestoneId}
-                          >
-                            {milestone.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button className="button" type="submit">
-                      Create task
-                    </button>
-                  </form>
-                  {campaignTasks.length === 0 ? (
-                    <p className="muted">No tasks yet.</p>
-                  ) : (
-                    <ul className="compact-list">
-                      {campaignTasks.slice(0, 5).map((task) => (
-                        <li key={task.taskId}>
-                          {task.title} — {task.status}
-                        </li>
+                    <select
+                      className="select"
+                      value={campaignTaskForm.milestoneId}
+                      onChange={(event) =>
+                        setCampaignTaskForm((prev) => ({
+                          ...prev,
+                          milestoneId: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Link to milestone</option>
+                      {milestones.map((milestone) => (
+                        <option
+                          key={`task-${milestone.milestoneId}`}
+                          value={milestone.milestoneId}
+                        >
+                          {milestone.title}
+                        </option>
                       ))}
-                    </ul>
-                  )}
-                </div>
+                    </select>
+                  </div>
+                  <button className="button" type="submit">
+                    Create task
+                  </button>
+                </form>
+                {campaignTasks.length === 0 ? (
+                  <p className="muted">No tasks yet.</p>
+                ) : (
+                  <ul className="compact-list">
+                    {campaignTasks.slice(0, 5).map((task) => (
+                      <li key={task.taskId}>
+                        {task.title} — {task.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               )}
             </div>
           )}
@@ -5852,7 +6499,7 @@ function CRMEventsTab() {
           <div className="card-divider">
             <h4>Slack</h4>
             <p className="muted">Send to the default Slack channel.</p>
-          </div>
+        </div>
           <input className="input" value={publicLink} readOnly />
           <button
             className="button"

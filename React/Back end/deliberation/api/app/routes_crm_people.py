@@ -5,6 +5,7 @@ geocoding triggers, segments, distinct-values, and furry-friend registry.
 import io
 import json
 from typing import List, Optional
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,7 @@ from .routes_crm_helpers import (
     _build_furry_import_rows,
     _build_segment_query,
     _extract_municipality,
+    _split_list,
     SegmentFilter,
 )
 
@@ -103,6 +105,15 @@ class PersonUpsert(BaseModel):
     supporterType: Optional[str] = "Supporter"
     address: Optional[str] = None
     timeAvailability: Optional[str] = None
+    about: Optional[str] = None
+    agreesWithManifesto: Optional[bool] = None
+    interestedInMembership: Optional[bool] = None
+    facebookGroupMember: Optional[bool] = None
+    education: Optional[str] = None
+    educationLevels: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    skills: Optional[List[str]] = None
+    involvementAreas: Optional[List[str]] = None
 
 
 class PersonImportRow(BaseModel):
@@ -219,6 +230,55 @@ class SegmentPersonOut(BaseModel):
     effort_hours: float = Field(alias="effortHours")
     tags: List[str] = []
     skills: List[str] = []
+
+
+class SupporterInviteCreate(BaseModel):
+    recipient_name: Optional[str] = Field(alias="recipientName", default="")
+    recipient_email: Optional[str] = Field(alias="recipientEmail", default="")
+    recipient_phone: Optional[str] = Field(alias="recipientPhone", default="")
+    channel: Optional[str] = "manual"
+    supporter_type: Optional[str] = Field(alias="supporterType", default="Supporter")
+    notes: Optional[str] = ""
+
+
+class SupporterInviteReminderCreate(BaseModel):
+    channel: Optional[str] = "manual"
+    note: Optional[str] = ""
+
+
+class SupporterSignupCreate(BaseModel):
+    first_name: str = Field(alias="firstName", min_length=1)
+    last_name: Optional[str] = Field(alias="lastName", default="")
+    email: str
+    phone: Optional[str] = ""
+    supporter_type: Optional[str] = Field(alias="supporterType", default="Supporter")
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    address: Optional[str] = ""
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    effort_hours: Optional[float] = Field(alias="effortHours", default=None)
+    events_attended_count: Optional[int] = Field(alias="eventsAttendedCount", default=None)
+    referral_count: Optional[int] = Field(alias="referralCount", default=None)
+    tasks_completed: Optional[int] = Field(alias="tasksCompleted", default=None)
+    about: Optional[str] = ""
+    agrees_with_manifesto: Optional[bool] = Field(alias="agreesWithManifesto", default=False)
+    time_availability: Optional[str] = Field(alias="timeAvailability", default="Unspecified")
+    education_levels: List[str] = Field(alias="educationLevels", default_factory=list)
+    skills: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    involvement_areas: List[str] = Field(alias="involvementAreas", default_factory=list)
+    facebook_group_member: Optional[bool] = Field(alias="facebookGroupMember", default=False)
+    interested_in_membership: Optional[bool] = Field(
+        alias="interestedInMembership", default=False
+    )
+    interests: List[str] = Field(default_factory=list)
+    invite_code: Optional[str] = Field(alias="inviteCode", default="")
+
+
+class SupporterSignupConfigUpdate(BaseModel):
+    welcome_video_url: Optional[str] = Field(alias="welcomeVideoUrl", default="")
+    thank_you_video_url: Optional[str] = Field(alias="thankYouVideoUrl", default="")
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +417,381 @@ def crm_summary():
         "missing_age": missing_age,
         "missing_gender": missing_gender,
         "missing_time_availability": missing_time,
+    }
+
+
+@router.get("/supporter-invites/stats")
+def supporter_invite_stats():
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_read(
+            session,
+            """
+            MATCH (inv:SupporterInvite)
+            RETURN
+              count(inv) AS sent,
+              sum(CASE WHEN coalesce(inv.status, 'sent') = 'converted' THEN 1 ELSE 0 END) AS converted,
+              sum(coalesce(inv.reminderCount, 0)) AS reminders
+            """,
+        )
+        channel_rows = _execute_read(
+            session,
+            """
+            MATCH (inv:SupporterInvite)
+            RETURN coalesce(inv.channel, 'manual') AS channel, count(inv) AS sent
+            ORDER BY sent DESC
+            """,
+        )
+    sent = int((records[0].get("sent") if records else 0) or 0)
+    converted = int((records[0].get("converted") if records else 0) or 0)
+    reminders = int((records[0].get("reminders") if records else 0) or 0)
+    conversion_rate = round((converted / sent) * 100, 2) if sent else 0.0
+    return {
+        "sent": sent,
+        "converted": converted,
+        "pending": max(0, sent - converted),
+        "reminders": reminders,
+        "conversionRate": conversion_rate,
+        "channels": [
+            {"channel": row.get("channel") or "manual", "sent": int(row.get("sent") or 0)}
+            for row in channel_rows
+        ],
+    }
+
+
+@router.get("/supporter-invites")
+def list_supporter_invites(limit: int = Query(100, ge=1, le=1000)):
+    driver = get_driver()
+    with _db_session(driver) as session:
+        rows = _execute_read(
+            session,
+            """
+            MATCH (inv:SupporterInvite)
+            RETURN
+              inv.inviteId AS inviteId,
+              inv.inviteCode AS inviteCode,
+              coalesce(inv.recipientName, '') AS recipientName,
+              coalesce(inv.recipientEmail, '') AS recipientEmail,
+              coalesce(inv.recipientPhone, '') AS recipientPhone,
+              coalesce(inv.channel, 'manual') AS channel,
+              coalesce(inv.supporterType, 'Supporter') AS supporterType,
+              coalesce(inv.status, 'sent') AS status,
+              coalesce(inv.reminderCount, 0) AS reminderCount,
+              toString(inv.createdAt) AS createdAt,
+              toString(inv.lastReminderAt) AS lastReminderAt,
+              toString(inv.convertedAt) AS convertedAt,
+              coalesce(inv.convertedEmail, '') AS convertedEmail
+            ORDER BY inv.createdAt DESC
+            LIMIT $limit
+            """,
+            {"limit": int(limit)},
+        )
+    return [row.data() for row in rows]
+
+
+@router.post("/supporter-invites")
+def create_supporter_invite(payload: SupporterInviteCreate):
+    invite_id = str(uuid4())
+    invite_code = uuid4().hex[:12]
+    supporter_type = _normalize_supporter_type(payload.supporter_type, "Supporter")
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            """
+            CREATE (inv:SupporterInvite {
+              inviteId: $inviteId,
+              inviteCode: $inviteCode,
+              recipientName: $recipientName,
+              recipientEmail: $recipientEmail,
+              recipientPhone: $recipientPhone,
+              channel: $channel,
+              supporterType: $supporterType,
+              notes: $notes,
+              status: 'sent',
+              reminderCount: 0,
+              createdAt: datetime()
+            })
+            RETURN
+              inv.inviteId AS inviteId,
+              inv.inviteCode AS inviteCode,
+              inv.recipientName AS recipientName,
+              inv.recipientEmail AS recipientEmail,
+              inv.recipientPhone AS recipientPhone,
+              inv.channel AS channel,
+              inv.supporterType AS supporterType,
+              inv.status AS status,
+              coalesce(inv.reminderCount, 0) AS reminderCount,
+              toString(inv.createdAt) AS createdAt
+            """,
+            {
+                "inviteId": invite_id,
+                "inviteCode": invite_code,
+                "recipientName": _clean_text(payload.recipient_name),
+                "recipientEmail": _clean_text(payload.recipient_email),
+                "recipientPhone": _clean_text(payload.recipient_phone),
+                "channel": _clean_text(payload.channel) or "manual",
+                "supporterType": supporter_type,
+                "notes": _clean_text(payload.notes),
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=500, detail="Unable to create invite")
+    return records[0].data()
+
+
+@router.post("/supporter-invites/{invite_code}/remind")
+def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCreate):
+    code = _clean_text(invite_code)
+    if not code:
+        raise HTTPException(status_code=400, detail="Invite code is required")
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            """
+            MATCH (inv:SupporterInvite {inviteCode: $inviteCode})
+            SET inv.reminderCount = coalesce(inv.reminderCount, 0) + 1,
+                inv.lastReminderAt = datetime(),
+                inv.lastReminderChannel = $channel,
+                inv.lastReminderNote = $note,
+                inv.updatedAt = datetime()
+            RETURN
+              inv.inviteId AS inviteId,
+              inv.inviteCode AS inviteCode,
+              coalesce(inv.status, 'sent') AS status,
+              coalesce(inv.reminderCount, 0) AS reminderCount,
+              toString(inv.lastReminderAt) AS lastReminderAt
+            """,
+            {
+                "inviteCode": code,
+                "channel": _clean_text(payload.channel) or "manual",
+                "note": _clean_text(payload.note),
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return records[0].data()
+
+
+@router.post("/supporter-signup")
+def supporter_signup(payload: SupporterSignupCreate):
+    email = _clean_text(payload.email)
+    first_name = _clean_text(payload.first_name)
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if not first_name:
+        raise HTTPException(status_code=400, detail="First name is required")
+    supporter_type = _normalize_supporter_type(payload.supporter_type, "Supporter")
+    invite_code = _clean_text(payload.invite_code)
+    interests = [
+        _clean_text(item)
+        for item in (payload.interests or [])
+        if _clean_text(item)
+    ]
+    education_levels = [
+        _clean_text(item)
+        for item in (payload.education_levels or [])
+        if _clean_text(item)
+    ]
+    skills = [
+        _clean_text(item)
+        for item in (payload.skills or [])
+        if _clean_text(item)
+    ]
+    tags = [
+        _clean_text(item)
+        for item in (payload.tags or [])
+        if _clean_text(item)
+    ]
+    involvement_areas = [
+        _clean_text(item)
+        for item in (payload.involvement_areas or [])
+        if _clean_text(item)
+    ]
+    driver = get_driver()
+    with _db_session(driver) as session:
+        _execute_write(
+            session,
+            """
+            MERGE (p:Person {email: $email})
+            ON CREATE SET p.personId = randomUUID(), p.createdAt = datetime()
+            SET p.firstName = $firstName,
+                p.lastName = $lastName,
+                p.phone = $phone,
+                p.gender = $gender,
+                p.age = $age,
+                p.address = $address,
+                p.lat = coalesce($lat, p.lat),
+                p.lon = coalesce($lon, p.lon),
+                p.effortHours = coalesce($effortHours, p.effortHours),
+                p.eventsAttendedCount = coalesce($eventsAttendedCount, p.eventsAttendedCount),
+                p.referralCount = coalesce($referralCount, p.referralCount),
+                p.tasksCompleted = coalesce($tasksCompleted, p.tasksCompleted),
+                p.about = coalesce($about, p.about),
+                p.agreesWithManifesto = coalesce($agreesWithManifesto, false),
+                p.timeAvailability = $timeAvailability,
+                p.interestedInMembership = coalesce($interestedInMembership, false),
+                p.facebookGroupMember = coalesce($facebookGroupMember, false),
+                p.interests = $interests,
+                p.updatedAt = datetime()
+            WITH p
+            MERGE (st:SupporterType {name: $supporterType})
+            MERGE (p)-[:CLASSIFIED_AS]->(st)
+            WITH p
+            OPTIONAL MATCH (p)-[oldRel:INTERESTED_IN]->(:InvolvementArea)
+            DELETE oldRel
+            WITH p
+            UNWIND $interests AS interestName
+            MERGE (ia:InvolvementArea {name: interestName})
+            MERGE (p)-[:INTERESTED_IN]->(ia)
+            """,
+            {
+                "email": email,
+                "firstName": first_name,
+                "lastName": _clean_text(payload.last_name),
+                "phone": _clean_text(payload.phone),
+                "gender": _clean_text(payload.gender),
+                "age": payload.age,
+                "address": _clean_text(payload.address),
+                "lat": payload.lat,
+                "lon": payload.lon,
+                "effortHours": payload.effort_hours,
+                "eventsAttendedCount": payload.events_attended_count,
+                "referralCount": payload.referral_count,
+                "tasksCompleted": payload.tasks_completed,
+                "about": _clean_text(payload.about),
+                "agreesWithManifesto": bool(payload.agrees_with_manifesto),
+                "timeAvailability": _clean_text(payload.time_availability) or "Unspecified",
+                "interestedInMembership": bool(payload.interested_in_membership),
+                "facebookGroupMember": bool(payload.facebook_group_member),
+                "interests": interests,
+                "supporterType": supporter_type,
+            },
+        )
+        _execute_write(
+            session,
+            """
+            MATCH (p:Person {email: $email})
+            OPTIONAL MATCH (p)-[oldEdu:HAS_EDUCATION]->(:EducationLevel)
+            DELETE oldEdu
+            WITH p
+            UNWIND $educationLevels AS educationName
+            MERGE (ed:EducationLevel {name: educationName})
+            MERGE (p)-[:HAS_EDUCATION]->(ed)
+            """,
+            {"email": email, "educationLevels": education_levels},
+        )
+        _execute_write(
+            session,
+            """
+            MATCH (p:Person {email: $email})
+            OPTIONAL MATCH (p)-[oldSkill:CAN_CONTRIBUTE_WITH]->(:Skill)
+            DELETE oldSkill
+            WITH p
+            UNWIND $skills AS skillName
+            MERGE (sk:Skill {name: skillName})
+            MERGE (p)-[:CAN_CONTRIBUTE_WITH]->(sk)
+            """,
+            {"email": email, "skills": skills},
+        )
+        _execute_write(
+            session,
+            """
+            MATCH (p:Person {email: $email})
+            OPTIONAL MATCH (p)-[oldTag:HAS_TAG]->(:Tag)
+            DELETE oldTag
+            WITH p
+            UNWIND $tags AS tagName
+            MERGE (tag:Tag {name: tagName})
+            MERGE (p)-[:HAS_TAG]->(tag)
+            """,
+            {"email": email, "tags": tags},
+        )
+        _execute_write(
+            session,
+            """
+            MATCH (p:Person {email: $email})
+            OPTIONAL MATCH (p)-[oldInterest:INTERESTED_IN]->(:InvolvementArea)
+            DELETE oldInterest
+            WITH p
+            UNWIND $involvementAreas AS areaName
+            MERGE (ia:InvolvementArea {name: areaName})
+            MERGE (p)-[:INTERESTED_IN]->(ia)
+            """,
+            {"email": email, "involvementAreas": involvement_areas},
+        )
+        if invite_code:
+            _execute_write(
+                session,
+                """
+                MATCH (inv:SupporterInvite {inviteCode: $inviteCode})
+                MATCH (p:Person {email: $email})
+                SET inv.status = 'converted',
+                    inv.convertedAt = datetime(),
+                    inv.convertedEmail = $email
+                MERGE (inv)-[:CONVERTED_TO]->(p)
+                """,
+                {"inviteCode": invite_code, "email": email},
+            )
+    return {"saved": True, "email": email, "inviteCode": invite_code}
+
+
+@router.get("/supporter-signup-config")
+def get_supporter_signup_config():
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_read(
+            session,
+            """
+            MATCH (cfg:PlatformConfig {id: 'supporter-signup'})
+            RETURN
+              coalesce(cfg.welcomeVideoUrl, '') AS welcomeVideoUrl,
+              coalesce(cfg.thankYouVideoUrl, '') AS thankYouVideoUrl,
+              toString(cfg.updatedAt) AS updatedAt
+            """,
+        )
+    if not records:
+        return {"welcomeVideoUrl": "", "thankYouVideoUrl": "", "updatedAt": None}
+    row = records[0]
+    return {
+        "welcomeVideoUrl": row.get("welcomeVideoUrl") or "",
+        "thankYouVideoUrl": row.get("thankYouVideoUrl") or "",
+        "updatedAt": row.get("updatedAt"),
+    }
+
+
+@router.patch("/supporter-signup-config")
+def update_supporter_signup_config(payload: SupporterSignupConfigUpdate):
+    welcome_video_url = _clean_text(payload.welcome_video_url)
+    thank_you_video_url = _clean_text(payload.thank_you_video_url)
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            """
+            MERGE (cfg:PlatformConfig {id: 'supporter-signup'})
+            ON CREATE SET cfg.createdAt = datetime()
+            SET cfg.welcomeVideoUrl = $welcomeVideoUrl,
+                cfg.thankYouVideoUrl = $thankYouVideoUrl,
+                cfg.updatedAt = datetime()
+            RETURN
+              coalesce(cfg.welcomeVideoUrl, '') AS welcomeVideoUrl,
+              coalesce(cfg.thankYouVideoUrl, '') AS thankYouVideoUrl,
+              toString(cfg.updatedAt) AS updatedAt
+            """,
+            {
+                "welcomeVideoUrl": welcome_video_url,
+                "thankYouVideoUrl": thank_you_video_url,
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=500, detail="Unable to update signup config")
+    row = records[0]
+    return {
+        "welcomeVideoUrl": row.get("welcomeVideoUrl") or "",
+        "thankYouVideoUrl": row.get("thankYouVideoUrl") or "",
+        "updatedAt": row.get("updatedAt"),
     }
 
 
@@ -508,6 +943,19 @@ def upsert_person(payload: PersonUpsert):
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     supporter_type = _normalize_supporter_type(payload.supporterType, "Supporter")
+    tags = _split_list(payload.tags) if payload.tags is not None else None
+    skills = _split_list(payload.skills) if payload.skills is not None else None
+    involvement_areas = (
+        _split_list(payload.involvementAreas)
+        if payload.involvementAreas is not None
+        else None
+    )
+    education_levels = (
+        _split_list(payload.educationLevels)
+        if payload.educationLevels is not None
+        else None
+    )
+    education = _clean_text(payload.education) if payload.education is not None else None
     driver = get_driver()
     query = """
     MERGE (p:Person {email: $email})
@@ -523,7 +971,11 @@ def upsert_person(payload: PersonUpsert):
         p.effortHours = coalesce($effortHours, p.effortHours),
         p.eventsAttendedCount = coalesce($eventsAttendedCount, p.eventsAttendedCount),
         p.referralCount = coalesce($referralCount, p.referralCount),
-        p.tasksCompleted = coalesce($tasksCompleted, p.tasksCompleted)
+        p.tasksCompleted = coalesce($tasksCompleted, p.tasksCompleted),
+        p.about = coalesce($about, p.about),
+        p.agreesWithManifesto = coalesce($agreesWithManifesto, p.agreesWithManifesto),
+        p.interestedInMembership = coalesce($interestedInMembership, p.interestedInMembership),
+        p.facebookGroupMember = coalesce($facebookGroupMember, p.facebookGroupMember)
     WITH p
     MERGE (st:SupporterType {name: $supporterType})
     MERGE (p)-[:CLASSIFIED_AS]->(st)
@@ -556,8 +1008,83 @@ def upsert_person(payload: PersonUpsert):
                 "supporterType": supporter_type,
                 "address": _clean_text(payload.address),
                 "timeAvailability": _clean_text(payload.timeAvailability),
+                "about": _clean_text(payload.about),
+                "agreesWithManifesto": payload.agreesWithManifesto,
+                "interestedInMembership": payload.interestedInMembership,
+                "facebookGroupMember": payload.facebookGroupMember,
             },
         )
+        if education_levels is not None:
+            _execute_write(
+                session,
+                """
+                MATCH (p:Person {email: $email})
+                OPTIONAL MATCH (p)-[oldEdu:HAS_EDUCATION]->(:EducationLevel)
+                DELETE oldEdu
+                WITH p
+                UNWIND $educationLevels AS educationName
+                MERGE (ed:EducationLevel {name: educationName})
+                MERGE (p)-[:HAS_EDUCATION]->(ed)
+                """,
+                {"email": email, "educationLevels": education_levels},
+            )
+        elif education is not None:
+            _execute_write(
+                session,
+                """
+                MATCH (p:Person {email: $email})
+                OPTIONAL MATCH (p)-[oldEdu:HAS_EDUCATION]->(:EducationLevel)
+                DELETE oldEdu
+                WITH p
+                FOREACH (_ IN CASE WHEN $education = '' THEN [] ELSE [1] END |
+                    MERGE (ed:EducationLevel {name: $education})
+                    MERGE (p)-[:HAS_EDUCATION]->(ed)
+                )
+                """,
+                {"email": email, "education": education},
+            )
+        if tags is not None:
+            _execute_write(
+                session,
+                """
+                MATCH (p:Person {email: $email})
+                OPTIONAL MATCH (p)-[oldTag:HAS_TAG]->(:Tag)
+                DELETE oldTag
+                WITH p
+                UNWIND $tags AS tagName
+                MERGE (tag:Tag {name: tagName})
+                MERGE (p)-[:HAS_TAG]->(tag)
+                """,
+                {"email": email, "tags": tags},
+            )
+        if skills is not None:
+            _execute_write(
+                session,
+                """
+                MATCH (p:Person {email: $email})
+                OPTIONAL MATCH (p)-[oldSkill:CAN_CONTRIBUTE_WITH]->(:Skill)
+                DELETE oldSkill
+                WITH p
+                UNWIND $skills AS skillName
+                MERGE (sk:Skill {name: skillName})
+                MERGE (p)-[:CAN_CONTRIBUTE_WITH]->(sk)
+                """,
+                {"email": email, "skills": skills},
+            )
+        if involvement_areas is not None:
+            _execute_write(
+                session,
+                """
+                MATCH (p:Person {email: $email})
+                OPTIONAL MATCH (p)-[oldInterest:INTERESTED_IN]->(:InvolvementArea)
+                DELETE oldInterest
+                WITH p
+                UNWIND $involvementAreas AS areaName
+                MERGE (ia:InvolvementArea {name: areaName})
+                MERGE (p)-[:INTERESTED_IN]->(ia)
+                """,
+                {"email": email, "involvementAreas": involvement_areas},
+            )
     profile = _load_profile(email)
     return profile or {"email": email}
 

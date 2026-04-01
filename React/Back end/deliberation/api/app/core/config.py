@@ -42,6 +42,8 @@ DEFAULT_AUTH_PUBLIC_RULES = (
     "POST:/crm/campaigns/*/contributions/checkout",
     "POST:/crm/campaigns/*/volunteers",
     "POST:/crm/payments/webhook",
+    "POST:/crm/supporter-signup",
+    "GET:/crm/supporter-signup-config",
     "GET:/conversations/*",
     "POST:/conversations/*/queue",
     "POST:/conversations/*/view",

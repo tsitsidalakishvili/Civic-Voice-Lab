@@ -114,11 +114,23 @@ export const MODULE_SECTIONS = {
     flowSummary: 'Build, engage, and mobilize in one place.',
     defaultTab: 'overview',
     primaryActions: [
+      {
+        label: 'New supporters/members',
+        type: 'tab',
+        value: 'intake',
+        hint: 'Capture new registrations and invites.',
+      },
       { label: 'People directory', type: 'tab', value: 'people', hint: 'Search and update people.' },
       { label: 'Outreach & events', type: 'tab', value: 'outreach', hint: 'Segments and messaging.' },
     ],
     sections: [
       { label: 'Overview', type: 'tab', value: 'overview', hint: 'Map, filters, and coverage charts.' },
+      {
+        label: 'New supporters/members',
+        type: 'tab',
+        value: 'intake',
+        hint: 'Intake form, invites, and conversion.',
+      },
       { label: 'People directory', type: 'tab', value: 'people', hint: 'Profiles and segments.' },
       { label: 'Outreach & events', type: 'tab', value: 'outreach', hint: 'Segments, messaging, and events.' },
     ],

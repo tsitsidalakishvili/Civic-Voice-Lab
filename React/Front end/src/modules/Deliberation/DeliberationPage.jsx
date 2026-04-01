@@ -76,6 +76,11 @@ const sanitizeStatement = (value) => {
     .trim()
 }
 
+const STATEMENT_SLOT_COUNT = 5
+const buildStatementSlots = () => Array.from({ length: STATEMENT_SLOT_COUNT }, () => '')
+const buildExistingStatementSlots = () =>
+  Array.from({ length: STATEMENT_SLOT_COUNT }, () => ({ id: '', text: '' }))
+
 const formatPercent = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 
 const buildClusterTooltip = (card) => {
@@ -256,7 +261,7 @@ export function DeliberationPage({
   const [createForm, setCreateForm] = useState({
     topic: '',
     description: '',
-    initialStatements: '',
+    initialStatements: buildStatementSlots(),
     allowCommentSubmission: true,
     allowViz: true,
     moderationProfile: 'lazy',
@@ -270,7 +275,8 @@ export function DeliberationPage({
     isOpen: true,
   })
   const [updateForm, setUpdateForm] = useState(null)
-  const [seedText, setSeedText] = useState('')
+  const [existingStatementSlots, setExistingStatementSlots] = useState(buildExistingStatementSlots())
+  const [savingExistingStatements, setSavingExistingStatements] = useState(false)
   const [seedEditId, setSeedEditId] = useState('')
   const [seedEditText, setSeedEditText] = useState('')
   const [seedStatus, setSeedStatus] = useState('')
@@ -653,6 +659,17 @@ export function DeliberationPage({
     () => approvedComments.filter((comment) => comment.is_seed),
     [approvedComments],
   )
+
+  useEffect(() => {
+    const nextSlots = buildExistingStatementSlots()
+    seedComments.slice(0, STATEMENT_SLOT_COUNT).forEach((comment, index) => {
+      nextSlots[index] = {
+        id: comment.id || '',
+        text: String(comment.text || ''),
+      }
+    })
+    setExistingStatementSlots(nextSlots)
+  }, [activeId, seedComments])
 
   const reportSummary = useMemo(() => {
     if (!report?.metrics) return null
@@ -1081,10 +1098,13 @@ export function DeliberationPage({
       setConvoError('Topic must be at least 3 characters.')
       return
     }
-    const initialStatements = createForm.initialStatements
-      .split('\n')
+    const initialStatements = (createForm.initialStatements || [])
       .map((line) => sanitizeStatement(line))
       .filter(Boolean)
+    if (initialStatements.length !== STATEMENT_SLOT_COUNT) {
+      setConvoError(`Please provide ${STATEMENT_SLOT_COUNT} statements.`)
+      return
+    }
     setConvoError('')
     try {
       const created = await requestJson('/conversations', {
@@ -1109,7 +1129,7 @@ export function DeliberationPage({
       setCreateForm({
         topic: '',
         description: '',
-        initialStatements: '',
+        initialStatements: buildStatementSlots(),
         allowCommentSubmission: true,
         allowViz: true,
         moderationProfile: 'lazy',
@@ -1176,25 +1196,44 @@ export function DeliberationPage({
     }
   }
 
-  const handleSeedComments = async () => {
+  const handleSaveExistingStatements = async () => {
     if (!activeId) return
-    const comments = seedText
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-    if (!comments.length) {
-      setConvoError('Add at least one comment.')
+    const normalizedSlots = existingStatementSlots.map((slot) => ({
+      id: slot.id || '',
+      text: sanitizeStatement(slot.text),
+    }))
+    if (normalizedSlots.filter((slot) => slot.text).length !== STATEMENT_SLOT_COUNT) {
+      setSeedStatus(`Please fill all ${STATEMENT_SLOT_COUNT} statements.`)
       return
     }
-    setConvoError('')
+    setSavingExistingStatements(true)
+    setSeedStatus('')
     try {
-      await requestJson(`/conversations/${activeId}/seed-comments:bulk`, {
-        method: 'POST',
-        payload: { comments },
-      })
-      setSeedText('')
+      const updates = normalizedSlots.filter((slot) => slot.id && slot.text)
+      const creates = normalizedSlots.filter((slot) => !slot.id && slot.text).map((slot) => slot.text)
+      if (updates.length) {
+        await Promise.all(
+          updates.map((slot) =>
+            requestJson(`/comments/${slot.id}/edit`, {
+              method: 'PATCH',
+              payload: { text: slot.text, is_seed: true },
+            }),
+          ),
+        )
+      }
+      if (creates.length) {
+        await requestJson(`/conversations/${activeId}/seed-comments:bulk`, {
+          method: 'POST',
+          payload: { comments: creates },
+        })
+      }
+      const approved = await getJson(`/conversations/${activeId}/comments?status=approved`)
+      setApprovedComments(Array.isArray(approved) ? approved : [])
+      setSeedStatus('Saved 5 statements.')
     } catch (err) {
-      setConvoError(err.message || 'Unable to seed comments.')
+      setSeedStatus(err.message || 'Unable to save statements.')
+    } finally {
+      setSavingExistingStatements(false)
     }
   }
 
@@ -2267,17 +2306,26 @@ export function DeliberationPage({
               </div>
               <div className="form-grid__full">
                 <label className="label">Statements for voting cards</label>
-                <textarea
-                  className="textarea"
-                  placeholder={'Add one statement per line.\nThese become participant voting cards.'}
-                  value={createForm.initialStatements}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      initialStatements: event.target.value,
-                    }))
-                  }
-                />
+                <div className="stack">
+                  {buildStatementSlots().map((_, index) => (
+                    <input
+                      key={`new-statement-${index + 1}`}
+                      className="input"
+                      placeholder={`Statement ${index + 1}`}
+                      value={createForm.initialStatements?.[index] || ''}
+                      onChange={(event) =>
+                        setCreateForm((prev) => {
+                          const next = Array.isArray(prev.initialStatements)
+                            ? [...prev.initialStatements]
+                            : buildStatementSlots()
+                          next[index] = event.target.value
+                          return { ...prev, initialStatements: next }
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+                <p className="muted">Add all 5 statements now. These become participant voting cards.</p>
               </div>
               <div className="form-grid__full">
                 <textarea
@@ -2495,17 +2543,33 @@ export function DeliberationPage({
                       </div>
                       <div className="form-grid__full">
                         <label className="label">Statements for voting cards</label>
-                        <textarea
-                          className="textarea"
-                          placeholder={'Add one statement per line.\nThese become participant voting cards.'}
-                          value={seedText}
-                          onChange={(event) => setSeedText(event.target.value)}
-                        />
+                        <div className="stack">
+                          {existingStatementSlots.map((slot, index) => (
+                            <input
+                              key={`existing-statement-${index + 1}`}
+                              className="input"
+                              placeholder={`Statement ${index + 1}`}
+                              value={slot.text}
+                              onChange={(event) =>
+                                setExistingStatementSlots((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index ? { ...item, text: event.target.value } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
                         <div className="filter-row">
-                          <button className="button-secondary" type="button" onClick={handleSeedComments}>
-                            Add statements
+                          <button
+                            className="button-secondary"
+                            type="button"
+                            onClick={handleSaveExistingStatements}
+                            disabled={savingExistingStatements}
+                          >
+                            {savingExistingStatements ? 'Saving...' : 'Save 5 statements'}
                           </button>
-                          <span className="muted">Adds statements to the selected conversation.</span>
+                          <span className="muted">Edit and save the first 5 statements used for voting cards.</span>
                         </div>
                         {seedStatus ? <p className="muted">{seedStatus}</p> : null}
                       </div>

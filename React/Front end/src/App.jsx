@@ -28,6 +28,7 @@ import { AppProvider, useApp } from './context/AppContext'
 import { buildModules, HUB_MODULE_IDS, MODULE_SECTIONS, renderModuleIcon } from './config/modules'
 import { FeedbackDrawer } from './components/FeedbackDrawer'
 import { PublicEventRegistration } from './views/PublicEventRegistration'
+import { PublicSupporterSignup } from './views/PublicSupporterSignup'
 import { DeliberationQuestionnaire } from './views/DeliberationQuestionnaire'
 import { DeliberationPublicReport } from './views/DeliberationPublicReport'
 import { PublicCampaignPage } from './modules'
@@ -47,15 +48,19 @@ function AppShell_() {
   const campaignPublic = params.get('campaign_public')
   const publicCampaignId = params.get('campaign_id')
   const reportShare = params.get('report_share') || params.get('report')
+  const supporterSignup = params.get('supporter_signup')
+  const supporterInviteCode = params.get('invite_code') || ''
 
   const isPublicEvent = eventRegistration === '1' && eventId
   const isPublicCampaign = campaignPublic === '1'
+  const isSupporterSignup = supporterSignup === '1'
   const isQuestionnaireView = ['mobile', 'participant', 'embed', 'admin'].includes(viewParam)
   const isQuestionnaire =
     (questionnaire && questionnaire.startsWith('deliberation')) ||
     (conversationId && isQuestionnaireView)
   const isPublicReport = Boolean(reportShare)
-  const isPublicView = isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport
+  const isPublicView =
+    isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport || isSupporterSignup
 
   const modules = useMemo(() => buildModules(t), [t])
   const hubModules = useMemo(
@@ -181,6 +186,17 @@ function AppShell_() {
     return (
       <PublicCampaignPage
         campaignId={publicCampaignId}
+        t={t}
+        language={language}
+        languages={languages}
+        onLanguageChange={setLanguage}
+      />
+    )
+  }
+  if (isSupporterSignup) {
+    return (
+      <PublicSupporterSignup
+        inviteCode={supporterInviteCode}
         t={t}
         language={language}
         languages={languages}
