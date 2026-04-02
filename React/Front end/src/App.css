@@ -3201,6 +3201,12 @@ button.module-flow__step:hover {
   gap: 14px;
 }
 
+.intake-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .intake-tile {
   border: 1px solid var(--border);
   border-radius: 20px;
@@ -3216,6 +3222,10 @@ button.module-flow__step:hover {
 
 .intake-order-conversion {
   order: 1;
+}
+
+.intake-order-links {
+  order: 2;
 }
 
 .intake-order-latest {
@@ -3445,6 +3455,10 @@ button.module-flow__step:hover {
 
 @media (max-width: 900px) {
   .conversion-visual__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-two-col {
     grid-template-columns: 1fr;
   }
 }

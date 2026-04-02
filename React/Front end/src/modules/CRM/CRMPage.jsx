@@ -1958,7 +1958,8 @@ export function CRMPage({
             {supporterInviteStatus ? (
               <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
             ) : null}
-            <div className="module-card intake-tile intake-order-create">
+            <div className="intake-two-col intake-order-links">
+              <div className="module-card intake-tile intake-order-create">
               <div className="intake-section-heading">
                 <h4 className="intake-section-title">Create and send invite signup form</h4>
                 <p className="muted intake-section-subtitle">
@@ -2096,8 +2097,8 @@ export function CRMPage({
                   </button>
                 </div>
               </form>
-            </div>
-            <div className="module-card intake-tile stack intake-order-latest">
+              </div>
+              <div className="module-card intake-tile stack intake-order-latest">
               <h4 className="intake-section-title">Latest invite link</h4>
               <label className="label">Latest invite link</label>
               <input
@@ -2143,6 +2144,7 @@ export function CRMPage({
                   <strong>Conversion rate (approved after invite):</strong>{' '}
                   {supporterInviteStats?.conversionRate ?? 0}%
                 </span>
+              </div>
               </div>
             </div>
             <div className="module-card intake-tile stack intake-order-pending">
