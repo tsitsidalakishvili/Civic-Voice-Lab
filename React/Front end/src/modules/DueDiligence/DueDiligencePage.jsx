@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Group, RingProgress, Text } from '@mantine/core'
 import { IconAlertTriangle, IconFileSearch, IconShieldCheck, IconUsers } from '@tabler/icons-react'
-import { API_BASE, getJson, requestJson } from '../../services/api'
+import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, InfoBox } from '../../ui'
 
 export function DueDiligencePage({
@@ -1497,7 +1497,7 @@ export function DueDiligencePage({
                       <div className="filter-row">
                         <a
                           className="button-secondary"
-                          href={`${API_BASE}/due-diligence/reports/${analysisResult.reportId}/pdf`}
+                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -1571,7 +1571,7 @@ export function DueDiligencePage({
                       <div className="filter-row">
                         <a
                           className="button-secondary"
-                          href={`${API_BASE}/due-diligence/reports/${analysisResult.reportId}/pdf`}
+                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -1715,7 +1715,7 @@ export function DueDiligencePage({
                             <span>{(row.sources || []).join(', ') || '—'}</span>
                             <span>
                               <a
-                                href={`${API_BASE}/due-diligence/reports/${row.reportId}/pdf`}
+                                href={`${getApiBaseUrl()}/due-diligence/reports/${row.reportId}/pdf`}
                                 target="_blank"
                                 rel="noreferrer"
                               >

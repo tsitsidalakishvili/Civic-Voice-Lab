@@ -2132,7 +2132,18 @@ button.module-flow__step:hover {
   min-width: 0;
 }
 
-/* Outreach / survey flow: soft tinted panels for segment → events → distribute */
+/* Outreach flow visual order: events → segment audience → distribution (DOM may list segment first). */
+.crm-outreach-flow > .module-card--outreach-flow-events {
+  order: 1;
+}
+.crm-outreach-flow > .module-card--outreach-flow-segment {
+  order: 2;
+}
+.crm-outreach-flow > .module-card--outreach-flow-distribute {
+  order: 3;
+}
+
+/* Outreach / survey flow: soft tinted panels (visual order: events → segment → distribute) */
 .module--crm-radical .module-card.module-card--outreach-flow-segment,
 .module--delib-radical .module-card.module-card--outreach-flow-segment {
   background: linear-gradient(
@@ -2392,6 +2403,11 @@ button.module-flow__step:hover {
   display: grid;
   gap: 12px;
   margin: 16px 0 0;
+}
+
+.stack.crm-outreach-flow {
+  display: flex;
+  flex-direction: column;
 }
 
 .input,

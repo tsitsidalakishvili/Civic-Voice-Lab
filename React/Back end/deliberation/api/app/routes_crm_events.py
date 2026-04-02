@@ -5,7 +5,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .db import get_driver
 from .routes_crm_helpers import (
@@ -16,6 +16,7 @@ from .routes_crm_helpers import (
     _execute_write,
     _db_session,
     _query_df,
+    _sanitize_neo4j_row,
 )
 
 router = APIRouter()
@@ -35,6 +36,8 @@ class EventCreate(BaseModel):
 
 
 class EventOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     event_id: str = Field(alias="eventId")
     event_key: Optional[str] = Field(alias="eventKey", default=None)
     name: str
@@ -48,6 +51,8 @@ class EventOut(BaseModel):
 
 
 class EventRegistrationOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     email: str
     first_name: Optional[str] = Field(alias="firstName", default="")
     last_name: Optional[str] = Field(alias="lastName", default="")
@@ -109,7 +114,8 @@ def list_events(limit: int = Query(200, ge=10, le=1000)):
         """,
         {"limit": int(limit)},
     )
-    return df.to_dict(orient="records") if not df.empty else []
+    records = df.to_dict(orient="records") if not df.empty else []
+    return [EventOut.model_validate(_sanitize_neo4j_row(r)) for r in records]
 
 
 @router.get("/events/detail", response_model=EventOut)
@@ -137,7 +143,7 @@ def get_event_detail(event_id: Optional[str] = None, event_key: Optional[str] = 
     )
     if df.empty:
         raise HTTPException(status_code=404, detail="Event not found")
-    return df.iloc[0].to_dict()
+    return EventOut.model_validate(_sanitize_neo4j_row(df.iloc[0].to_dict()))
 
 
 @router.post("/events", response_model=EventOut)
@@ -194,7 +200,7 @@ def create_event(payload: EventCreate):
         )
     if not records:
         raise HTTPException(status_code=500, detail="Event could not be created")
-    return records[0].data()
+    return EventOut.model_validate(_sanitize_neo4j_row(records[0].data()))
 
 
 @router.post("/events/with-people")
@@ -385,7 +391,8 @@ def list_event_registrations(event_id: str, limit: int = Query(500, ge=10, le=50
         """,
         {"eventId": _clean_text(event_id), "limit": int(limit)},
     )
-    return df.to_dict(orient="records") if not df.empty else []
+    recs = df.to_dict(orient="records") if not df.empty else []
+    return [EventRegistrationOut.model_validate(_sanitize_neo4j_row(r)) for r in recs]
 
 
 @router.get("/events/registrations/status-counts", response_model=List[EventStatusCountOut])
@@ -406,7 +413,8 @@ def list_registration_status_counts(limit_events: int = Query(20, ge=1, le=100))
         """,
         {"limitEvents": int(limit_events)},
     )
-    return df.to_dict(orient="records") if not df.empty else []
+    recs = df.to_dict(orient="records") if not df.empty else []
+    return [EventStatusCountOut.model_validate(_sanitize_neo4j_row(r)) for r in recs]
 
 
 @router.delete("/events/{event_id}")

@@ -7,7 +7,7 @@ import {
   forceSimulation,
 } from 'd3-force'
 import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/icons-react'
-import { API_BASE, getJson, requestForm, requestJson } from '../../services/api'
+import { getApiBaseUrl, getJson, requestForm, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
 const VIEWS = ['explorer', 'connectors']
@@ -454,7 +454,7 @@ export function DataHubPage({
     } catch (err) {
       const message = err?.message || 'Unable to load Neo4j data.'
       if (message.includes('Failed to fetch')) {
-        setError(`Unable to reach the backend at ${API_BASE}. Check the API port and logs.`)
+        setError(`Unable to reach the backend at ${getApiBaseUrl()}. Check the API port and logs.`)
       } else {
         setError(message)
       }
@@ -479,7 +479,7 @@ export function DataHubPage({
     } catch (err) {
       const message = err?.message || 'Unable to load Data Hub connectors.'
       if (message.includes('Failed to fetch')) {
-        setCatalogError(`Unable to reach the backend at ${API_BASE}. Check the API port and logs.`)
+        setCatalogError(`Unable to reach the backend at ${getApiBaseUrl()}. Check the API port and logs.`)
       } else {
         setCatalogError(message)
       }

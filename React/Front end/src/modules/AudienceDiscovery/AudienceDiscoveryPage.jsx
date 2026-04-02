@@ -3,7 +3,7 @@ import { Badge, Group } from '@mantine/core'
 import { IconBolt, IconChartDots, IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, BarElement, CategoryScale, Legend, LinearScale, Tooltip } from 'chart.js'
-import { API_BASE, requestForm, requestJson } from '../../services/api'
+import { getApiBaseUrl, requestForm, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, InfoBox, InfoHint, StatusMessage } from '../../ui'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
@@ -416,7 +416,7 @@ export function AudienceDiscoveryPage({
       const message = err?.message || 'Audience discovery failed.'
       if (message.includes('Failed to fetch')) {
         setError(
-          `Unable to reach the backend at ${API_BASE}. Check the API port and backend logs.`,
+          `Unable to reach the backend at ${getApiBaseUrl()}. Check the API port and backend logs.`,
         )
       } else if (message.includes('Internal Server Error')) {
         setError('Backend error while running discovery. Check backend logs for details.')
@@ -535,7 +535,7 @@ export function AudienceDiscoveryPage({
     } catch (err) {
       const message = err?.message || 'Unable to refresh analysis results.'
       if (message.includes('Failed to fetch')) {
-        setError(`Unable to reach the backend at ${API_BASE}. Check the API port and backend logs.`)
+        setError(`Unable to reach the backend at ${getApiBaseUrl()}. Check the API port and backend logs.`)
       } else if (message.includes('Internal Server Error')) {
         setError('Backend error while running discovery. Check backend logs for details.')
       } else {
@@ -616,7 +616,7 @@ export function AudienceDiscoveryPage({
     } catch (err) {
       const message = err?.message || 'Unable to load analysis results.'
       if (message.includes('Failed to fetch')) {
-        setError(`Unable to reach the backend at ${API_BASE}. Check the API port and backend logs.`)
+        setError(`Unable to reach the backend at ${getApiBaseUrl()}. Check the API port and backend logs.`)
       } else if (message.includes('Internal Server Error')) {
         setError('Backend error while running discovery. Check backend logs for details.')
       } else {
@@ -1319,7 +1319,7 @@ export function AudienceDiscoveryPage({
                       type="button"
                       onClick={() =>
                         (window.open(
-                          `${API_BASE}/audience-discovery/analysis/${analysis.runId}/export/json`,
+                          `${getApiBaseUrl()}/audience-discovery/analysis/${analysis.runId}/export/json`,
                           '_blank',
                         ),
                         setExportStatus('Opened JSON export in a new tab.'))
@@ -1332,7 +1332,7 @@ export function AudienceDiscoveryPage({
                       type="button"
                       onClick={() =>
                         (window.open(
-                          `${API_BASE}/audience-discovery/analysis/${analysis.runId}/export/csv`,
+                          `${getApiBaseUrl()}/audience-discovery/analysis/${analysis.runId}/export/csv`,
                           '_blank',
                         ),
                         setExportStatus('Opened CSV export in a new tab.'))

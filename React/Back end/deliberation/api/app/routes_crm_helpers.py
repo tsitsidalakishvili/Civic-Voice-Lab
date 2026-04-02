@@ -117,6 +117,33 @@ def _query_df(query: str, params: Optional[dict] = None) -> pd.DataFrame:
     return pd.DataFrame([record.data() for record in records])
 
 
+def _sanitize_neo4j_value(value: Any) -> Any:
+    """Convert Neo4j driver / pandas / numpy scalars to JSON-friendly Python values."""
+    if value is None:
+        return None
+    if isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, (float, np.floating)):
+        if pd.isna(value):
+            return None
+        return float(value)
+    if hasattr(value, "item") and not isinstance(value, (str, bytes, dict, list)):
+        try:
+            return _sanitize_neo4j_value(value.item())
+        except Exception:
+            pass
+    if hasattr(value, "isoformat") and not isinstance(value, str):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    return value
+
+
+def _sanitize_neo4j_row(row: dict) -> dict:
+    return {k: _sanitize_neo4j_value(v) for k, v in row.items()}
+
+
 # ---------------------------------------------------------------------------
 # Text / data helpers
 # ---------------------------------------------------------------------------

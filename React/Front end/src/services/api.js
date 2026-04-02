@@ -1,14 +1,18 @@
 import { getRuntimeConfig } from '../config/runtime'
 import { getAuthHeaders, getAuthSnapshot } from './runtimeAuth'
 
-export const API_BASE = getRuntimeConfig().apiBaseUrl
+/** Resolve on each use so production never keeps a stale base from first module load. */
+export function getApiBaseUrl() {
+  return getRuntimeConfig().apiBaseUrl
+}
 
 const DEFAULT_GET_CACHE_MS = 5000
 const getCache = new Map()
 const inflightGetRequests = new Map()
 
 function buildUrl(path) {
-  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+  const base = getApiBaseUrl()
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
 
 function buildGetRequestKey(url) {

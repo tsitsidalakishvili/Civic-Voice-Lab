@@ -321,6 +321,8 @@ export function CRMPage({
   const [segmentEventCapacity, setSegmentEventCapacity] = useState('')
   const [segmentEventNotes, setSegmentEventNotes] = useState('')
   const [segmentEventStatusMessage, setSegmentEventStatusMessage] = useState('')
+  const [outreachAttachLoading, setOutreachAttachLoading] = useState(false)
+  const [outreachAttachMessage, setOutreachAttachMessage] = useState('')
   const [showNewEventForm, setShowNewEventForm] = useState(false)
   const [outreachEvents, setOutreachEvents] = useState([])
   const [outreachEventsError, setOutreachEventsError] = useState('')
@@ -1118,13 +1120,14 @@ export function CRMPage({
 
   const loadOutreachEvents = () => {
     setOutreachEventsError('')
-    getJson('/crm/events', { forceRefresh: true })
+    return getJson('/crm/events', { forceRefresh: true })
       .then((payload) => {
         const rows = Array.isArray(payload) ? payload : []
         setOutreachEvents(rows)
-        if (outreachEventId && !rows.some((event) => event.eventId === outreachEventId)) {
-          setOutreachEventId('')
-        }
+        setOutreachEventId((current) => {
+          if (current && !rows.some((event) => event.eventId === current)) return ''
+          return current
+        })
       })
       .catch((err) => {
         setOutreachEventsError(err.message || 'Unable to load events.')
@@ -1315,21 +1318,64 @@ export function CRMPage({
     }
   }
 
-  const handleCreateSegmentEvent = async () => {
-    if (!segmentSelectedId) {
-      setSegmentEventStatusMessage('Select a saved segment first.')
-      return
-    }
+  /** Create an event without requiring a segment (POST /crm/events). */
+  const handleCreateOutreachEvent = async () => {
     if (!segmentEventName.trim()) {
       setSegmentEventStatusMessage('Event name is required.')
       return
     }
     setSegmentEventStatusMessage('')
+    setOutreachAttachMessage('')
+    try {
+      const created = await requestJson('/crm/events', {
+        method: 'POST',
+        payload: {
+          name: segmentEventName.trim(),
+          startDate: segmentEventStartDate || '',
+          endDate: segmentEventEndDate || '',
+          location: segmentEventLocation.trim(),
+          status: segmentEventStatus,
+          capacity: segmentEventCapacity ? Number(segmentEventCapacity) : 0,
+          notes: segmentEventNotes.trim(),
+        },
+      })
+      if (created?.eventId) {
+        setOutreachEventId(created.eventId)
+      }
+      await loadOutreachEvents()
+      setSegmentEventStatusMessage(
+        'Event created. Optionally pick a segment below and register its audience, then use distribution.',
+      )
+      setSegmentEventName('')
+      setSegmentEventStartDate('')
+      setSegmentEventEndDate('')
+      setSegmentEventLocation('')
+      setSegmentEventCapacity('')
+      setSegmentEventNotes('')
+      setShowNewEventForm(false)
+    } catch (err) {
+      setSegmentEventStatusMessage(err.message || 'Unable to create event.')
+    }
+  }
+
+  /** Register everyone in the selected segment for the event chosen above (bulk register). */
+  const handleAttachSegmentAudienceToEvent = async () => {
+    if (!outreachEventId) {
+      setOutreachAttachMessage('Select or create an event in the section above first.')
+      return
+    }
+    if (!segmentSelectedId) {
+      setOutreachAttachMessage('Select a saved segment first.')
+      return
+    }
+    setOutreachAttachMessage('')
+    setSegmentEventStatusMessage('')
+    setOutreachAttachLoading(true)
     try {
       const limit = Math.max(1, Number(segmentLimit) || 200)
-      const audience = await getJson(`/crm/segments/${segmentSelectedId}/run?limit=${limit}`)
+      const audience = await getJson(`/crm/segments/${encodeURIComponent(segmentSelectedId)}/run?limit=${limit}`)
       if (!Array.isArray(audience) || audience.length === 0) {
-        setSegmentEventStatusMessage('Selected segment has no people to invite.')
+        setOutreachAttachMessage('Selected segment has no people to register.')
         return
       }
       const rows = audience.map((row) => {
@@ -1341,36 +1387,16 @@ export function CRMPage({
           group: row.group,
         }
       })
-      const result = await requestJson('/crm/events/with-people', {
+      await requestJson(`/crm/events/${encodeURIComponent(outreachEventId)}/register/bulk`, {
         method: 'POST',
-        payload: {
-          event: {
-            name: segmentEventName.trim(),
-            startDate: segmentEventStartDate || '',
-            endDate: segmentEventEndDate || '',
-            location: segmentEventLocation.trim(),
-            status: segmentEventStatus,
-            capacity: segmentEventCapacity ? Number(segmentEventCapacity) : 0,
-            notes: segmentEventNotes.trim(),
-          },
-          rows,
-          registrationStatus: 'Registered',
-        },
+        payload: { rows, status: 'Registered' },
       })
-      setSegmentEventStatusMessage('Event created and attached to selected segment.')
-      if (result?.eventId) {
-        setOutreachEventId(result.eventId)
-      }
+      setOutreachAttachMessage(`Registered ${rows.length} people from this segment for the selected event.`)
       loadOutreachEvents()
-      setSegmentEventName('')
-      setSegmentEventStartDate('')
-      setSegmentEventEndDate('')
-      setSegmentEventLocation('')
-      setSegmentEventCapacity('')
-      setSegmentEventNotes('')
-      setShowNewEventForm(false)
     } catch (err) {
-      setSegmentEventStatusMessage(err.message || 'Unable to create event.')
+      setOutreachAttachMessage(err.message || 'Unable to register segment audience for this event.')
+    } finally {
+      setOutreachAttachLoading(false)
     }
   }
 
@@ -2675,12 +2701,15 @@ export function CRMPage({
         </div>
       )}
       {activeTab === 'outreach' && (
-        <div className="stack">
+        <div className="stack crm-outreach-flow">
           <div className="module-card module-card__wide module-card--outreach-flow-segment">
             <div className="card-header">
               <div>
                 <h3>Segment: create or select</h3>
-                <p className="muted">Save a new segment or pick an existing one.</p>
+                <p className="muted">
+                  Save or pick a segment, then register its audience for the event you selected in Events
+                  above.
+                </p>
               </div>
               <div className="pill">Audience</div>
             </div>
@@ -2766,6 +2795,40 @@ export function CRMPage({
                 Select a saved segment to view its details.
               </p>
             )}
+            <div className="outreach-segment-to-event" style={{ marginTop: 14 }}>
+              <h4 className="intake-section-title" style={{ margin: '0 0 8px', fontSize: '1rem' }}>
+                Register segment for selected event
+              </h4>
+              <p className="muted" style={{ margin: '0 0 10px', lineHeight: 1.45 }}>
+                Uses the event from the Events section (above). Choose a segment, then bulk-register those
+                people for that event.
+              </p>
+              {!outreachEventId ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Select or create an event in Events first.
+                </p>
+              ) : (
+                <>
+                  <p className="muted" style={{ margin: '0 0 8px' }}>
+                    Event:{' '}
+                    <strong>{outreachSelectedEvent?.name || outreachEventId}</strong>
+                  </p>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!segmentSelectedId || outreachAttachLoading}
+                    onClick={handleAttachSegmentAudienceToEvent}
+                  >
+                    {outreachAttachLoading ? 'Registering…' : 'Register segment audience for this event'}
+                  </button>
+                </>
+              )}
+              {outreachAttachMessage ? (
+                <div className="module-alert" style={{ marginTop: 10 }}>
+                  {outreachAttachMessage}
+                </div>
+              ) : null}
+            </div>
             {showNewSegmentForm ? (
                 <form className="stack" onSubmit={handleCreateSegment}>
                   <input
@@ -2870,7 +2933,10 @@ export function CRMPage({
                 <div className="card-header">
                   <div>
                 <h3>Events: create or select</h3>
-                <p className="muted">Create an event for the selected segment or pick an existing event.</p>
+                <p className="muted">
+                  Create a new event or pick one from the list (no segment required). Then attach a segment
+                  below if you want bulk registrations, and use distribution for links and invites.
+                </p>
                   </div>
               <div className="pill">Events</div>
                 </div>
@@ -2947,12 +3013,6 @@ export function CRMPage({
                     <div className="stack">
                       <input
                         className="input"
-                  readOnly
-                  value={selectedSegment?.name || ''}
-                  placeholder="Selected segment"
-                />
-                      <input
-                        className="input"
                         placeholder="Event name"
                         value={segmentEventName}
                         onChange={(event) => setSegmentEventName(event.target.value)}
@@ -3002,7 +3062,7 @@ export function CRMPage({
                         value={segmentEventNotes}
                         onChange={(event) => setSegmentEventNotes(event.target.value)}
                       />
-                      <button className="button" type="button" onClick={handleCreateSegmentEvent}>
+                      <button className="button" type="button" onClick={handleCreateOutreachEvent}>
                         Create event
                       </button>
                     </div>

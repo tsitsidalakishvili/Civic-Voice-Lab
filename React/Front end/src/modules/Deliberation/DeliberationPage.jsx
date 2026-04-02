@@ -12,7 +12,7 @@ import {
   Tooltip,
 } from 'chart.js'
 import { IconChartDots, IconMessage2, IconPlus, IconTrash, IconUsers } from '@tabler/icons-react'
-import { API_BASE, getJson, requestJson } from '../../services/api'
+import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import {
   getInviteAudienceGroupEmail,
   getInviteAudienceLabel,
@@ -1726,7 +1726,7 @@ export function DeliberationPage({
     setExportStatus('')
     setExporting(true)
     try {
-      const response = await fetch(`${API_BASE}/conversations/${activeId}/export`)
+      const response = await fetch(`${getApiBaseUrl()}/conversations/${activeId}/export`)
       if (!response.ok) {
         throw new Error('Export failed.')
       }
@@ -1752,7 +1752,7 @@ export function DeliberationPage({
     setTableExportingConversationId(conversationId)
     setConvoError('')
     try {
-      const response = await fetch(`${API_BASE}/conversations/${conversationId}/export.csv`)
+      const response = await fetch(`${getApiBaseUrl()}/conversations/${conversationId}/export.csv`)
       if (!response.ok) {
         throw new Error('Conversation CSV export failed.')
       }
@@ -1985,7 +1985,7 @@ export function DeliberationPage({
   const handleDownloadExportJob = async () => {
     if (!exportJob?.id) return
     try {
-      const response = await fetch(`${API_BASE}/exports/${exportJob.id}/download`)
+      const response = await fetch(`${getApiBaseUrl()}/exports/${exportJob.id}/download`)
       if (!response.ok) {
         throw new Error('Export not ready.')
       }
