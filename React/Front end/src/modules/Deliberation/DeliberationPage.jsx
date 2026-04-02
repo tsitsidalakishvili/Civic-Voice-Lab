@@ -381,6 +381,13 @@ export function DeliberationPage({
     channel: 'email',
     notes: '',
   })
+
+  useEffect(() => {
+    setSurveyInviteForm((prev) =>
+      prev.inviteAudience === 'everyone' ? { ...prev, inviteAudience: 'verified' } : prev,
+    )
+  }, [])
+
   const [shareSegments, setShareSegments] = useState([])
   const [shareSegmentsError, setShareSegmentsError] = useState('')
   const [shareSegmentsLoading, setShareSegmentsLoading] = useState(false)
@@ -1272,7 +1279,10 @@ export function DeliberationPage({
     const recipientPhone = surveyInviteForm.recipientPhone.trim()
     const notes = surveyInviteForm.notes.trim()
     try {
-      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+      if (
+        selectedChannel === 'email' &&
+        (selectedAudience === 'verified' || selectedAudience === 'registered')
+      ) {
         await requestJson('/crm/supporter-invite-groups-config', {
           method: 'PATCH',
           payload: {
@@ -3276,9 +3286,8 @@ export function DeliberationPage({
                           }
                         >
                           <option value="individual">Single recipient</option>
-                          <option value="everyone">Everyone</option>
-                          <option value="verified">Verified users</option>
-                          <option value="registered">Registered users</option>
+                          <option value="verified">Verified users (group list)</option>
+                          <option value="registered">Registered users (group list)</option>
                         </select>
                         {surveyInviteForm.inviteAudience === 'individual' ? (
                           <>

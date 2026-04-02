@@ -7,6 +7,7 @@ import {
 import {
   getInviteAudienceGroupEmail,
   getInviteAudienceLabel,
+  MAILTO_SEGMENT_BCC_LIMIT,
   openExternalShareLink,
 } from '../../lib/inviteDistribution'
 import { CivicStatGrid, PageHeader } from '../../ui'
@@ -482,6 +483,10 @@ export function CRMPage({
     }
     if (audience === 'registered') {
       setSupporterInviteGroupsConfig((prev) => ({ ...prev, registeredGroupEmail: value }))
+      return
+    }
+    if (audience === 'segment') {
+      return
     }
   }
 
@@ -1143,6 +1148,20 @@ export function CRMPage({
   }, [activeTab])
 
   useEffect(() => {
+    setOutreachInviteForm((prev) =>
+      prev.inviteAudience === 'everyone' ? { ...prev, inviteAudience: 'verified' } : prev,
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!segmentSelectedId) {
+      setOutreachInviteForm((prev) =>
+        prev.inviteAudience === 'segment' ? { ...prev, inviteAudience: 'individual' } : prev,
+      )
+    }
+  }, [segmentSelectedId])
+
+  useEffect(() => {
     if (activeTab !== 'outreach' || !segmentSelectedId) {
       setSegmentMemberCount(null)
       setSegmentCountLoading(false)
@@ -1426,6 +1445,9 @@ export function CRMPage({
   ) => {
     const noteBlock = notes ? `\n\nNote: ${notes}` : ''
     const audience = String(inviteAudience || 'individual').toLowerCase()
+    if (audience === 'segment') {
+      return `Hi, here is the Freedom Square event registration link — ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+    }
     if (audience !== 'individual') {
       return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} — ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
     }
@@ -1447,6 +1469,32 @@ export function CRMPage({
     const normalizedChannel = String(channel || '').toLowerCase()
     const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
     const trimmedNotes = String(notes || '').trim()
+
+    let segmentMemberEmails = null
+    if (normalizedAudience === 'segment') {
+      if (!segmentSelectedId) {
+        setOutreachDistributionError('Select a saved segment in Audience first.')
+        return false
+      }
+      try {
+        const limit = 500
+        const rows = await getJson(
+          `/crm/segments/${encodeURIComponent(segmentSelectedId)}/run?limit=${limit}`,
+        )
+        const emails = Array.isArray(rows)
+          ? [...new Set(rows.map((r) => String(r?.email || '').trim()).filter(Boolean))]
+          : []
+        if (!emails.length) {
+          setOutreachDistributionError('This segment has no people with email addresses.')
+          return false
+        }
+        segmentMemberEmails = emails
+      } catch (err) {
+        setOutreachDistributionError(err.message || 'Unable to load segment members.')
+        return false
+      }
+    }
+
     const message = buildOutreachInviteShareMessage(
       recipientName,
       event,
@@ -1455,6 +1503,33 @@ export function CRMPage({
       normalizedAudience,
     )
     if (normalizedChannel === 'email') {
+      if (normalizedAudience === 'segment' && segmentMemberEmails) {
+        const bcc = segmentMemberEmails.slice(0, MAILTO_SEGMENT_BCC_LIMIT)
+        const segName = selectedSegment?.name || 'segment'
+        const subject = encodeURIComponent(
+          `Freedom Square event: ${event.name || 'Registration'} (${segName})`,
+        )
+        const body = encodeURIComponent(message)
+        const bccParam = bcc.map((e) => encodeURIComponent(e)).join('%2C')
+        openExternalShareLink(`mailto:?bcc=${bccParam}&subject=${subject}&body=${body}`)
+        if (segmentMemberEmails.length > MAILTO_SEGMENT_BCC_LIMIT && navigator?.clipboard) {
+          try {
+            await navigator.clipboard.writeText(segmentMemberEmails.join('\n'))
+            setOutreachDistributionStatus(
+              `Draft opened with first ${bcc.length} addresses in Bcc. All ${segmentMemberEmails.length} emails copied for mail merge.`,
+            )
+          } catch {
+            setOutreachDistributionStatus(
+              `Draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment — copy from CRM if needed).`,
+            )
+          }
+        } else {
+          setOutreachDistributionStatus(
+            `Registration link draft opened with ${bcc.length} segment address(es) in Bcc.`,
+          )
+        }
+        return true
+      }
       const audienceGroupEmail = getInviteAudienceGroupEmail(
         normalizedAudience,
         supporterInviteGroupsConfig,
@@ -1483,6 +1558,23 @@ export function CRMPage({
       return true
     }
     if (normalizedChannel === 'whatsapp') {
+      if (normalizedAudience === 'segment' && segmentMemberEmails) {
+        if (navigator?.clipboard) {
+          try {
+            await navigator.clipboard.writeText(
+              `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`,
+            )
+          } catch {
+            /* continue with short URL only */
+          }
+        }
+        const text = encodeURIComponent(message)
+        openExternalShareLink(`https://wa.me/?text=${text}`)
+        setOutreachDistributionStatus(
+          'WhatsApp opened with the message; full segment email list copied to clipboard when available.',
+        )
+        return true
+      }
       const text = encodeURIComponent(message)
       const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
       const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
@@ -1496,8 +1588,16 @@ export function CRMPage({
         return false
       }
       try {
-        await navigator.clipboard.writeText(message)
-        setOutreachDistributionStatus('Slack message copied with the registration link.')
+        const payload =
+          normalizedAudience === 'segment' && segmentMemberEmails
+            ? `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`
+            : message
+        await navigator.clipboard.writeText(payload)
+        setOutreachDistributionStatus(
+          normalizedAudience === 'segment' && segmentMemberEmails
+            ? 'Slack-ready text and segment email list copied.'
+            : 'Slack message copied with the registration link.',
+        )
         return true
       } catch {
         setOutreachDistributionError('Unable to copy message for Slack.')
@@ -1525,7 +1625,10 @@ export function CRMPage({
     const recipientPhone = outreachInviteForm.recipientPhone.trim()
     const notes = outreachInviteForm.notes.trim()
     try {
-      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+      if (
+        selectedChannel === 'email' &&
+        (selectedAudience === 'verified' || selectedAudience === 'registered')
+      ) {
         await requestJson('/crm/supporter-invite-groups-config', {
           method: 'PATCH',
           payload: {
@@ -3074,8 +3177,8 @@ export function CRMPage({
               <div>
                 <h3>Distribution: invite &amp; registration link</h3>
                 <p className="muted">
-                  Same invite flow as New supporters and Survey &amp; Consensus — audience, channel, latest
-                  link, then copy, send, or open.
+                  Choose single recipient, the saved segment (Bcc to member emails), or verified / registered
+                  Google groups. Then pick channel and send or copy the event link.
                 </p>
               </div>
               <div className="pill">Distribution</div>
@@ -3108,9 +3211,11 @@ export function CRMPage({
                       }
                     >
                       <option value="individual">Single recipient</option>
-                      <option value="everyone">Everyone</option>
-                      <option value="verified">Verified users</option>
-                      <option value="registered">Registered users</option>
+                      {segmentSelectedId ? (
+                        <option value="segment">Selected segment (member emails)</option>
+                      ) : null}
+                      <option value="verified">Verified users (group list)</option>
+                      <option value="registered">Registered users (group list)</option>
                     </select>
                     {outreachInviteForm.inviteAudience === 'individual' ? (
                       <>
@@ -3149,6 +3254,15 @@ export function CRMPage({
                           }
                         />
                       </>
+                    ) : outreachInviteForm.inviteAudience === 'segment' &&
+                      outreachInviteForm.channel === 'email' ? (
+                      <div className="form-grid__full">
+                        <p className="muted" style={{ margin: 0 }}>
+                          Opens your mail client with up to {MAILTO_SEGMENT_BCC_LIMIT} segment addresses in Bcc.
+                          If the segment is larger, remaining emails are copied to the clipboard for a mail
+                          merge.
+                        </p>
+                      </div>
                     ) : outreachInviteForm.channel === 'email' ? (
                       <div className="form-grid__full">
                         <label className="label">Group email list</label>
@@ -3179,6 +3293,11 @@ export function CRMPage({
                           Outlook opens with this group email in To: field for{' '}
                           {getInviteAudienceLabel(outreachInviteForm.inviteAudience)}.
                         </p>
+                      </div>
+                    ) : outreachInviteForm.inviteAudience === 'segment' ? (
+                      <div className="form-grid__full muted">
+                        Segment audience: Slack copies the message plus all member emails. WhatsApp opens a
+                        short message and copies the full email list when possible.
                       </div>
                     ) : (
                       <div className="form-grid__full muted">
