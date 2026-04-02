@@ -17,9 +17,11 @@ Env:
 3. Build command: `npm run build`
 4. Output directory: `dist`
 5. Set environment variable:
-   - `VITE_API_BASE_URL=https://fs-udmk.onrender.com`
-   - Ensure Render `CORS_ORIGINS` includes `https://fs-frontend-puce.vercel.app`
-6. Deploy.
+   - **`VITE_API_BASE_URL`** = your Render (or other) API origin, e.g. `https://fs-udmk.onrender.com`
+   - Required if you do not rely on a committed `.env.production` during build. Without it, the browser may try `localhost:8010` and CRM calls (e.g. `GET /crm/events`) fail with **Failed to fetch** while some POSTs appear to work.
+6. On Render, set **`CORS_ORIGINS`** to your real frontend origin(s), comma-separated, e.g. `https://your-app.vercel.app,https://your-custom-domain.com` (default regex already allows `*.vercel.app` and `*.netlify.app`).
+7. Optional: edit `public/runtime-config.js` **on the deployed host** to set `API_BASE_URL` if you cannot inject Vite env at build time (leave empty when using `VITE_API_BASE_URL`).
+8. Deploy.
 
 ---
 

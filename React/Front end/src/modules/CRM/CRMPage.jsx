@@ -1118,7 +1118,7 @@ export function CRMPage({
 
   const loadOutreachEvents = () => {
     setOutreachEventsError('')
-    getJson('/crm/events')
+    getJson('/crm/events', { forceRefresh: true })
       .then((payload) => {
         const rows = Array.isArray(payload) ? payload : []
         setOutreachEvents(rows)

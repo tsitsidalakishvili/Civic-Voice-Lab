@@ -5,6 +5,8 @@
 **/.env.auth.local
 .streamlit/secrets.toml
 **/public/runtime-config.js
+# Ship default SPA runtime config (empty API_BASE_URL); local overrides stay gitignored elsewhere.
+!React/Front end/public/runtime-config.js
 __pycache__/
 *.pyc
 .pytest_cache/

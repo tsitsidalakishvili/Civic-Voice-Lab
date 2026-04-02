@@ -20,7 +20,8 @@ DEFAULT_CORS_ORIGIN_REGEX = (
     r"10\.\d+\.\d+\.\d+|"
     r"192\.168\.\d+\.\d+|"
     r"172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|"
-    r"[a-z0-9-]+\.vercel\.app"
+    r"[a-z0-9-]+\.vercel\.app|"
+    r"[a-z0-9-]+\.netlify\.app"
     r")(:\d+)?$"
 )
 
