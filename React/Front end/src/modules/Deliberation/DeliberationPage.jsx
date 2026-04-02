@@ -11,7 +11,7 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js'
-import { IconChartDots, IconMessage2, IconUsers } from '@tabler/icons-react'
+import { IconChartDots, IconMessage2, IconPlus, IconTrash, IconUsers } from '@tabler/icons-react'
 import { API_BASE, getJson, requestJson } from '../../services/api'
 import {
   getInviteAudienceGroupEmail,
@@ -81,10 +81,10 @@ const sanitizeStatement = (value) => {
     .trim()
 }
 
-const STATEMENT_SLOT_COUNT = 5
-const buildStatementSlots = () => Array.from({ length: STATEMENT_SLOT_COUNT }, () => '')
-const buildExistingStatementSlots = () =>
-  Array.from({ length: STATEMENT_SLOT_COUNT }, () => ({ id: '', text: '' }))
+/** At least one statement row in the UI; users can add as many as they need. */
+const MIN_SURVEY_STATEMENTS = 1
+const defaultCreateStatementRows = () => ['']
+const defaultExistingStatementRow = () => [{ id: '', text: '' }]
 
 const formatPercent = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 
@@ -286,7 +286,7 @@ export function DeliberationPage({
   const [createForm, setCreateForm] = useState({
     topic: '',
     description: '',
-    initialStatements: buildStatementSlots(),
+    initialStatements: defaultCreateStatementRows(),
     allowCommentSubmission: true,
     allowViz: true,
     moderationProfile: 'lazy',
@@ -300,7 +300,9 @@ export function DeliberationPage({
     isOpen: true,
   })
   const [updateForm, setUpdateForm] = useState(null)
-  const [existingStatementSlots, setExistingStatementSlots] = useState(buildExistingStatementSlots())
+  const [existingStatementSlots, setExistingStatementSlots] = useState(() =>
+    defaultExistingStatementRow(),
+  )
   const [savingExistingStatements, setSavingExistingStatements] = useState(false)
   const [seedEditId, setSeedEditId] = useState('')
   const [seedEditText, setSeedEditText] = useState('')
@@ -682,14 +684,11 @@ export function DeliberationPage({
   )
 
   useEffect(() => {
-    const nextSlots = buildExistingStatementSlots()
-    seedComments.slice(0, STATEMENT_SLOT_COUNT).forEach((comment, index) => {
-      nextSlots[index] = {
-        id: comment.id || '',
-        text: String(comment.text || ''),
-      }
-    })
-    setExistingStatementSlots(nextSlots)
+    const rows = seedComments.map((comment) => ({
+      id: String(comment.id || ''),
+      text: String(comment.text || ''),
+    }))
+    setExistingStatementSlots(rows.length ? rows : defaultExistingStatementRow())
   }, [activeId, seedComments])
 
   const reportSummary = useMemo(() => {
@@ -1353,8 +1352,8 @@ export function DeliberationPage({
     const initialStatements = (createForm.initialStatements || [])
       .map((line) => sanitizeStatement(line))
       .filter(Boolean)
-    if (initialStatements.length !== STATEMENT_SLOT_COUNT) {
-      setConvoError(`Please provide ${STATEMENT_SLOT_COUNT} statements.`)
+    if (initialStatements.length < MIN_SURVEY_STATEMENTS) {
+      setConvoError('Add at least one statement for voting cards.')
       return
     }
     setConvoError('')
@@ -1381,7 +1380,7 @@ export function DeliberationPage({
       setCreateForm({
         topic: '',
         description: '',
-        initialStatements: buildStatementSlots(),
+        initialStatements: defaultCreateStatementRows(),
         allowCommentSubmission: true,
         allowViz: true,
         moderationProfile: 'lazy',
@@ -1454,19 +1453,24 @@ export function DeliberationPage({
       id: slot.id || '',
       text: sanitizeStatement(slot.text),
     }))
-    if (normalizedSlots.filter((slot) => slot.text).length !== STATEMENT_SLOT_COUNT) {
-      setSeedStatus(`Please fill all ${STATEMENT_SLOT_COUNT} statements.`)
+    const withText = normalizedSlots.filter((slot) => slot.text)
+    if (withText.length < MIN_SURVEY_STATEMENTS) {
+      setSeedStatus('Add at least one statement with text.')
       return
     }
+    const toDelete = normalizedSlots.filter((slot) => slot.id && !slot.text)
+    const toUpdate = normalizedSlots.filter((slot) => slot.id && slot.text)
+    const creates = normalizedSlots.filter((slot) => !slot.id && slot.text).map((slot) => slot.text)
     setSavingExistingStatements(true)
     setSeedStatus('')
     try {
-      const updates = normalizedSlots.filter((slot) => slot.id && slot.text)
-      const creates = normalizedSlots.filter((slot) => !slot.id && slot.text).map((slot) => slot.text)
-      if (updates.length) {
+      for (const slot of toDelete) {
+        await requestJson(`/comments/${encodeURIComponent(slot.id)}`, { method: 'DELETE' })
+      }
+      if (toUpdate.length) {
         await Promise.all(
-          updates.map((slot) =>
-            requestJson(`/comments/${slot.id}/edit`, {
+          toUpdate.map((slot) =>
+            requestJson(`/comments/${encodeURIComponent(slot.id)}/edit`, {
               method: 'PATCH',
               payload: { text: slot.text, is_seed: true },
             }),
@@ -1481,12 +1485,30 @@ export function DeliberationPage({
       }
       const approved = await getJson(`/conversations/${activeId}/comments?status=approved`)
       setApprovedComments(Array.isArray(approved) ? approved : [])
-      setSeedStatus('Saved 5 statements.')
+      const n = withText.length
+      setSeedStatus(`Saved ${n} statement${n === 1 ? '' : 's'}.`)
     } catch (err) {
       setSeedStatus(err.message || 'Unable to save statements.')
     } finally {
       setSavingExistingStatements(false)
     }
+  }
+
+  const handleRemoveExistingStatementRow = async (index) => {
+    if (!activeId || existingStatementSlots.length <= MIN_SURVEY_STATEMENTS) return
+    const slot = existingStatementSlots[index]
+    if (slot?.id) {
+      setSeedStatus('')
+      try {
+        await requestJson(`/comments/${encodeURIComponent(slot.id)}`, { method: 'DELETE' })
+        const approved = await getJson(`/conversations/${activeId}/comments?status=approved`)
+        setApprovedComments(Array.isArray(approved) ? approved : [])
+      } catch (err) {
+        setSeedStatus(err.message || 'Unable to remove statement.')
+      }
+      return
+    }
+    setExistingStatementSlots((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleSimulateVotes = async () => {
@@ -2431,26 +2453,71 @@ export function DeliberationPage({
               </div>
               <div className="form-grid__full">
                 <label className="label">Statements for voting cards</label>
-                <div className="stack">
-                  {buildStatementSlots().map((_, index) => (
-                    <input
-                      key={`new-statement-${index + 1}`}
-                      className="input"
-                      placeholder={`Statement ${index + 1}`}
-                      value={createForm.initialStatements?.[index] || ''}
-                      onChange={(event) =>
-                        setCreateForm((prev) => {
-                          const next = Array.isArray(prev.initialStatements)
-                            ? [...prev.initialStatements]
-                            : buildStatementSlots()
-                          next[index] = event.target.value
-                          return { ...prev, initialStatements: next }
-                        })
-                      }
-                    />
+                <div className="stack" style={{ gap: 10 }}>
+                  {(createForm.initialStatements || defaultCreateStatementRows()).map((line, index) => (
+                    <div
+                      key={`new-statement-${index}`}
+                      className="filter-row"
+                      style={{ gap: 10, alignItems: 'center', margin: 0, flexWrap: 'nowrap' }}
+                    >
+                      <input
+                        className="input"
+                        style={{ flex: 1, minWidth: 0 }}
+                        placeholder={`Statement ${index + 1}`}
+                        value={line}
+                        onChange={(event) =>
+                          setCreateForm((prev) => {
+                            const next = Array.isArray(prev.initialStatements)
+                              ? [...prev.initialStatements]
+                              : defaultCreateStatementRows()
+                            next[index] = event.target.value
+                            return { ...prev, initialStatements: next }
+                          })
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="button-secondary button-secondary--small delib-statement-remove"
+                        title="Remove statement"
+                        disabled={(createForm.initialStatements || []).length <= MIN_SURVEY_STATEMENTS}
+                        onClick={() =>
+                          setCreateForm((prev) => {
+                            const list = Array.isArray(prev.initialStatements)
+                              ? [...prev.initialStatements]
+                              : defaultCreateStatementRows()
+                            if (list.length <= MIN_SURVEY_STATEMENTS) return prev
+                            list.splice(index, 1)
+                            return { ...prev, initialStatements: list }
+                          })
+                        }
+                        aria-label={`Remove statement ${index + 1}`}
+                      >
+                        <IconTrash size={18} stroke={1.5} aria-hidden />
+                      </button>
+                    </div>
                   ))}
+                  <button
+                    type="button"
+                    className="button-secondary delib-statement-add"
+                    onClick={() =>
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        initialStatements: [
+                          ...(Array.isArray(prev.initialStatements)
+                            ? prev.initialStatements
+                            : defaultCreateStatementRows()),
+                          '',
+                        ],
+                      }))
+                    }
+                  >
+                    <IconPlus size={18} stroke={1.5} aria-hidden style={{ marginRight: 6 }} />
+                    Add statement
+                  </button>
                 </div>
-                <p className="muted">Add all 5 statements now. These become participant voting cards.</p>
+                <p className="muted">
+                  Add one or more statements (use + to add rows). Each becomes a participant voting card.
+                </p>
               </div>
               <div className="form-grid__full">
                 <textarea
@@ -2668,22 +2735,48 @@ export function DeliberationPage({
                       </div>
                       <div className="form-grid__full">
                         <label className="label">Statements for voting cards</label>
-                        <div className="stack">
+                        <div className="stack" style={{ gap: 10 }}>
                           {existingStatementSlots.map((slot, index) => (
-                            <input
-                              key={`existing-statement-${index + 1}`}
-                              className="input"
-                              placeholder={`Statement ${index + 1}`}
-                              value={slot.text}
-                              onChange={(event) =>
-                                setExistingStatementSlots((prev) =>
-                                  prev.map((item, itemIndex) =>
-                                    itemIndex === index ? { ...item, text: event.target.value } : item,
-                                  ),
-                                )
-                              }
-                            />
+                            <div
+                              key={slot.id || `existing-draft-${index}`}
+                              className="filter-row"
+                              style={{ gap: 10, alignItems: 'center', margin: 0, flexWrap: 'nowrap' }}
+                            >
+                              <input
+                                className="input"
+                                style={{ flex: 1, minWidth: 0 }}
+                                placeholder={`Statement ${index + 1}`}
+                                value={slot.text}
+                                onChange={(event) =>
+                                  setExistingStatementSlots((prev) =>
+                                    prev.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, text: event.target.value } : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="button-secondary button-secondary--small delib-statement-remove"
+                                title="Remove statement"
+                                disabled={existingStatementSlots.length <= MIN_SURVEY_STATEMENTS}
+                                onClick={() => handleRemoveExistingStatementRow(index)}
+                                aria-label={`Remove statement ${index + 1}`}
+                              >
+                                <IconTrash size={18} stroke={1.5} aria-hidden />
+                              </button>
+                            </div>
                           ))}
+                          <button
+                            type="button"
+                            className="button-secondary delib-statement-add"
+                            onClick={() =>
+                              setExistingStatementSlots((prev) => [...prev, { id: '', text: '' }])
+                            }
+                          >
+                            <IconPlus size={18} stroke={1.5} aria-hidden style={{ marginRight: 6 }} />
+                            Add statement
+                          </button>
                         </div>
                         <div className="filter-row">
                           <button
@@ -2692,9 +2785,11 @@ export function DeliberationPage({
                             onClick={handleSaveExistingStatements}
                             disabled={savingExistingStatements}
                           >
-                            {savingExistingStatements ? 'Saving...' : 'Save 5 statements'}
+                            {savingExistingStatements ? 'Saving…' : 'Save statements'}
                           </button>
-                          <span className="muted">Edit and save the first 5 statements used for voting cards.</span>
+                          <span className="muted">
+                            Edit, add (+), or remove statements; save to update voting cards.
+                          </span>
                         </div>
                         {seedStatus ? <p className="muted">{seedStatus}</p> : null}
                       </div>
