@@ -13,6 +13,11 @@ import {
 } from 'chart.js'
 import { IconChartDots, IconMessage2, IconUsers } from '@tabler/icons-react'
 import { API_BASE, getJson, requestJson } from '../../services/api'
+import {
+  getInviteAudienceGroupEmail,
+  getInviteAudienceLabel,
+  openExternalShareLink,
+} from '../../lib/inviteDistribution'
 import { CivicStatGrid } from '../../ui'
 
 ChartJS.register(
@@ -95,6 +100,25 @@ const buildClusterTooltip = (card) => {
   return lines
 }
 
+/** Human-readable lines for saved segment filterSpec (matches CRM / Network segment form). */
+const formatSegmentFilterSummary = (spec) => {
+  if (!spec || typeof spec !== 'object') return '—'
+  const s = spec
+  const lines = []
+  if (s.group && s.group !== 'All') lines.push(`Group: ${s.group}`)
+  const ta = s.timeAvailability ?? s.time_availability
+  if (Array.isArray(ta) && ta.length) lines.push(`Time availability: ${ta.join(', ')}`)
+  if (Array.isArray(s.tags) && s.tags.length) lines.push(`Tags: ${s.tags.join(', ')}`)
+  if (Array.isArray(s.skills) && s.skills.length) lines.push(`Skills: ${s.skills.join(', ')}`)
+  const nameQ = String(s.nameContains ?? s.name_contains ?? '').trim()
+  if (nameQ) lines.push(`Name contains: ${nameQ}`)
+  const addrQ = String(s.addressContains ?? s.address_contains ?? '').trim()
+  if (addrQ) lines.push(`Address contains: ${addrQ}`)
+  const me = s.minEffortHours ?? s.min_effort_hours
+  if (me != null && Number(me) > 0) lines.push(`Min effort hours: ${me}`)
+  if (!lines.length) return 'All people (no filters)'
+  return lines.join('\n')
+}
 
 const buildStatementTooltipRows = (item) => {
   const agree = Number(item?.agree_count || 0)
@@ -205,13 +229,14 @@ const DELIBERATION_DEFAULT_TAB = 'overview'
 const DELIBERATION_PRIMARY_TABS = new Set([
   'overview',
   'setup',
-  'distribute',
   'insights',
   'moderation',
 ])
 
 const normalizeDeliberationTab = (tabId) => {
   if (!tabId) return DELIBERATION_DEFAULT_TAB
+  // Share tab was merged into setup; keep old stored/module links working.
+  if (tabId === 'distribute') return 'setup'
   return DELIBERATION_PRIMARY_TABS.has(tabId) ? tabId : DELIBERATION_DEFAULT_TAB
 }
 
@@ -339,29 +364,43 @@ export function DeliberationPage({
   const [seedCsvColumn, setSeedCsvColumn] = useState('')
   const [seedCsvLimit, setSeedCsvLimit] = useState(200)
   const [runAnalysisAfterImport, setRunAnalysisAfterImport] = useState(false)
-  const [slackMessage, setSlackMessage] = useState('')
-  const [slackStatus, setSlackStatus] = useState('')
-  const [slackError, setSlackError] = useState('')
-  const [slackChannelMode, setSlackChannelMode] = useState('default')
-  const [slackChannelValue, setSlackChannelValue] = useState('')
-  const [sendingSlack, setSendingSlack] = useState(false)
-  const [shareAudience, setShareAudience] = useState('verified')
-  const [whatsappGroups, setWhatsappGroups] = useState([])
-  const [whatsappGroupId, setWhatsappGroupId] = useState('')
-  const [whatsappMessage, setWhatsappMessage] = useState('')
-  const [whatsappError, setWhatsappError] = useState('')
-  const [whatsappStatus, setWhatsappStatus] = useState('')
-  const [sendingWhatsapp, setSendingWhatsapp] = useState(false)
+  const [surveyInviteGroupsConfig, setSurveyInviteGroupsConfig] = useState({
+    everyoneGroupEmail: '',
+    verifiedGroupEmail: '',
+    registeredGroupEmail: '',
+  })
+  const [surveyDistributionError, setSurveyDistributionError] = useState('')
+  const [surveyDistributionStatus, setSurveyDistributionStatus] = useState('')
+  const [surveyInviteForm, setSurveyInviteForm] = useState({
+    inviteAudience: 'individual',
+    recipientName: '',
+    recipientEmail: '',
+    recipientPhone: '',
+    channel: 'email',
+    notes: '',
+  })
+  const [shareSegments, setShareSegments] = useState([])
+  const [shareSegmentsError, setShareSegmentsError] = useState('')
+  const [shareSegmentsLoading, setShareSegmentsLoading] = useState(false)
+  const [shareSegmentSelectedId, setShareSegmentSelectedId] = useState('')
+  const [shareSegmentMemberCount, setShareSegmentMemberCount] = useState(null)
+  const [shareSegmentCountLoading, setShareSegmentCountLoading] = useState(false)
+  const [showShareSegmentForm, setShowShareSegmentForm] = useState(false)
+  const [shareSegName, setShareSegName] = useState('')
+  const [shareSegDescription, setShareSegDescription] = useState('')
+  const [shareSegGroup, setShareSegGroup] = useState('All')
+  const [shareSegNameContains, setShareSegNameContains] = useState('')
+  const [shareSegAddressContains, setShareSegAddressContains] = useState('')
+  const [shareSegTimeAvailability, setShareSegTimeAvailability] = useState('All')
+  const [shareSegTags, setShareSegTags] = useState([])
+  const [shareSegSkills, setShareSegSkills] = useState([])
+  const [shareSegTagOptions, setShareSegTagOptions] = useState([])
+  const [shareSegSkillOptions, setShareSegSkillOptions] = useState([])
+  const [shareSegMinEffort, setShareSegMinEffort] = useState('')
   const [polisSiteId, setPolisSiteId] = useState('polis_site_id_dZO8TFLSfUGNe651NN')
   const [polisPageId, setPolisPageId] = useState('PAGE_ID')
   const [polisConversationId, setPolisConversationId] = useState('')
   const [copyStatus, setCopyStatus] = useState(null)
-  const [discussionCommentsByStatement, setDiscussionCommentsByStatement] = useState({})
-  const [discussionDraftByStatement, setDiscussionDraftByStatement] = useState({})
-  const [discussionErrorByStatement, setDiscussionErrorByStatement] = useState({})
-  const [discussionLoadingByStatement, setDiscussionLoadingByStatement] = useState({})
-  const [discussionSavingByStatement, setDiscussionSavingByStatement] = useState({})
-  const [discussionReactionBusyByStatement, setDiscussionReactionBusyByStatement] = useState({})
 
   useEffect(() => {
     if (!activeTabOverride) return
@@ -458,25 +497,6 @@ export function DeliberationPage({
       clusterSizes: clusterSummaries.map((row) => Number(row?.size || 0)),
     }
   }, [report])
-
-  const discussionStatementOptions = useMemo(() => {
-    const rows = [...(reportCharts?.consensusTop || []), ...(reportCharts?.polarizingTop || [])]
-    const unique = new Map()
-    rows.forEach((row) => {
-      if (!row?.id || unique.has(row.id)) return
-      unique.set(row.id, row)
-    })
-    return Array.from(unique.values())
-  }, [reportCharts])
-
-  const getDiscussionStateForStatement = (statementId) => ({
-    comments: discussionCommentsByStatement[statementId] || [],
-    draft: discussionDraftByStatement[statementId] || '',
-    error: discussionErrorByStatement[statementId] || '',
-    loading: Boolean(discussionLoadingByStatement[statementId]),
-    saving: Boolean(discussionSavingByStatement[statementId]),
-    reactionBusyId: discussionReactionBusyByStatement[statementId] || '',
-  })
 
   const topicMap = useMemo(() => {
     const points = report?.points || []
@@ -869,15 +889,69 @@ export function DeliberationPage({
   }, [activeId, conversations])
 
   useEffect(() => {
-    if (activeTab !== 'setup' && activeTab !== 'distribute') return
-    getJson('/crm/whatsapp-groups')
+    if (activeTab !== 'setup') return
+    getJson('/crm/supporter-invite-groups-config')
       .then((payload) => {
-        setWhatsappGroups(Array.isArray(payload) ? payload : [])
+        setSurveyInviteGroupsConfig({
+          everyoneGroupEmail: payload?.everyoneGroupEmail || '',
+          verifiedGroupEmail: payload?.verifiedGroupEmail || '',
+          registeredGroupEmail: payload?.registeredGroupEmail || '',
+        })
       })
-      .catch((err) => {
-        setWhatsappError(err.message || 'Unable to load WhatsApp groups.')
-      })
+      .catch(() => null)
   }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'setup') return
+    setShareSegmentsLoading(true)
+    setShareSegmentsError('')
+    getJson('/crm/segments')
+      .then((payload) => setShareSegments(Array.isArray(payload) ? payload : []))
+      .catch((err) => setShareSegmentsError(err.message || 'Unable to load segments.'))
+      .finally(() => setShareSegmentsLoading(false))
+    Promise.all([
+      getJson('/crm/distinct-values?label=Tag'),
+      getJson('/crm/distinct-values?label=Skill'),
+    ])
+      .then(([tags, skills]) => {
+        setShareSegTagOptions(Array.isArray(tags) ? tags : [])
+        setShareSegSkillOptions(Array.isArray(skills) ? skills : [])
+      })
+      .catch(() => null)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'setup' || !shareSegmentSelectedId) {
+      setShareSegmentMemberCount(null)
+      setShareSegmentCountLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setShareSegmentCountLoading(true)
+    getJson(`/crm/segments/${encodeURIComponent(shareSegmentSelectedId)}/count`)
+      .then((payload) => {
+        if (cancelled) return
+        const n = payload?.count
+        setShareSegmentMemberCount(typeof n === 'number' ? n : null)
+      })
+      .catch(() => {
+        if (!cancelled) setShareSegmentMemberCount(null)
+      })
+      .finally(() => {
+        if (!cancelled) setShareSegmentCountLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, shareSegmentSelectedId])
+
+  useEffect(() => {
+    if (activeTab !== 'setup' || !activeId) return
+    setStatsError('')
+    getJson(`/conversations/${activeId}/stats`)
+      .then((payload) => setStats(payload))
+      .catch((err) => setStatsError(err.message || 'Unable to load survey stats.'))
+  }, [activeTab, activeId])
 
   useEffect(() => {
     if (activeTab !== 'setup' || !activeId) return
@@ -970,40 +1044,10 @@ export function DeliberationPage({
     () => buildQuestionnaireLink('deliberation', 'participant'),
     [activeId, language],
   )
-  const getShareAudienceLabel = (audience) => {
-    if (audience === 'unverified') return 'Unverified users'
-    if (audience === 'registered') return 'Registered users'
-    return 'Verified users'
-  }
-  const audienceQuestionnaireLink = useMemo(() => {
-    if (!questionnaireLink) return ''
-    try {
-      const url = new URL(questionnaireLink)
-      url.searchParams.set('audience', shareAudience)
-      return url.toString()
-    } catch {
-      return questionnaireLink
-    }
-  }, [questionnaireLink, shareAudience])
-  const verifiedQuestionnaireLink = useMemo(() => {
-    if (!questionnaireLink) return ''
-    const url = new URL(questionnaireLink)
-    url.searchParams.set('audience', 'verified')
-    return url.toString()
-  }, [questionnaireLink])
-  const unverifiedQuestionnaireLink = useMemo(() => {
-    if (!questionnaireLink) return ''
-    const url = new URL(questionnaireLink)
-    url.searchParams.set('audience', 'unverified')
-    return url.toString()
-  }, [questionnaireLink])
-  const registeredQuestionnaireLink = useMemo(() => {
-    if (!questionnaireLink) return ''
-    const url = new URL(questionnaireLink)
-    url.searchParams.set('audience', 'registered')
-    return url.toString()
-  }, [questionnaireLink])
-
+  const selectedShareSegment = useMemo(
+    () => shareSegments.find((s) => s.segmentId === shareSegmentSelectedId) || null,
+    [shareSegmentSelectedId, shareSegments],
+  )
   const adminQuestionnaireLink = useMemo(
     () => buildQuestionnaireLink('deliberation_admin', 'admin'),
     [activeId, language],
@@ -1029,88 +1073,258 @@ export function DeliberationPage({
     return `<iframe src="${embedLink}&xid=YOUR_USER_ID" style="width:100%;min-height:720px;border:0;" title="Survey & Consensus widget"></iframe>`
   }, [activeId, language])
 
-  useEffect(() => {
-    if (!activeId || !audienceQuestionnaireLink) {
-      setSlackMessage('')
-      setWhatsappMessage('')
+  const setSurveyInviteAudienceGroupEmail = (audience, value) => {
+    if (audience === 'everyone') {
+      setSurveyInviteGroupsConfig((prev) => ({ ...prev, everyoneGroupEmail: value }))
       return
     }
-    const message = `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
-      activeConvo?.topic || 'Conversation'
-    }\n\n${audienceQuestionnaireLink}`
-    setSlackMessage(message)
-    setWhatsappMessage(message)
-    setSlackStatus('')
-    setSlackError('')
-    setWhatsappStatus('')
-    setWhatsappError('')
-  }, [activeId, audienceQuestionnaireLink, activeConvo?.topic, shareAudience])
-
-  const handleSendSlack = async () => {
-    if (!audienceQuestionnaireLink) {
-      setSlackError('Select a conversation first.')
+    if (audience === 'verified') {
+      setSurveyInviteGroupsConfig((prev) => ({ ...prev, verifiedGroupEmail: value }))
       return
     }
-    if (slackChannelMode === 'custom' && !slackChannelValue.trim()) {
-      setSlackError('Enter a Slack channel.')
-      return
-    }
-    const message =
-      slackMessage ||
-      `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
-        activeConvo?.topic || 'Conversation'
-      }\n\n${audienceQuestionnaireLink}`
-    setSlackError('')
-    setSlackStatus('')
-    setSendingSlack(true)
-    try {
-      await requestJson('/crm/slack/send', {
-        method: 'POST',
-        payload: {
-          message,
-          channel: slackChannelMode === 'custom' ? slackChannelValue.trim() : '',
-          source: 'deliberation_share',
-        },
-      })
-      setSlackStatus('Sent to Slack.')
-    } catch (err) {
-      setSlackError(err.message || 'Unable to send to Slack.')
-    } finally {
-      setSendingSlack(false)
+    if (audience === 'registered') {
+      setSurveyInviteGroupsConfig((prev) => ({ ...prev, registeredGroupEmail: value }))
     }
   }
 
-  const handleSendWhatsapp = async () => {
-    if (!audienceQuestionnaireLink) {
-      setWhatsappError('Select a conversation first.')
+  const buildSurveyShareMessage = (
+    recipientName,
+    topicLabel,
+    link,
+    notes,
+    inviteAudience,
+    segmentAudienceLine = '',
+  ) => {
+    const trimmedNotes = String(notes || '').trim()
+    const noteBlock = trimmedNotes ? `\n\nNote: ${trimmedNotes}` : ''
+    const audience = String(inviteAudience || 'individual').toLowerCase()
+    const topic = topicLabel || 'this survey'
+    const prefix =
+      segmentAudienceLine && String(segmentAudienceLine).trim()
+        ? `${String(segmentAudienceLine).trim()}\n\n`
+        : ''
+    if (audience !== 'individual') {
+      return `${prefix}Hi team, here is the Freedom Square survey link for ${getInviteAudienceLabel(audience)} — ${topic}:\n\n${link}${noteBlock}`
+    }
+    const name = String(recipientName || '').trim() || 'there'
+    return `${prefix}Hi ${name}, you're invited to take part in our survey — ${topic}:\n\n${link}${noteBlock}`
+  }
+
+  const handleShareSurveyLinkByChannel = async ({
+    channel,
+    inviteAudience,
+    inviteLink,
+    recipientName,
+    recipientEmail,
+    recipientPhone,
+    notes,
+    topicLabel,
+    segmentAudienceLine,
+  }) => {
+    if (!inviteLink) return false
+    const normalizedChannel = String(channel || '').toLowerCase()
+    const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
+    const message = buildSurveyShareMessage(
+      recipientName,
+      topicLabel,
+      inviteLink,
+      notes,
+      normalizedAudience,
+      segmentAudienceLine,
+    )
+    if (normalizedChannel === 'email') {
+      const audienceGroupEmail = getInviteAudienceGroupEmail(
+        normalizedAudience,
+        surveyInviteGroupsConfig,
+      )
+      const targetEmail =
+        normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
+      if (!targetEmail) {
+        if (normalizedAudience === 'individual') {
+          setSurveyDistributionError('Recipient email is required for email sends.')
+        } else {
+          setSurveyDistributionError(
+            `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
+          )
+        }
+        return false
+      }
+      const subject = encodeURIComponent(
+        `Freedom Square survey: ${topicLabel || 'Participate'} (${getInviteAudienceLabel(normalizedAudience)})`,
+      )
+      const body = encodeURIComponent(message)
+      openExternalShareLink(
+        `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
+      )
+      setSurveyDistributionStatus('Survey link shared — email draft opened.')
+      return true
+    }
+    if (normalizedChannel === 'whatsapp') {
+      const text = encodeURIComponent(message)
+      const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
+      const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
+      openExternalShareLink(whatsappUrl)
+      setSurveyDistributionStatus('WhatsApp share opened with the survey link.')
+      return true
+    }
+    if (normalizedChannel === 'slack') {
+      if (!navigator?.clipboard) {
+        setSurveyDistributionError('Clipboard unavailable in this browser.')
+        return false
+      }
+      try {
+        await navigator.clipboard.writeText(message)
+        setSurveyDistributionStatus('Slack message copied with the survey link.')
+        return true
+      } catch {
+        setSurveyDistributionError('Unable to copy message for Slack.')
+        return false
+      }
+    }
+    setSurveyDistributionStatus('Survey link ready to share.')
+    return true
+  }
+
+  const buildShareSegmentFilter = () => {
+    const tags = shareSegTags.filter(Boolean)
+    const skills = shareSegSkills.filter(Boolean)
+    return {
+      group: shareSegGroup !== 'All' ? shareSegGroup : null,
+      timeAvailability: shareSegTimeAvailability !== 'All' ? [shareSegTimeAvailability] : [],
+      tags,
+      skills,
+      nameContains: shareSegNameContains.trim() || null,
+      addressContains: shareSegAddressContains.trim() || null,
+      minEffortHours: shareSegMinEffort ? Number(shareSegMinEffort) : null,
+    }
+  }
+
+  const handleShareCreateSegment = async (event) => {
+    event.preventDefault()
+    if (!shareSegName.trim()) {
+      setShareSegmentsError('Segment name is required.')
       return
     }
-    if (!whatsappGroupId) {
-      setWhatsappError('Select a WhatsApp group.')
-      return
-    }
-    const message =
-      whatsappMessage ||
-      `Survey questionnaire (${getShareAudienceLabel(shareAudience)}): ${
-        activeConvo?.topic || 'Conversation'
-      }\n\n${audienceQuestionnaireLink}`
-    setWhatsappError('')
-    setWhatsappStatus('')
-    setSendingWhatsapp(true)
+    setShareSegmentsError('')
     try {
-      await requestJson(`/crm/whatsapp-groups/${whatsappGroupId}/send`, {
+      await requestJson('/crm/segments', {
         method: 'POST',
         payload: {
-          message,
-          appendInvite: false,
-          source: 'deliberation_share',
+          name: shareSegName.trim(),
+          description: shareSegDescription.trim(),
+          filterSpec: buildShareSegmentFilter(),
         },
       })
-      setWhatsappStatus('Sent to WhatsApp.')
+      setShareSegName('')
+      setShareSegDescription('')
+      setShareSegTags([])
+      setShareSegSkills([])
+      setShowShareSegmentForm(false)
+      setShareSegmentsLoading(true)
+      getJson('/crm/segments')
+        .then((payload) => setShareSegments(Array.isArray(payload) ? payload : []))
+        .catch((err) => setShareSegmentsError(err.message || 'Unable to load segments.'))
+        .finally(() => setShareSegmentsLoading(false))
     } catch (err) {
-      setWhatsappError(err.message || 'Unable to send to WhatsApp.')
-    } finally {
-      setSendingWhatsapp(false)
+      setShareSegmentsError(err.message || 'Unable to save segment.')
+    }
+  }
+
+  const handleShareDeleteSegment = async (segmentId) => {
+    setShareSegmentsError('')
+    try {
+      await requestJson(`/crm/segments/${segmentId}`, { method: 'DELETE' })
+      if (shareSegmentSelectedId === segmentId) {
+        setShareSegmentSelectedId('')
+      }
+      setShareSegmentsLoading(true)
+      getJson('/crm/segments')
+        .then((payload) => setShareSegments(Array.isArray(payload) ? payload : []))
+        .catch((err) => setShareSegmentsError(err.message || 'Unable to load segments.'))
+        .finally(() => setShareSegmentsLoading(false))
+    } catch (err) {
+      setShareSegmentsError(err.message || 'Unable to delete segment.')
+    }
+  }
+
+  const handleSubmitSurveyInvite = async (ev) => {
+    ev.preventDefault()
+    setSurveyDistributionError('')
+    setSurveyDistributionStatus('')
+    const link = questionnaireLink
+    const topicLabel = activeConvo?.topic || 'Survey'
+    if (!activeId || !link) {
+      setSurveyDistributionError('Select a conversation to get a survey link.')
+      return
+    }
+    if (!shareSegmentSelectedId) {
+      setSurveyDistributionError('Select a saved audience segment first (card above).')
+      return
+    }
+    const segmentAudienceLine = selectedShareSegment
+      ? `Audience segment: ${selectedShareSegment.name}${
+          shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount} people)` : ''
+        }`
+      : ''
+    const selectedChannel = surveyInviteForm.channel
+    const selectedAudience = surveyInviteForm.inviteAudience || 'individual'
+    const recipientName = surveyInviteForm.recipientName.trim()
+    const recipientEmail = surveyInviteForm.recipientEmail.trim()
+    const recipientPhone = surveyInviteForm.recipientPhone.trim()
+    const notes = surveyInviteForm.notes.trim()
+    try {
+      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+        await requestJson('/crm/supporter-invite-groups-config', {
+          method: 'PATCH',
+          payload: {
+            everyoneGroupEmail: surveyInviteGroupsConfig.everyoneGroupEmail.trim(),
+            verifiedGroupEmail: surveyInviteGroupsConfig.verifiedGroupEmail.trim(),
+            registeredGroupEmail: surveyInviteGroupsConfig.registeredGroupEmail.trim(),
+          },
+        })
+      }
+      const ok = await handleShareSurveyLinkByChannel({
+        channel: selectedChannel,
+        inviteAudience: selectedAudience,
+        inviteLink: link,
+        recipientName,
+        recipientEmail,
+        recipientPhone,
+        notes,
+        topicLabel,
+        segmentAudienceLine,
+      })
+      if (ok) {
+        setSurveyInviteForm((prev) => ({
+          ...prev,
+          recipientName: '',
+          recipientEmail: '',
+          recipientPhone: '',
+          notes: '',
+        }))
+      }
+    } catch (err) {
+      setSurveyDistributionError(err.message || 'Unable to share survey link.')
+    }
+  }
+
+  const handleCopySurveyLink = async () => {
+    const value = String(questionnaireLink || '').trim()
+    setSurveyDistributionError('')
+    setSurveyDistributionStatus('')
+    if (!value) {
+      setSurveyDistributionError('Select a conversation to copy the survey link.')
+      return
+    }
+    if (!navigator?.clipboard) {
+      setSurveyDistributionError('Clipboard unavailable in this browser.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      setSurveyDistributionStatus('Link copied.')
+    } catch {
+      setSurveyDistributionError('Unable to copy survey link.')
     }
   }
 
@@ -1443,132 +1657,6 @@ export function DeliberationPage({
 
   const activeConversations = conversations.filter((convo) => convo.is_open)
   const closedConversations = conversations.filter((convo) => !convo.is_open)
-
-  const getDiscussionParticipantId = () => {
-    if (typeof window === 'undefined') return `insights_${Date.now()}`
-    const key = `fs.deliberation.discussion.participant.${activeId || 'default'}`
-    const existing = window.localStorage.getItem(key)
-    if (existing) return existing
-    const created = `insights_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
-    window.localStorage.setItem(key, created)
-    return created
-  }
-
-  const loadStatementDiscussionComments = async (statementId) => {
-    if (!activeId || !statementId) return
-    setDiscussionLoadingByStatement((prev) => ({ ...prev, [statementId]: true }))
-    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
-    try {
-      const participantId = getDiscussionParticipantId()
-      const payload = await requestJson(
-        `/conversations/${activeId}/statements/${statementId}/discussion-comments`,
-        {
-          method: 'GET',
-          headers: { 'X-Participant-Id': participantId },
-        },
-      )
-      setDiscussionCommentsByStatement((prev) => ({
-        ...prev,
-        [statementId]: Array.isArray(payload) ? payload : [],
-      }))
-    } catch (err) {
-      setDiscussionErrorByStatement((prev) => ({
-        ...prev,
-        [statementId]: err.message || 'Unable to load statement comments.',
-      }))
-    } finally {
-      setDiscussionLoadingByStatement((prev) => ({ ...prev, [statementId]: false }))
-    }
-  }
-
-  const handleCreateStatementDiscussionComment = async (statementId) => {
-    const draft = discussionDraftByStatement[statementId] || ''
-    if (activeConvo?.is_open === false) {
-      setDiscussionErrorByStatement((prev) => ({
-        ...prev,
-        [statementId]: 'Conversation is closed. Reopen it to add statement comments.',
-      }))
-      return
-    }
-    if (!activeId || !statementId) {
-      setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: 'Select a statement first.' }))
-      return
-    }
-    if (!draft.trim()) {
-      setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: 'Comment text is required.' }))
-      return
-    }
-    setDiscussionSavingByStatement((prev) => ({ ...prev, [statementId]: true }))
-    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
-    try {
-      const participantId = getDiscussionParticipantId()
-      await requestJson(
-        `/conversations/${activeId}/statements/${statementId}/discussion-comments`,
-        {
-          method: 'POST',
-          payload: { text: draft.trim(), author_id: participantId },
-          headers: { 'X-Participant-Id': participantId },
-        },
-      )
-      setDiscussionDraftByStatement((prev) => ({ ...prev, [statementId]: '' }))
-      await loadStatementDiscussionComments(statementId)
-    } catch (err) {
-      setDiscussionErrorByStatement((prev) => ({
-        ...prev,
-        [statementId]: err.message || 'Unable to post statement comment.',
-      }))
-    } finally {
-      setDiscussionSavingByStatement((prev) => ({ ...prev, [statementId]: false }))
-    }
-  }
-
-  const handleReactToStatementDiscussionComment = async (statementId, commentId, reaction) => {
-    if (activeConvo?.is_open === false) {
-      setDiscussionErrorByStatement((prev) => ({
-        ...prev,
-        [statementId]: 'Conversation is closed. Reopen it to react on comments.',
-      }))
-      return
-    }
-    if (!activeId || !statementId || !commentId) return
-    setDiscussionReactionBusyByStatement((prev) => ({ ...prev, [statementId]: commentId }))
-    setDiscussionErrorByStatement((prev) => ({ ...prev, [statementId]: '' }))
-    try {
-      const participantId = getDiscussionParticipantId()
-      const updated = await requestJson(
-        `/conversations/${activeId}/statements/${statementId}/discussion-comments/${commentId}/reactions`,
-        {
-          method: 'POST',
-          payload: { reaction, author_id: participantId },
-          headers: { 'X-Participant-Id': participantId },
-        },
-      )
-      setDiscussionCommentsByStatement((prev) => ({
-        ...prev,
-        [statementId]: (prev[statementId] || []).map((item) =>
-          item.id === commentId ? { ...item, ...(updated || {}) } : item,
-        ),
-      }))
-    } catch (err) {
-      setDiscussionErrorByStatement((prev) => ({
-        ...prev,
-        [statementId]: err.message || 'Unable to react to comment.',
-      }))
-    } finally {
-      setDiscussionReactionBusyByStatement((prev) => ({ ...prev, [statementId]: '' }))
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab !== 'insights') return
-    if (!activeId) return
-    discussionStatementOptions.forEach((row) => {
-      if (!row?.id) return
-      if (discussionCommentsByStatement[row.id]) return
-      loadStatementDiscussionComments(row.id)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeId, discussionStatementOptions])
 
   const handleRunAnalysis = async () => {
     if (!activeId) return
@@ -2065,8 +2153,7 @@ export function DeliberationPage({
         <div className="subtabs">
           {[
             { id: 'overview', label: 'Overview' },
-            { id: 'setup', label: 'Survey setup' },
-            { id: 'distribute', label: 'Share' },
+            { id: 'setup', label: 'Set up & share' },
             { id: 'moderation', label: 'Review queue' },
             { id: 'insights', label: 'Insights' },
           ].map((tab) => (
@@ -2847,189 +2934,438 @@ export function DeliberationPage({
               )}
             </div>
           ) : null}
-        </div>
-      )}
 
-
-      {activeTab === 'distribute' && (
-        <div className="stack">
-          <details className="dashboard-detail">
-            <summary>Share the survey</summary>
-            <div className="dashboard-detail__body">
-              <p className="muted">Send the participant link or embed the survey into your site.</p>
+          <div className="module-card module-card__wide module-card--outreach-flow-segment">
+            <div className="card-header">
+              <div>
+                <h3>Segment: create or select</h3>
+                <p className="muted">
+                  Same step as Network → Outreach &amp; events: define who you are reaching before you
+                  send. Segments are shared across the workspace.
+                </p>
+              </div>
+              <div className="pill">Audience</div>
             </div>
-          </details>
+            {shareSegmentsError ? <div className="module-alert">{shareSegmentsError}</div> : null}
+            {shareSegmentsLoading ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Loading segments…
+              </p>
+            ) : null}
+            <div className="filter-row">
+              <select
+                className="select"
+                value={shareSegmentSelectedId}
+                onChange={(event) => setShareSegmentSelectedId(event.target.value)}
+              >
+                <option value="">Select saved segment</option>
+                {shareSegments.map((segment) => (
+                  <option key={segment.segmentId} value={segment.segmentId}>
+                    {segment.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button-secondary"
+                type="button"
+                disabled={!shareSegmentSelectedId}
+                onClick={() => handleShareDeleteSegment(shareSegmentSelectedId)}
+              >
+                Delete segment
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() => setShowShareSegmentForm((prev) => !prev)}
+              >
+                {showShareSegmentForm ? 'Close new segment' : '+ New segment'}
+              </button>
+            </div>
+            {shareSegmentSelectedId ? (
+              <details
+                className="dashboard-detail intake-tile outreach-detail-expander"
+                key={shareSegmentSelectedId}
+                defaultOpen
+              >
+                <summary>
+                  <span className="intake-section-title">Selected segment details</span>
+                </summary>
+                <div className="dashboard-detail__body">
+                  {selectedShareSegment ? (
+                    <div className="stack" style={{ marginTop: 0, gap: 12 }}>
+                      <div className="module-footer outreach-detail-footer">
+                        <span>
+                          <strong>Name:</strong> {selectedShareSegment.name || '—'}
+                        </span>
+                        <span>
+                          <strong>Description:</strong> {selectedShareSegment.description || '—'}
+                        </span>
+                        <span>
+                          <strong>Size:</strong>{' '}
+                          {shareSegmentCountLoading
+                            ? '…'
+                            : shareSegmentMemberCount != null
+                              ? shareSegmentMemberCount
+                              : '—'}
+                        </span>
+                        <span>
+                          <strong>Updated:</strong> {selectedShareSegment.updatedAt || '—'}
+                        </span>
+                        <span>
+                          <strong>ID:</strong> {selectedShareSegment.segmentId || '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Filters</strong>
+                        <p
+                          className="muted"
+                          style={{ whiteSpace: 'pre-line', margin: '6px 0 0', lineHeight: 1.45 }}
+                        >
+                          {formatSegmentFilterSummary(selectedShareSegment.filterSpec || {})}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="muted" style={{ margin: 0 }}>
+                      Segment data is unavailable. Try leaving this tab and returning.
+                    </p>
+                  )}
+                </div>
+              </details>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                Select a saved segment to view its details.
+              </p>
+            )}
+            {showShareSegmentForm ? (
+              <form className="stack" onSubmit={handleShareCreateSegment}>
+                <input
+                  className="input"
+                  value={shareSegName}
+                  onChange={(event) => setShareSegName(event.target.value)}
+                  placeholder="Segment name"
+                />
+                <input
+                  className="input"
+                  value={shareSegDescription}
+                  onChange={(event) => setShareSegDescription(event.target.value)}
+                  placeholder="Description"
+                />
+                <div className="filter-row">
+                  <select
+                    className="select"
+                    value={shareSegGroup}
+                    onChange={(event) => setShareSegGroup(event.target.value)}
+                  >
+                    <option value="All">All groups</option>
+                    <option value="Supporter">Supporters</option>
+                    <option value="Member">Members</option>
+                  </select>
+                  <select
+                    className="select"
+                    value={shareSegTimeAvailability}
+                    onChange={(event) => setShareSegTimeAvailability(event.target.value)}
+                  >
+                    <option value="All">Any availability</option>
+                    <option value="Weekends">Weekends</option>
+                    <option value="Evenings">Evenings</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Ad-hoc">Ad-hoc</option>
+                  </select>
+                </div>
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={shareSegMinEffort}
+                    onChange={(event) => setShareSegMinEffort(event.target.value)}
+                    placeholder="Min effort hours"
+                  />
+                  <input
+                    className="input"
+                    value={shareSegNameContains}
+                    onChange={(event) => setShareSegNameContains(event.target.value)}
+                    placeholder="Name contains"
+                  />
+                  <input
+                    className="input"
+                    value={shareSegAddressContains}
+                    onChange={(event) => setShareSegAddressContains(event.target.value)}
+                    placeholder="Address contains"
+                  />
+                </div>
+                <div className="filter-row">
+                  <select
+                    className="select"
+                    multiple
+                    value={shareSegTags}
+                    onChange={(event) =>
+                      setShareSegTags(Array.from(event.target.selectedOptions, (opt) => opt.value))
+                    }
+                  >
+                    {shareSegTagOptions.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="select"
+                    multiple
+                    value={shareSegSkills}
+                    onChange={(event) =>
+                      setShareSegSkills(Array.from(event.target.selectedOptions, (opt) => opt.value))
+                    }
+                  >
+                    {shareSegSkillOptions.map((skill) => (
+                      <option key={skill} value={skill}>
+                        {skill}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button className="button" type="submit">
+                  Save segment
+                </button>
+              </form>
+            ) : null}
+          </div>
 
-          {!activeConvo ? (
-            <ActiveConversationRequired
-              message="Choose a conversation in Overview to generate sharing links."
-              onOpenOverview={() => applyActiveTab('overview')}
-            />
-          ) : (
-            <>
-              <div className="module-card module-card__wide">
-                <h3>Share survey link</h3>
-                <p className="muted">Choose audience and send the matching survey link.</p>
-                {questionnaireLink ? (
-                  <div className="stack">
-                    <label className="label">Audience</label>
-                    <select
-                      className="select"
-                      value={shareAudience}
-                      onChange={(event) => setShareAudience(event.target.value)}
-                    >
-                      <option value="verified">Verified users</option>
-                      <option value="unverified">Unverified users</option>
-                      <option value="registered">Registered users</option>
-                    </select>
-                    <input className="input" value={audienceQuestionnaireLink} readOnly />
-                    <div className="filter-row">
-                      <a
-                        className="button"
-                        href={audienceQuestionnaireLink}
-                        target="_blank"
-                        rel="noreferrer"
+          <div className="module-card module-card__wide module-card--outreach-flow-distribute">
+            <div className="card-header">
+              <div>
+                <h3>Distribution: survey participant link</h3>
+                <p className="muted">
+                  After you pick an audience segment above, choose channel (email, WhatsApp, Slack),
+                  copy or send the participant link — same pattern as event registration in Network.
+                  Survey access still follows identity and invite settings in your configuration
+                  above.
+                </p>
+              </div>
+              <div className="pill">Distribution</div>
+            </div>
+            {!activeId ? (
+              <ActiveConversationRequired
+                message="Create or select a conversation above, or pick one in Overview, to get a shareable link."
+                onOpenOverview={() => applyActiveTab('overview')}
+              />
+            ) : questionnaireLink ? (
+              <>
+                {surveyDistributionError ? (
+                  <div className="module-alert">{surveyDistributionError}</div>
+                ) : null}
+                {surveyDistributionStatus ? (
+                  <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
+                ) : null}
+                <div className="module-card intake-tile intake-order-links">
+                  <div className="intake-invite-combined">
+                    <div className="intake-invite-combined__pane">
+                      <div className="intake-section-heading">
+                        <h4 className="intake-section-title">Create and send invite form</h4>
+                      </div>
+                      <form
+                        id="delib-survey-invite-form"
+                        className="form-grid"
+                        onSubmit={handleSubmitSurveyInvite}
                       >
-                        Open participant view
-                      </a>
+                        <select
+                          className="select"
+                          value={surveyInviteForm.inviteAudience}
+                          onChange={(event) =>
+                            setSurveyInviteForm((prev) => ({
+                              ...prev,
+                              inviteAudience: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="individual">Single recipient</option>
+                          <option value="everyone">Everyone</option>
+                          <option value="verified">Verified users</option>
+                          <option value="registered">Registered users</option>
+                        </select>
+                        {surveyInviteForm.inviteAudience === 'individual' ? (
+                          <>
+                            <input
+                              className="input"
+                              placeholder="Recipient name"
+                              value={surveyInviteForm.recipientName}
+                              onChange={(event) =>
+                                setSurveyInviteForm((prev) => ({
+                                  ...prev,
+                                  recipientName: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="input"
+                              type="email"
+                              placeholder="Recipient email"
+                              value={surveyInviteForm.recipientEmail}
+                              onChange={(event) =>
+                                setSurveyInviteForm((prev) => ({
+                                  ...prev,
+                                  recipientEmail: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="input"
+                              placeholder="Recipient phone"
+                              value={surveyInviteForm.recipientPhone}
+                              onChange={(event) =>
+                                setSurveyInviteForm((prev) => ({
+                                  ...prev,
+                                  recipientPhone: event.target.value,
+                                }))
+                              }
+                            />
+                          </>
+                        ) : surveyInviteForm.channel === 'email' ? (
+                          <div className="form-grid__full">
+                            <label className="label">Group email list</label>
+                            <input
+                              className="input"
+                              type="email"
+                              list="delib-survey-invite-group-options"
+                              placeholder="group@googlegroups.com"
+                              value={getInviteAudienceGroupEmail(
+                                surveyInviteForm.inviteAudience,
+                                surveyInviteGroupsConfig,
+                              )}
+                              onChange={(event) =>
+                                setSurveyInviteAudienceGroupEmail(
+                                  surveyInviteForm.inviteAudience,
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            <datalist id="delib-survey-invite-group-options">
+                              {[
+                                ...new Set(
+                                  Object.values(surveyInviteGroupsConfig).filter(Boolean),
+                                ),
+                              ].map((groupEmail) => (
+                                <option key={groupEmail} value={groupEmail} />
+                              ))}
+                            </datalist>
+                            <p className="muted">
+                              Outlook opens with this group email in To: field for{' '}
+                              {getInviteAudienceLabel(surveyInviteForm.inviteAudience)}.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="form-grid__full muted">
+                            Audience group lists are used when channel is Email.
+                          </div>
+                        )}
+                        <select
+                          className="select"
+                          value="participant"
+                          aria-label="Survey link type"
+                          onChange={() => {
+                            /* Participant survey is the default share target */
+                          }}
+                        >
+                          <option value="participant">Participant survey</option>
+                        </select>
+                        <select
+                          className="select"
+                          value={surveyInviteForm.channel}
+                          onChange={(event) =>
+                            setSurveyInviteForm((prev) => ({
+                              ...prev,
+                              channel: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="email">Email</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="slack">Slack</option>
+                        </select>
+                        <input
+                          className="input"
+                          placeholder="Notes (optional)"
+                          value={surveyInviteForm.notes}
+                          onChange={(event) =>
+                            setSurveyInviteForm((prev) => ({
+                              ...prev,
+                              notes: event.target.value,
+                            }))
+                          }
+                        />
+                      </form>
+                    </div>
+                    <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
+                      <h4 className="intake-section-title">Latest invite link</h4>
+                      <label className="label" htmlFor="delib-survey-invite-url">
+                        Invite URL
+                      </label>
+                      <input
+                        id="delib-survey-invite-url"
+                        className="input"
+                        readOnly
+                        value={questionnaireLink}
+                        placeholder="Invite link appears here"
+                      />
+                      <div className="module-footer intake-invite-combined__footer">
+                        <span>
+                          <strong>Segment:</strong>{' '}
+                          {selectedShareSegment
+                            ? `${truncateText(selectedShareSegment.name, 36)}${
+                                shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount})` : ''
+                              }`
+                            : '—'}
+                        </span>
+                        <span>
+                          <strong>Topic:</strong>{' '}
+                          {truncateText(activeConvo?.topic || '—', 48)}
+                        </span>
+                        <span>
+                          <strong>Views:</strong> {stats?.views ?? '—'}
+                        </span>
+                        <span>
+                          <strong>Voters:</strong> {stats?.voters ?? '—'}
+                        </span>
+                        <span>
+                          <strong>Commenters:</strong> {stats?.commenters ?? '—'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="intake-invite-combined__cta-row">
+                      <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
                       <button
-                        className="button-secondary"
+                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
                         type="button"
-                        onClick={() => handleCopy(audienceQuestionnaireLink, 'Participant link')}
+                        onClick={handleCopySurveyLink}
                       >
                         Copy link
                       </button>
                       <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => applyActiveTab('setup')}
+                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
+                        type="submit"
+                        form="delib-survey-invite-form"
+                        disabled={!shareSegmentSelectedId}
                       >
-                        Edit setup
+                        Send invite link
                       </button>
-                    </div>
-                    <div className="stack">
-                      <div className="metric-row">
-                        <span>Verified users</span>
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleCopy(verifiedQuestionnaireLink, 'Verified audience link')}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <input className="input" value={verifiedQuestionnaireLink} readOnly />
-                      <div className="metric-row">
-                        <span>Unverified users</span>
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleCopy(unverifiedQuestionnaireLink, 'Unverified audience link')}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <input className="input" value={unverifiedQuestionnaireLink} readOnly />
-                      <div className="metric-row">
-                        <span>Registered users</span>
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleCopy(registeredQuestionnaireLink, 'Registered audience link')}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <input className="input" value={registeredQuestionnaireLink} readOnly />
+                      <a
+                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
+                        href={questionnaireLink || '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open latest form
+                      </a>
                     </div>
                   </div>
-                ) : (
-                  <p className="muted">Select a conversation in Overview to generate a link.</p>
-                )}
-              </div>
-
-              <div className="module-grid">
-                <div className="module-card">
-                  <h3>Share to Slack</h3>
-                  {slackError ? <div className="module-alert">{slackError}</div> : null}
-                  {slackStatus ? (
-                    <div className="module-alert module-alert--success">{slackStatus}</div>
-                  ) : null}
-                  <div className="stack">
-                    <label className="label">Slack channel</label>
-                    <select
-                      className="select"
-                      value={slackChannelMode}
-                      onChange={(event) => setSlackChannelMode(event.target.value)}
-                    >
-                      <option value="default">Default channel</option>
-                      <option value="custom">Custom channel</option>
-                    </select>
-                    {slackChannelMode === 'custom' ? (
-                      <input
-                        className="input"
-                        value={slackChannelValue}
-                        onChange={(event) => setSlackChannelValue(event.target.value)}
-                        placeholder="#general"
-                      />
-                    ) : null}
-                    <label className="label">Slack message</label>
-                    <textarea
-                      className="textarea"
-                      value={slackMessage}
-                      onChange={(event) => setSlackMessage(event.target.value)}
-                      placeholder="Slack message"
-                    />
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={handleSendSlack}
-                      disabled={sendingSlack || !audienceQuestionnaireLink}
-                    >
-                      {sendingSlack ? 'Sending…' : 'Send to Slack'}
-                    </button>
-                  </div>
                 </div>
-                <div className="module-card">
-                  <h3>Share to WhatsApp</h3>
-                  {whatsappError ? <div className="module-alert">{whatsappError}</div> : null}
-                  {whatsappStatus ? (
-                    <div className="module-alert module-alert--success">{whatsappStatus}</div>
-                  ) : null}
-                  <div className="stack">
-                    <label className="label">WhatsApp group</label>
-                    <select
-                      className="select"
-                      value={whatsappGroupId}
-                      onChange={(event) => setWhatsappGroupId(event.target.value)}
-                    >
-                      <option value="">Select WhatsApp group</option>
-                      {whatsappGroups.map((group) => (
-                        <option key={group.groupId} value={group.groupId}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="label">WhatsApp message</label>
-                    <textarea
-                      className="textarea"
-                      value={whatsappMessage}
-                      onChange={(event) => setWhatsappMessage(event.target.value)}
-                      placeholder="WhatsApp message"
-                    />
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={handleSendWhatsapp}
-                      disabled={sendingWhatsapp || !audienceQuestionnaireLink}
-                    >
-                      {sendingWhatsapp ? 'Sending…' : 'Send to WhatsApp'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+              </>
+            ) : (
+              <p className="muted">Unable to build a link for this conversation.</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -3224,162 +3560,6 @@ export function DeliberationPage({
                       </div>
                     </>
                   ) : null}
-                </div>
-                <div className="module-card report-card">
-                  <div className="card-header">
-                    <div>
-                      <h4>Statement discussion</h4>
-                      <p className="muted">
-                        Each statement card has its own comments directly below it.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="stack">
-                    {activeConvo?.is_open === false ? (
-                      <div className="module-alert">
-                        Conversation is closed. Reopen it in Overview to add statement comments or reactions.
-                      </div>
-                    ) : null}
-                    {discussionStatementOptions.length === 0 ? (
-                      <p className="muted">No statements available yet. Run analysis first.</p>
-                    ) : (
-                      discussionStatementOptions.map((statement) => {
-                        const discussion = getDiscussionStateForStatement(statement.id)
-                        return (
-                          <article className="module-card" key={`statement-discussion-${statement.id}`}>
-                            <div className="card-header">
-                              <div>
-                                <h4>{truncateText(statement.text, 120)}</h4>
-                                <p className="muted">Statement ID: {statement.id}</p>
-                              </div>
-                              <div className="filter-row">
-                                <span className="pill">{discussion.comments.length} comments</span>
-                                <button
-                                  className="button-secondary"
-                                  type="button"
-                                  onClick={() => loadStatementDiscussionComments(statement.id)}
-                                  disabled={discussion.loading}
-                                >
-                                  {discussion.loading ? 'Refreshing…' : 'Refresh'}
-                                </button>
-                              </div>
-                            </div>
-                            {discussion.error ? <div className="module-alert">{discussion.error}</div> : null}
-                            <div className="module-footer">
-                              <span>
-                                <strong>Participation:</strong> {statement.participation || 0}
-                              </span>
-                              <span>
-                                <strong>Agreement:</strong>{' '}
-                                {Math.round(Number(statement.agreement_ratio || 0) * 100)}%
-                              </span>
-                              <span>
-                                <strong>Consensus:</strong>{' '}
-                                {Math.round(Number(statement.consensus_score || 0) * 100)}
-                              </span>
-                              <span>
-                                <strong>Polarity:</strong>{' '}
-                                {Math.round(Number(statement.polarity_score || 0) * 100)}
-                              </span>
-                            </div>
-                            {discussion.comments.length === 0 ? (
-                              <p className="muted">No comments yet for this statement.</p>
-                            ) : (
-                              discussion.comments.map((item) => (
-                                <div className="module-card" key={item.id}>
-                                  <p>{item.text}</p>
-                                  <div className="module-footer">
-                                    <span className="muted">{item.created_at || 'Live'}</span>
-                                    <span>
-                                      <strong>Like</strong> {item.like_count || 0}
-                                    </span>
-                                    <span>
-                                      <strong>Agree</strong> {item.agree_count || 0}
-                                    </span>
-                                    <span>
-                                      <strong>Disagree</strong> {item.disagree_count || 0}
-                                    </span>
-                                    <span>
-                                      <strong>Insightful</strong> {item.insightful_count || 0}
-                                    </span>
-                                    {item.my_reaction ? (
-                                      <span>
-                                        <strong>Your reaction:</strong> {item.my_reaction}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <div className="filter-row">
-                                    <button
-                                      className="button-secondary"
-                                      type="button"
-                                      onClick={() =>
-                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'like')
-                                      }
-                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
-                                    >
-                                      👍 Like
-                                    </button>
-                                    <button
-                                      className="button-secondary"
-                                      type="button"
-                                      onClick={() =>
-                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'agree')
-                                      }
-                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
-                                    >
-                                      ✅ Agree
-                                    </button>
-                                    <button
-                                      className="button-secondary"
-                                      type="button"
-                                      onClick={() =>
-                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'disagree')
-                                      }
-                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
-                                    >
-                                      ❌ Disagree
-                                    </button>
-                                    <button
-                                      className="button-secondary"
-                                      type="button"
-                                      onClick={() =>
-                                        handleReactToStatementDiscussionComment(statement.id, item.id, 'insightful')
-                                      }
-                                      disabled={discussion.reactionBusyId === item.id || activeConvo?.is_open === false}
-                                    >
-                                      💡 Insightful
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                            <div className="stack">
-                              <textarea
-                                className="textarea"
-                                value={discussion.draft}
-                                onChange={(event) =>
-                                  setDiscussionDraftByStatement((prev) => ({
-                                    ...prev,
-                                    [statement.id]: event.target.value,
-                                  }))
-                                }
-                                placeholder="Write a comment on this statement"
-                                disabled={activeConvo?.is_open === false}
-                              />
-                              <button
-                                className="button"
-                                type="button"
-                                onClick={() => handleCreateStatementDiscussionComment(statement.id)}
-                                disabled={discussion.saving || activeConvo?.is_open === false}
-                              >
-                                {discussion.saving ? 'Posting…' : 'Post comment'}
-                              </button>
-                            </div>
-                          </article>
-                        )
-                      })
-                    )}
-                  </div>
                 </div>
               </div>
             ) : null}

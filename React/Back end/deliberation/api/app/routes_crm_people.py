@@ -30,9 +30,11 @@ from .routes_crm_helpers import (
     _build_import_rows,
     _build_furry_import_rows,
     _build_segment_query,
+    _build_segment_count_query,
     _extract_municipality,
     _split_list,
     SegmentFilter,
+    segment_filter_from_stored_value,
 )
 
 router = APIRouter()
@@ -214,6 +216,11 @@ class SegmentOut(BaseModel):
     name: str
     description: str = ""
     updated_at: Optional[str] = Field(alias="updatedAt", default=None)
+    filter_spec: SegmentFilter = Field(default_factory=SegmentFilter, alias="filterSpec")
+
+
+class SegmentCountOut(BaseModel):
+    count: int
 
 
 class SegmentRunRequest(BaseModel):
@@ -1677,6 +1684,16 @@ def get_distinct_values(label: str, prop: str = "name"):
 # Segment endpoints
 # ---------------------------------------------------------------------------
 
+
+def _segment_record_to_out(row: dict) -> dict:
+    """Attach parsed filterSpec for API responses."""
+    data = dict(row)
+    raw = data.pop("filterJson", None)
+    filt = segment_filter_from_stored_value(raw)
+    data["filterSpec"] = filt.model_dump(mode="json")
+    return data
+
+
 @router.get("/segments", response_model=List[SegmentOut])
 def list_segments():
     driver = get_driver()
@@ -1686,19 +1703,20 @@ def list_segments():
       s.segmentId AS segmentId,
       s.name AS name,
       coalesce(s.description,'') AS description,
-      toString(s.updatedAt) AS updatedAt
+      toString(s.updatedAt) AS updatedAt,
+      coalesce(s.filterJson, '{}') AS filterJson
     ORDER BY s.updatedAt DESC
     """
     with _db_session(driver) as session:
         records = _execute_read(session, query)
-    return [record.data() for record in records]
+    return [_segment_record_to_out(record.data()) for record in records]
 
 
 @router.post("/segments", response_model=SegmentOut)
 def create_segment(payload: SegmentCreate):
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Segment name is required")
-    filter_json = json.dumps(payload.filterSpec.dict(), ensure_ascii=False)
+    filter_json = payload.filterSpec.model_dump_json()
     driver = get_driver()
     query = """
     MERGE (s:Segment {name: $name})
@@ -1710,7 +1728,8 @@ def create_segment(payload: SegmentCreate):
       s.segmentId AS segmentId,
       s.name AS name,
       coalesce(s.description,'') AS description,
-      toString(s.updatedAt) AS updatedAt
+      toString(s.updatedAt) AS updatedAt,
+      coalesce(s.filterJson, '{}') AS filterJson
     """
     with _db_session(driver) as session:
         records = _execute_write(
@@ -1720,7 +1739,7 @@ def create_segment(payload: SegmentCreate):
         )
     if not records:
         raise HTTPException(status_code=500, detail="Segment could not be created")
-    return records[0].data()
+    return _segment_record_to_out(records[0].data())
 
 
 @router.delete("/segments/{segment_id}")
@@ -1744,6 +1763,33 @@ def run_segment(payload: SegmentRunRequest):
     return [record.data() for record in records]
 
 
+@router.get("/segments/{segment_id}/count", response_model=SegmentCountOut)
+def count_saved_segment(segment_id: str):
+    driver = get_driver()
+    query = """
+    MATCH (s:Segment {segmentId: $id})
+    RETURN coalesce(s.filterJson, '{}') AS filterJson
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(session, query, {"id": segment_id})
+    if not records:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    row = records[0].data() if hasattr(records[0], "data") else dict(records[0])
+    filt = segment_filter_from_stored_value(row.get("filterJson"))
+    count_query, params = _build_segment_count_query(filt)
+    with _db_session(driver) as session:
+        rows = _execute_read(session, count_query, params)
+    if not rows:
+        return SegmentCountOut(count=0)
+    cnt_row = rows[0].data() if hasattr(rows[0], "data") else dict(rows[0])
+    cnt = cnt_row.get("cnt")
+    try:
+        n = int(cnt)
+    except (TypeError, ValueError):
+        n = 0
+    return SegmentCountOut(count=n)
+
+
 @router.get("/segments/{segment_id}/run", response_model=List[SegmentPersonOut])
 def run_saved_segment(segment_id: str, limit: int = Query(500, ge=10, le=2000)):
     driver = get_driver()
@@ -1755,13 +1801,11 @@ def run_saved_segment(segment_id: str, limit: int = Query(500, ge=10, le=2000)):
         records = _execute_read(session, query, {"id": segment_id})
     if not records:
         raise HTTPException(status_code=404, detail="Segment not found")
-    try:
-        filter_spec = json.loads(records[0].get("filterJson") or "{}")
-    except Exception:
-        filter_spec = {}
-    query, params = _build_segment_query(SegmentFilter(**filter_spec), limit)
+    row = records[0].data() if hasattr(records[0], "data") else dict(records[0])
+    filt = segment_filter_from_stored_value(row.get("filterJson"))
+    person_query, params = _build_segment_query(filt, limit)
     with _db_session(driver) as session:
-        rows = _execute_read(session, query, params)
+        rows = _execute_read(session, person_query, params)
     return [record.data() for record in rows]
 
 

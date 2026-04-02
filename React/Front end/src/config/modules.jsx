@@ -158,14 +158,22 @@ export const MODULE_SECTIONS = {
     flowSummary: 'Set up a conversation, share the link, and review insights.',
     defaultTab: 'overview',
     primaryActions: [
-      { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create a conversation.' },
-      { label: 'Share', type: 'tab', value: 'distribute', hint: 'Share the link.' },
+      {
+        label: 'Set up & share',
+        type: 'tab',
+        value: 'setup',
+        hint: 'Create a conversation and share the link.',
+      },
       { label: 'Insights', type: 'tab', value: 'insights', hint: 'Review results.' },
     ],
     sections: [
       { label: 'Overview', type: 'tab', value: 'overview', hint: 'Quick start and active conversation.' },
-      { label: 'Set up', type: 'tab', value: 'setup', hint: 'Create and configure.' },
-      { label: 'Share', type: 'tab', value: 'distribute', hint: 'Send the link out.' },
+      {
+        label: 'Set up & share',
+        type: 'tab',
+        value: 'setup',
+        hint: 'Create, configure, and send the participant link.',
+      },
       { label: 'Insights', type: 'tab', value: 'insights', hint: 'Consensus analytics.' },
       { label: 'Moderate', type: 'tab', value: 'moderation', hint: 'Review comments.' },
     ],

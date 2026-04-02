@@ -1,17 +1,18 @@
 """
 Shared constants, helpers, and Pydantic models used across multiple CRM sub-modules.
 """
+import json
 import os
 import re
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import requests
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .db import get_active_database, get_driver
 
@@ -584,6 +585,8 @@ def _get_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 class SegmentFilter(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     group: Optional[str] = None
     timeAvailability: Optional[List[str]] = None
     tags: Optional[List[str]] = None
@@ -593,11 +596,61 @@ class SegmentFilter(BaseModel):
     minEffortHours: Optional[float] = None
 
 
-def _build_segment_query(filter_spec: SegmentFilter, limit: int):
-    clauses = []
-    params = {
-        "limit": max(10, min(2000, int(limit) if str(limit).isdigit() else 500))
+def _decode_stored_filter_json(raw: Any) -> dict:
+    """Turn Neo4j/string/bytes/map values into a plain dict for SegmentFilter."""
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            text = raw.decode("utf-8").strip() or "{}"
+        except Exception:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    if isinstance(raw, str):
+        text = raw.strip() or "{}"
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _normalize_segment_filter_keys(d: dict) -> dict:
+    """Accept snake_case keys (or mixed) from older payloads."""
+    key_map = {
+        "time_availability": "timeAvailability",
+        "name_contains": "nameContains",
+        "address_contains": "addressContains",
+        "min_effort_hours": "minEffortHours",
     }
+    out: dict = {}
+    for key, val in (d or {}).items():
+        nk = key_map.get(str(key), str(key))
+        if nk not in out:
+            out[nk] = val
+    return out
+
+
+def segment_filter_from_stored_value(raw: Any) -> SegmentFilter:
+    """Parse filterJson from DB into SegmentFilter (never raises)."""
+    spec_dict = _normalize_segment_filter_keys(_decode_stored_filter_json(raw))
+    try:
+        return SegmentFilter.model_validate(spec_dict)
+    except Exception:
+        return SegmentFilter()
+
+
+def _segment_where_clause_and_params(filter_spec: SegmentFilter):
+    """Build WHERE clause and Cypher params for segment filters (no limit)."""
+    clauses = []
+    params = {}
 
     group = (filter_spec.group or "").strip()
     if group in {"Supporter", "Member"}:
@@ -641,8 +694,10 @@ def _build_segment_query(filter_spec: SegmentFilter, limit: int):
         params["minEffortHours"] = float(min_effort_val)
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
 
-    query = f"""
+
+_SEGMENT_MATCH_PIPELINE = """
     MATCH (p:Person)
     OPTIONAL MATCH (p)-[:LIVES_AT]->(addr:Address)
     OPTIONAL MATCH (p)-[:CLASSIFIED_AS]->(st:SupporterType)
@@ -656,6 +711,14 @@ def _build_segment_query(filter_spec: SegmentFilter, limit: int):
     WITH p, addr, fullName, group, tags, collect(DISTINCT sk.name) AS skills,
          coalesce(p.effortHours, 0.0) AS effortHours,
          coalesce(p.address, addr.fullAddress, '') AS address
+"""
+
+
+def _build_segment_query(filter_spec: SegmentFilter, limit: int):
+    where, params = _segment_where_clause_and_params(filter_spec)
+    params = {**params, "limit": max(10, min(2000, int(limit) if str(limit).isdigit() else 500))}
+    query = f"""
+    {_SEGMENT_MATCH_PIPELINE.strip()}
     {where}
     RETURN
       CASE WHEN fullName = '' THEN p.email ELSE fullName END AS fullName,
@@ -668,6 +731,16 @@ def _build_segment_query(filter_spec: SegmentFilter, limit: int):
       skills
     ORDER BY effortHours DESC
     LIMIT $limit
+    """
+    return query, params
+
+
+def _build_segment_count_query(filter_spec: SegmentFilter):
+    where, params = _segment_where_clause_and_params(filter_spec)
+    query = f"""
+    {_SEGMENT_MATCH_PIPELINE.strip()}
+    {where}
+    RETURN count(p) AS cnt
     """
     return query, params
 

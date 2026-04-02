@@ -72,6 +72,49 @@ def _build_report_payload(conversation_id: str, payload: ReportCreate):
     }
 
 
+def _parse_stored_report_payload(raw):
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _enrich_public_report_payload(stored: dict) -> dict:
+    """
+    Recompute consensus / polarizing statements, clusters, and stats from the live
+    conversation. The stored snapshot can be empty or stale if votes arrived after
+    the report was published; public pages poll for updates and expect current data.
+    """
+    conversation_id = stored.get("conversation_id")
+    if not conversation_id:
+        return stored
+    try:
+        create = ReportCreate(
+            name=stored.get("name") or "Report",
+            theme_ids=list(stored.get("theme_ids") or []),
+            include_unassigned=bool(stored.get("include_unassigned", True)),
+        )
+        fresh = _build_report_payload(conversation_id, create)
+    except HTTPException:
+        return stored
+    except Exception:
+        return stored
+    merged = dict(stored)
+    merged["metrics"] = fresh["metrics"]
+    merged["clusters"] = fresh["clusters"]
+    merged["cluster_similarity"] = fresh["cluster_similarity"]
+    merged["potential_agreements"] = fresh["potential_agreements"]
+    merged["stats"] = fresh["stats"]
+    merged["refreshed_at"] = datetime.utcnow().isoformat()
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -243,5 +286,5 @@ def get_public_report(share_id: str):
     if not records:
         raise HTTPException(status_code=404, detail="Report not found")
     report = _node_to_dict(records[0]["r"])
-    payload = report.get("payload")
-    return {"id": report.get("id"), "share_id": report.get("shareId"), "payload": json.loads(payload)}
+    payload = _enrich_public_report_payload(_parse_stored_report_payload(report.get("payload")))
+    return {"id": report.get("id"), "share_id": report.get("shareId"), "payload": payload}

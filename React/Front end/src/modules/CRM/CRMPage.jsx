@@ -4,6 +4,11 @@ import {
   requestForm,
   requestJson,
 } from '../../services/api'
+import {
+  getInviteAudienceGroupEmail,
+  getInviteAudienceLabel,
+  openExternalShareLink,
+} from '../../lib/inviteDistribution'
 import { CivicStatGrid, PageHeader } from '../../ui'
 import { IconTarget, IconUsers } from '@tabler/icons-react'
 import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
@@ -89,6 +94,26 @@ const splitFullName = (fullName) => {
 const renderTemplate = (template, context) => {
   if (!template) return ''
   return template.replace(/\{(\w+)\}/g, (_, key) => context?.[key] ?? '')
+}
+
+/** Human-readable lines for saved segment filterSpec (matches CRM segment form). */
+const formatSegmentFilterSummary = (spec) => {
+  if (!spec || typeof spec !== 'object') return '—'
+  const s = spec
+  const lines = []
+  if (s.group && s.group !== 'All') lines.push(`Group: ${s.group}`)
+  const ta = s.timeAvailability ?? s.time_availability
+  if (Array.isArray(ta) && ta.length) lines.push(`Time availability: ${ta.join(', ')}`)
+  if (Array.isArray(s.tags) && s.tags.length) lines.push(`Tags: ${s.tags.join(', ')}`)
+  if (Array.isArray(s.skills) && s.skills.length) lines.push(`Skills: ${s.skills.join(', ')}`)
+  const nameQ = String(s.nameContains ?? s.name_contains ?? '').trim()
+  if (nameQ) lines.push(`Name contains: ${nameQ}`)
+  const addrQ = String(s.addressContains ?? s.address_contains ?? '').trim()
+  if (addrQ) lines.push(`Address contains: ${addrQ}`)
+  const me = s.minEffortHours ?? s.min_effort_hours
+  if (me != null && Number(me) > 0) lines.push(`Min effort hours: ${me}`)
+  if (!lines.length) return 'All people (no filters)'
+  return lines.join('\n')
 }
 
 const toYouTubeEmbedUrl = (rawUrl) => {
@@ -267,6 +292,8 @@ export function CRMPage({
   const [segmentSelectedId, setSegmentSelectedId] = useState('')
   const [segmentResults, setSegmentResults] = useState([])
   const [segmentRunLoading, setSegmentRunLoading] = useState(false)
+  const [segmentMemberCount, setSegmentMemberCount] = useState(null)
+  const [segmentCountLoading, setSegmentCountLoading] = useState(false)
   const [showNewSegmentForm, setShowNewSegmentForm] = useState(false)
   const [segmentTaskTitle, setSegmentTaskTitle] = useState('')
   const [segmentTaskDescription, setSegmentTaskDescription] = useState('')
@@ -274,14 +301,8 @@ export function CRMPage({
   const [segmentTaskStatus, setSegmentTaskStatus] = useState('Open')
   const [segmentTaskSaving, setSegmentTaskSaving] = useState(false)
   const [segmentTaskError, setSegmentTaskError] = useState('')
-  const [groups, setGroups] = useState([])
-  const [groupsError, setGroupsError] = useState('')
-  const [sendGroupId, setSendGroupId] = useState('')
-  const [sendError, setSendError] = useState('')
-  const [channelSlackMode, setChannelSlackMode] = useState('default')
-  const [channelSlackCustom, setChannelSlackCustom] = useState('')
-  const [channelSlackError, setChannelSlackError] = useState('')
-  const [channelSlackStatus, setChannelSlackStatus] = useState('')
+  const [outreachDistributionError, setOutreachDistributionError] = useState('')
+  const [outreachDistributionStatus, setOutreachDistributionStatus] = useState('')
   const [individualQuery, setIndividualQuery] = useState('')
   const [individualResults, setIndividualResults] = useState([])
   const [individualSelected, setIndividualSelected] = useState([])
@@ -304,8 +325,14 @@ export function CRMPage({
   const [outreachEvents, setOutreachEvents] = useState([])
   const [outreachEventsError, setOutreachEventsError] = useState('')
   const [outreachEventId, setOutreachEventId] = useState('')
-  const [sendingEventWhatsApp, setSendingEventWhatsApp] = useState(false)
-  const [sendingEventSlack, setSendingEventSlack] = useState(false)
+  const [outreachInviteForm, setOutreachInviteForm] = useState({
+    inviteAudience: 'individual',
+    recipientName: '',
+    recipientEmail: '',
+    recipientPhone: '',
+    channel: 'email',
+    notes: '',
+  })
 
   useEffect(() => {
     let mounted = true
@@ -442,20 +469,6 @@ export function CRMPage({
     return `Hi ${name}, just a reminder to complete your supporter/member registration:\n${link}`
   }
 
-  const getInviteAudienceLabel = (audience) => {
-    if (audience === 'everyone') return 'Everyone'
-    if (audience === 'verified') return 'Verified users'
-    if (audience === 'registered') return 'Registered users'
-    return 'Single recipient'
-  }
-
-  const getInviteAudienceGroupEmail = (audience) => {
-    if (audience === 'everyone') return supporterInviteGroupsConfig.everyoneGroupEmail || ''
-    if (audience === 'verified') return supporterInviteGroupsConfig.verifiedGroupEmail || ''
-    if (audience === 'registered') return supporterInviteGroupsConfig.registeredGroupEmail || ''
-    return ''
-  }
-
   const setInviteAudienceGroupEmail = (audience, value) => {
     if (audience === 'everyone') {
       setSupporterInviteGroupsConfig((prev) => ({ ...prev, everyoneGroupEmail: value }))
@@ -484,14 +497,6 @@ export function CRMPage({
     return `Hi ${name}, here is your Freedom Square ${typeLabel} signup form:\n${inviteLink}`
   }
 
-  const openExternalShareLink = (url) => {
-    if (!url || typeof window === 'undefined') return
-    const popup = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!popup) {
-      window.location.href = url
-    }
-  }
-
   const handleShareSupporterInviteByChannel = async ({
     channel,
     inviteAudience,
@@ -511,7 +516,10 @@ export function CRMPage({
       normalizedAudience,
     )
     if (normalizedChannel === 'email') {
-      const audienceGroupEmail = getInviteAudienceGroupEmail(normalizedAudience)
+      const audienceGroupEmail = getInviteAudienceGroupEmail(
+        normalizedAudience,
+        supporterInviteGroupsConfig,
+      )
       const targetEmail =
         normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
       if (!targetEmail) {
@@ -593,7 +601,7 @@ export function CRMPage({
   }
 
   useEffect(() => {
-    if (activeTab !== 'people' && activeTab !== 'intake') return
+    if (activeTab !== 'people' && activeTab !== 'intake' && activeTab !== 'outreach') return
     if (activeTab === 'people') {
       loadPeople()
     }
@@ -1094,17 +1102,6 @@ export function CRMPage({
       })
   }
 
-  const loadGroups = () => {
-    setGroupsError('')
-    getJson('/crm/whatsapp-groups')
-      .then((payload) => {
-        setGroups(Array.isArray(payload) ? payload : [])
-      })
-      .catch((err) => {
-        setGroupsError(err.message || 'Unable to load WhatsApp groups.')
-      })
-  }
-
   const loadSegmentOptions = () => {
     Promise.all([
       getJson('/crm/distinct-values?label=Tag'),
@@ -1137,11 +1134,35 @@ export function CRMPage({
   useEffect(() => {
     if (activeTab !== 'outreach') return
     loadSegments()
-    loadGroups()
     loadSegmentOptions()
     loadOutreachEvents()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'outreach' || !segmentSelectedId) {
+      setSegmentMemberCount(null)
+      setSegmentCountLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setSegmentCountLoading(true)
+    getJson(`/crm/segments/${encodeURIComponent(segmentSelectedId)}/count`)
+      .then((payload) => {
+        if (cancelled) return
+        const n = payload?.count
+        setSegmentMemberCount(typeof n === 'number' ? n : null)
+      })
+      .catch(() => {
+        if (!cancelled) setSegmentMemberCount(null)
+      })
+      .finally(() => {
+        if (!cancelled) setSegmentCountLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, segmentSelectedId])
 
   const handleCreateSegment = async (event) => {
     event.preventDefault()
@@ -1370,65 +1391,165 @@ export function CRMPage({
       ? `${outreachBaseUrl}?event_registration=1&event_id=${outreachSelectedEvent.eventId}`
       : ''
 
-  const handleSendEventWhatsApp = async () => {
-    const targetEvent = outreachSelectedEvent
-    const targetLink = outreachPublicLink
-    if (!targetEvent || !targetLink) {
-      setSegmentEventStatusMessage('Select an event to send.')
+  const buildOutreachInviteShareMessage = (
+    recipientName,
+    event,
+    link,
+    notes,
+    inviteAudience = 'individual',
+  ) => {
+    const noteBlock = notes ? `\n\nNote: ${notes}` : ''
+    const audience = String(inviteAudience || 'individual').toLowerCase()
+    if (audience !== 'individual') {
+      return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} — ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+    }
+    const name = recipientName || 'there'
+    return `Hi ${name}, you're invited to register for ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+  }
+
+  const handleShareOutreachInviteByChannel = async ({
+    channel,
+    event,
+    inviteLink,
+    inviteAudience,
+    recipientName,
+    recipientEmail,
+    recipientPhone,
+    notes,
+  }) => {
+    if (!inviteLink || !event) return false
+    const normalizedChannel = String(channel || '').toLowerCase()
+    const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
+    const trimmedNotes = String(notes || '').trim()
+    const message = buildOutreachInviteShareMessage(
+      recipientName,
+      event,
+      inviteLink,
+      trimmedNotes,
+      normalizedAudience,
+    )
+    if (normalizedChannel === 'email') {
+      const audienceGroupEmail = getInviteAudienceGroupEmail(
+        normalizedAudience,
+        supporterInviteGroupsConfig,
+      )
+      const targetEmail =
+        normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
+      if (!targetEmail) {
+        if (normalizedAudience === 'individual') {
+          setOutreachDistributionError('Recipient email is required for email sends.')
+        } else {
+          setOutreachDistributionError(
+            `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
+          )
+        }
+        return false
+      }
+      const audienceLabel = getInviteAudienceLabel(normalizedAudience)
+      const subject = encodeURIComponent(
+        `Freedom Square event: ${event.name || 'Registration'} (${audienceLabel})`,
+      )
+      const body = encodeURIComponent(message)
+      openExternalShareLink(
+        `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
+      )
+      setOutreachDistributionStatus('Registration link shared — email draft opened.')
+      return true
+    }
+    if (normalizedChannel === 'whatsapp') {
+      const text = encodeURIComponent(message)
+      const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
+      const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
+      openExternalShareLink(whatsappUrl)
+      setOutreachDistributionStatus('WhatsApp share opened with the registration link.')
+      return true
+    }
+    if (normalizedChannel === 'slack') {
+      if (!navigator?.clipboard) {
+        setOutreachDistributionError('Clipboard unavailable in this browser.')
+        return false
+      }
+      try {
+        await navigator.clipboard.writeText(message)
+        setOutreachDistributionStatus('Slack message copied with the registration link.')
+        return true
+      } catch {
+        setOutreachDistributionError('Unable to copy message for Slack.')
+        return false
+      }
+    }
+    setOutreachDistributionStatus('Registration link ready to share.')
+    return true
+  }
+
+  const handleSubmitOutreachInvite = async (submitEvent) => {
+    submitEvent.preventDefault()
+    setOutreachDistributionError('')
+    setOutreachDistributionStatus('')
+    const link = outreachPublicLink
+    const ev = outreachSelectedEvent
+    if (!ev || !link) {
+      setOutreachDistributionError('Select an event first.')
       return
     }
-    if (!sendGroupId) {
-      setSendError('Select a WhatsApp group first.')
-      return
-    }
-    setSendError('')
-    setSegmentEventStatusMessage('')
-    setSendingEventWhatsApp(true)
+    const selectedChannel = outreachInviteForm.channel
+    const selectedAudience = outreachInviteForm.inviteAudience || 'individual'
+    const recipientName = outreachInviteForm.recipientName.trim()
+    const recipientEmail = outreachInviteForm.recipientEmail.trim()
+    const recipientPhone = outreachInviteForm.recipientPhone.trim()
+    const notes = outreachInviteForm.notes.trim()
     try {
-      await requestJson(`/crm/whatsapp-groups/${sendGroupId}/send`, {
-        method: 'POST',
-        payload: {
-          message: `Event registration: ${targetEvent.name}\n\nRegister here:\n${targetLink}`,
-          source: 'react_outreach',
-        },
+      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+        await requestJson('/crm/supporter-invite-groups-config', {
+          method: 'PATCH',
+          payload: {
+            everyoneGroupEmail: supporterInviteGroupsConfig.everyoneGroupEmail.trim(),
+            verifiedGroupEmail: supporterInviteGroupsConfig.verifiedGroupEmail.trim(),
+            registeredGroupEmail: supporterInviteGroupsConfig.registeredGroupEmail.trim(),
+          },
+        })
+      }
+      const ok = await handleShareOutreachInviteByChannel({
+        channel: selectedChannel,
+        event: ev,
+        inviteLink: link,
+        inviteAudience: selectedAudience,
+        recipientName,
+        recipientEmail,
+        recipientPhone,
+        notes,
       })
-      setSegmentEventStatusMessage(`Sent "${targetEvent.name}" to WhatsApp.`)
+      if (ok) {
+        setOutreachInviteForm((prev) => ({
+          ...prev,
+          recipientName: '',
+          recipientEmail: '',
+          recipientPhone: '',
+          notes: '',
+        }))
+      }
     } catch (err) {
-      setSendError(err.message || 'Unable to send event to WhatsApp.')
-    } finally {
-      setSendingEventWhatsApp(false)
+      setOutreachDistributionError(err.message || 'Unable to send event invite.')
     }
   }
 
-  const handleSendEventSlack = async () => {
-    const targetEvent = outreachSelectedEvent
-    const targetLink = outreachPublicLink
-    if (!targetEvent || !targetLink) {
-      setSegmentEventStatusMessage('Select an event to send.')
+  const handleCopyOutreachEventLink = async () => {
+    const value = String(outreachPublicLink || '').trim()
+    setOutreachDistributionError('')
+    setOutreachDistributionStatus('')
+    if (!value) {
+      setOutreachDistributionError('Select an event to copy its registration link.')
       return
     }
-    if (channelSlackMode === 'custom' && !channelSlackCustom.trim()) {
-      setChannelSlackError('Select or enter a Slack channel.')
+    if (!navigator?.clipboard) {
+      setOutreachDistributionError('Clipboard unavailable in this browser.')
       return
     }
-    setChannelSlackError('')
-    setChannelSlackStatus('')
-    setSegmentEventStatusMessage('')
-    setSendingEventSlack(true)
     try {
-      await requestJson('/crm/slack/send', {
-        method: 'POST',
-        payload: {
-          message: `Event registration: ${targetEvent.name}\n\nRegister here:\n${targetLink}`,
-          channel: channelSlackMode === 'custom' ? channelSlackCustom.trim() : '',
-          source: 'react_outreach',
-        },
-      })
-      setChannelSlackStatus(`Sent "${targetEvent.name}" to Slack.`)
-    } catch (err) {
-      setChannelSlackError(err.message || 'Unable to send event to Slack.')
-    } finally {
-      setSendingEventSlack(false)
+      await navigator.clipboard.writeText(value)
+      setOutreachDistributionStatus('Link copied.')
+    } catch {
+      setOutreachDistributionError('Unable to copy invite link.')
     }
   }
 
@@ -1646,7 +1767,7 @@ export function CRMPage({
         pendingPerson: person,
       }))
     return [...inviteRows, ...orphanPendingRows].sort((a, b) => b.sortAt - a.sortAt)
-  }, [supporterInvites, pendingSupporterSignups, pendingByInviteCode, getInviteAudienceLabel])
+  }, [supporterInvites, pendingSupporterSignups, pendingByInviteCode])
   const invitePipelineRows = useMemo(() => {
     const merged = [...invitePipelineAllRows]
     if (invitePipelineFilter === 'pending') {
@@ -1665,8 +1786,6 @@ export function CRMPage({
     latestSupporterInviteType || supporterInviteForm.supporterType || 'Supporter',
   )
   const fallbackOpenFormLink = buildSupporterInviteLink('', fallbackInviteType)
-  const openFormButtonLabel =
-    fallbackInviteType === 'Member' ? 'Open form (New member)' : 'Open form (New supporter)'
 
   return (
     <section className="module module--crm-radical">
@@ -1947,27 +2066,29 @@ export function CRMPage({
           <div className="module-card module-card__wide panel intake-flow">
             <div className="card-header">
               <div>
-                <h3>Invite links & conversion tracking</h3>
+                <h3>Distribution: new supporters &amp; members</h3>
                 <p className="muted">
-                  Send supporter/member signup links, manage reminders, and track conversion.
+                  Same invite flow as Outreach events and Survey &amp; Consensus — share signup links by
+                  email, WhatsApp, or Slack; track reminders and conversion below.
                 </p>
               </div>
-              <div className="pill">Intake</div>
+              <div className="pill">Distribution</div>
             </div>
             {supporterInviteError ? <div className="module-alert">{supporterInviteError}</div> : null}
             {supporterInviteStatus ? (
               <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
             ) : null}
-            <div className="intake-two-col intake-order-links">
-              <div className="module-card intake-tile intake-order-create">
-              <div className="intake-section-heading">
-                <h4 className="intake-section-title">Create and send invite signup form</h4>
-                <p className="muted intake-section-subtitle">
-                  Fill recipient details, generate an invite link, and share the supporter/member
-                  signup form.
-                </p>
-              </div>
-              <form className="form-grid" onSubmit={handleCreateSupporterInvite}>
+            <div className="module-card intake-tile intake-order-links">
+              <div className="intake-invite-combined">
+                <div className="intake-invite-combined__pane">
+                  <div className="intake-section-heading">
+                    <h4 className="intake-section-title">Create and send invite form</h4>
+                  </div>
+                  <form
+                    id="crm-supporter-invite-form"
+                    className="form-grid"
+                    onSubmit={handleCreateSupporterInvite}
+                  >
                 <select
                   className="select"
                   value={supporterInviteForm.inviteAudience}
@@ -2028,7 +2149,10 @@ export function CRMPage({
                       type="email"
                       list="supporter-invite-group-options"
                       placeholder="group@googlegroups.com"
-                      value={getInviteAudienceGroupEmail(supporterInviteForm.inviteAudience)}
+                      value={getInviteAudienceGroupEmail(
+                        supporterInviteForm.inviteAudience,
+                        supporterInviteGroupsConfig,
+                      )}
                       onChange={(event) =>
                         setInviteAudienceGroupEmail(
                           supporterInviteForm.inviteAudience,
@@ -2091,60 +2215,63 @@ export function CRMPage({
                     }))
                   }
                 />
-                <div className="form-grid__full filter-row">
-                  <button className="button" type="submit" disabled={supporterInviteLoading}>
+              </form>
+                </div>
+                <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
+                  <h4 className="intake-section-title">Latest invite link</h4>
+                  <label className="label" htmlFor="crm-latest-invite-url">
+                    Invite URL
+                  </label>
+                  <input
+                    id="crm-latest-invite-url"
+                    className="input"
+                    readOnly
+                    value={latestSupporterInviteLink || fallbackOpenFormLink}
+                    placeholder="Invite link appears here"
+                  />
+                  <div className="module-footer intake-invite-combined__footer">
+                    <span>
+                      <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
+                    </span>
+                    <span>
+                      <strong>Approved:</strong> {supporterInviteStats?.converted ?? 0}
+                    </span>
+                    <span>
+                      <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
+                    </span>
+                    <span>
+                      <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="intake-invite-combined__cta-row">
+                  <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
+                  <button
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
+                    type="button"
+                    onClick={() =>
+                      handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
+                    }
+                  >
+                    Copy link
+                  </button>
+                  <button
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
+                    type="submit"
+                    form="crm-supporter-invite-form"
+                    disabled={supporterInviteLoading}
+                  >
                     {supporterInviteLoading ? 'Creating…' : 'Send invite link'}
                   </button>
+                  <a
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
+                    href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open latest form
+                  </a>
                 </div>
-              </form>
-              </div>
-              <div className="module-card intake-tile stack intake-order-latest">
-              <h4 className="intake-section-title">Latest invite link</h4>
-              <label className="label">Latest invite link</label>
-              <input
-                className="input"
-                readOnly
-                value={latestSupporterInviteLink || fallbackOpenFormLink}
-                placeholder="Invite link appears here"
-              />
-              <div className="filter-row">
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() =>
-                    handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
-                  }
-                >
-                  Copy link
-                </button>
-                <a
-                  className="button-secondary"
-                  href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {openFormButtonLabel}
-                </a>
-              </div>
-              <div className="module-footer">
-                <span>
-                  <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
-                </span>
-                <span>
-                  <strong>Approved and added to Network:</strong>{' '}
-                  {supporterInviteStats?.converted ?? 0}
-                </span>
-                <span>
-                  <strong>Forms pending approval:</strong> {supporterInviteStats?.pending ?? 0}
-                </span>
-                <span>
-                  <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
-                </span>
-                <span>
-                  <strong>Conversion rate (approved after invite):</strong>{' '}
-                  {supporterInviteStats?.conversionRate ?? 0}%
-                </span>
-              </div>
               </div>
             </div>
             <div className="module-card intake-tile stack intake-order-pending">
@@ -2308,11 +2435,12 @@ export function CRMPage({
                 </div>
               </div>
             </div>
-            <div className="module-card intake-tile intake-order-videos">
-              <div className="card-header">
-                <h4 className="intake-section-title">Signup videos</h4>
-              </div>
-              <div className="stack">
+            <details className="dashboard-detail intake-tile intake-order-videos intake-video-expander">
+              <summary>
+                <span className="intake-section-title">Signup videos</span>
+              </summary>
+              <div className="dashboard-detail__body">
+                <div className="stack">
                   <label className="label">Welcome video (YouTube)</label>
                   <input
                     className="input"
@@ -2363,8 +2491,9 @@ export function CRMPage({
                   ) : (
                     <p className="muted">Add a second YouTube link for the post-signup thank you section.</p>
                   )}
+                </div>
               </div>
-            </div>
+            </details>
           </div>
         </div>
       )}
@@ -2547,10 +2676,10 @@ export function CRMPage({
       )}
       {activeTab === 'outreach' && (
         <div className="stack">
-          <div className="module-card module-card__wide">
+          <div className="module-card module-card__wide module-card--outreach-flow-segment">
             <div className="card-header">
               <div>
-                <h3>1) Segment: create or select</h3>
+                <h3>Segment: create or select</h3>
                 <p className="muted">Save a new segment or pick an existing one.</p>
               </div>
               <div className="pill">Audience</div>
@@ -2585,27 +2714,58 @@ export function CRMPage({
                 {showNewSegmentForm ? 'Close new segment' : '+ New segment'}
               </button>
           </div>
-              <div className="module-card">
-              <h4>Selected segment details</h4>
-              {!selectedSegment ? (
-                <p className="muted">No segment selected.</p>
-              ) : (
-                <div className="module-footer">
-                  <span>
-                    <strong>Name:</strong> {selectedSegment.name || '—'}
-                  </span>
-                  <span>
-                    <strong>Description:</strong> {selectedSegment.description || '—'}
-                  </span>
-                  <span>
-                    <strong>Updated:</strong> {selectedSegment.updatedAt || '—'}
-                  </span>
-                  <span>
-                    <strong>ID:</strong> {selectedSegment.segmentId || '—'}
-                  </span>
-                  </div>
-              )}
+            {segmentSelectedId ? (
+              <details
+                className="dashboard-detail intake-tile outreach-detail-expander"
+                key={segmentSelectedId}
+                defaultOpen
+              >
+                <summary>
+                  <span className="intake-section-title">Selected segment details</span>
+                </summary>
+                <div className="dashboard-detail__body">
+                  {selectedSegment ? (
+                    <div className="stack" style={{ marginTop: 0, gap: 12 }}>
+                      <div className="module-footer outreach-detail-footer">
+                        <span>
+                          <strong>Name:</strong> {selectedSegment.name || '—'}
+                        </span>
+                        <span>
+                          <strong>Description:</strong> {selectedSegment.description || '—'}
+                        </span>
+                        <span>
+                          <strong>Size:</strong>{' '}
+                          {segmentCountLoading ? '…' : segmentMemberCount != null ? segmentMemberCount : '—'}
+                        </span>
+                        <span>
+                          <strong>Updated:</strong> {selectedSegment.updatedAt || '—'}
+                        </span>
+                        <span>
+                          <strong>ID:</strong> {selectedSegment.segmentId || '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Filters</strong>
+                        <p
+                          className="muted"
+                          style={{ whiteSpace: 'pre-line', margin: '6px 0 0', lineHeight: 1.45 }}
+                        >
+                          {formatSegmentFilterSummary(selectedSegment.filterSpec || {})}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="muted" style={{ margin: 0 }}>
+                      Segment data is unavailable. Try refreshing the list.
+                    </p>
+                  )}
                 </div>
+              </details>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                Select a saved segment to view its details.
+              </p>
+            )}
             {showNewSegmentForm ? (
                 <form className="stack" onSubmit={handleCreateSegment}>
                   <input
@@ -2706,10 +2866,10 @@ export function CRMPage({
             ) : null}
                   </div>
 
-          <div className="module-card module-card__wide">
+          <div className="module-card module-card__wide module-card--outreach-flow-events">
                 <div className="card-header">
                   <div>
-                <h3>2) Events: create or select</h3>
+                <h3>Events: create or select</h3>
                 <p className="muted">Create an event for the selected segment or pick an existing event.</p>
                   </div>
               <div className="pill">Events</div>
@@ -2740,34 +2900,49 @@ export function CRMPage({
                 {showNewEventForm ? 'Close new event' : '+ New event'}
                   </button>
                 </div>
-            <input className="input" value={outreachPublicLink} readOnly placeholder="Event link" />
-            <div className="module-card">
-              <h4>Selected event details</h4>
-              {!outreachSelectedEvent ? (
-                <p className="muted">No event selected.</p>
-              ) : (
-                <div className="module-footer">
-                  <span>
-                    <strong>Name:</strong> {outreachSelectedEvent.name || '—'}
-                  </span>
-                  <span>
-                    <strong>Start:</strong> {outreachSelectedEvent.startDate || '—'}
-                  </span>
-                  <span>
-                    <strong>End:</strong> {outreachSelectedEvent.endDate || '—'}
-                  </span>
-                  <span>
-                    <strong>Status:</strong> {outreachSelectedEvent.status || 'Planned'}
-                  </span>
-                  <span>
-                    <strong>Registrations:</strong> {outreachSelectedEvent.registrations ?? 0}
-                  </span>
-                  <span>
-                    <strong>Location:</strong> {outreachSelectedEvent.location || '—'}
-                  </span>
-                  </div>
-              )}
+            {outreachEventId ? (
+              <details
+                className="dashboard-detail intake-tile outreach-detail-expander"
+                key={outreachEventId}
+                defaultOpen
+              >
+                <summary>
+                  <span className="intake-section-title">Selected event details</span>
+                </summary>
+                <div className="dashboard-detail__body">
+                  {outreachSelectedEvent ? (
+                    <div className="module-footer outreach-detail-footer">
+                      <span>
+                        <strong>Name:</strong> {outreachSelectedEvent.name || '—'}
+                      </span>
+                      <span>
+                        <strong>Start:</strong> {outreachSelectedEvent.startDate || '—'}
+                      </span>
+                      <span>
+                        <strong>End:</strong> {outreachSelectedEvent.endDate || '—'}
+                      </span>
+                      <span>
+                        <strong>Status:</strong> {outreachSelectedEvent.status || 'Planned'}
+                      </span>
+                      <span>
+                        <strong>Registrations:</strong> {outreachSelectedEvent.registrations ?? 0}
+                      </span>
+                      <span>
+                        <strong>Location:</strong> {outreachSelectedEvent.location || '—'}
+                      </span>
                     </div>
+                  ) : (
+                    <p className="muted" style={{ margin: 0 }}>
+                      Event data is unavailable. Try refreshing the list.
+                    </p>
+                  )}
+                </div>
+              </details>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                Select an event to view its details.
+              </p>
+            )}
             {showNewEventForm ? (
                     <div className="stack">
                       <input
@@ -2834,70 +3009,215 @@ export function CRMPage({
                 ) : null}
                 </div>
 
-          <div className="module-card module-card__wide">
-                <div className="card-header">
-                  <div>
-                <h3>3) Distribution: select channel and send</h3>
-                <p className="muted">Use the selected event link and send it to WhatsApp or Slack.</p>
-                  </div>
+          <div className="module-card module-card__wide module-card--outreach-flow-distribute">
+            <div className="card-header">
+              <div>
+                <h3>Distribution: invite &amp; registration link</h3>
+                <p className="muted">
+                  Same invite flow as New supporters and Survey &amp; Consensus — audience, channel, latest
+                  link, then copy, send, or open.
+                </p>
+              </div>
               <div className="pill">Distribution</div>
-                </div>
-                {groupsError ? <div className="module-alert">{groupsError}</div> : null}
-                {sendError ? <div className="module-alert">{sendError}</div> : null}
-            {channelSlackError ? <div className="module-alert">{channelSlackError}</div> : null}
-            {channelSlackStatus ? (
-              <div className="module-alert module-alert--success">{channelSlackStatus}</div>
-            ) : null}
-            <div className="filter-row">
-                  <select
-                    className="select"
-                    value={sendGroupId}
-                    onChange={(event) => setSendGroupId(event.target.value)}
-                  >
-                <option value="">WhatsApp group</option>
-                    {groups.map((group) => (
-                      <option key={group.groupId} value={group.groupId}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-              <select
-                className="select"
-                value={channelSlackMode}
-                onChange={(event) => setChannelSlackMode(event.target.value)}
-              >
-                <option value="default">Default Slack channel</option>
-                <option value="custom">Custom Slack channel</option>
-              </select>
-              {channelSlackMode === 'custom' ? (
-                    <input
-                  className="input"
-                  value={channelSlackCustom}
-                  onChange={(event) => setChannelSlackCustom(event.target.value)}
-                  placeholder="#general"
-                />
-              ) : null}
             </div>
-            <input className="input" value={outreachPublicLink} readOnly placeholder="Selected event link" />
-            <div className="filter-row">
+            {outreachDistributionError ? (
+              <div className="module-alert">{outreachDistributionError}</div>
+            ) : null}
+            {outreachDistributionStatus ? (
+              <div className="module-alert module-alert--success">{outreachDistributionStatus}</div>
+            ) : null}
+            <div className="module-card intake-tile intake-order-links">
+              <div className="intake-invite-combined">
+                <div className="intake-invite-combined__pane">
+                  <div className="intake-section-heading">
+                    <h4 className="intake-section-title">Create and send invite form</h4>
+                  </div>
+                  <form
+                    id="crm-outreach-invite-form"
+                    className="form-grid"
+                    onSubmit={handleSubmitOutreachInvite}
+                  >
+                    <select
+                      className="select"
+                      value={outreachInviteForm.inviteAudience}
+                      onChange={(event) =>
+                        setOutreachInviteForm((prev) => ({
+                          ...prev,
+                          inviteAudience: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="individual">Single recipient</option>
+                      <option value="everyone">Everyone</option>
+                      <option value="verified">Verified users</option>
+                      <option value="registered">Registered users</option>
+                    </select>
+                    {outreachInviteForm.inviteAudience === 'individual' ? (
+                      <>
+                        <input
+                          className="input"
+                          placeholder="Recipient name"
+                          value={outreachInviteForm.recipientName}
+                          onChange={(event) =>
+                            setOutreachInviteForm((prev) => ({
+                              ...prev,
+                              recipientName: event.target.value,
+                            }))
+                          }
+                        />
+                        <input
+                          className="input"
+                          type="email"
+                          placeholder="Recipient email"
+                          value={outreachInviteForm.recipientEmail}
+                          onChange={(event) =>
+                            setOutreachInviteForm((prev) => ({
+                              ...prev,
+                              recipientEmail: event.target.value,
+                            }))
+                          }
+                        />
+                        <input
+                          className="input"
+                          placeholder="Recipient phone"
+                          value={outreachInviteForm.recipientPhone}
+                          onChange={(event) =>
+                            setOutreachInviteForm((prev) => ({
+                              ...prev,
+                              recipientPhone: event.target.value,
+                            }))
+                          }
+                        />
+                      </>
+                    ) : outreachInviteForm.channel === 'email' ? (
+                      <div className="form-grid__full">
+                        <label className="label">Group email list</label>
+                        <input
+                          className="input"
+                          type="email"
+                          list="outreach-event-invite-group-options"
+                          placeholder="group@googlegroups.com"
+                          value={getInviteAudienceGroupEmail(
+                            outreachInviteForm.inviteAudience,
+                            supporterInviteGroupsConfig,
+                          )}
+                          onChange={(event) =>
+                            setInviteAudienceGroupEmail(
+                              outreachInviteForm.inviteAudience,
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <datalist id="outreach-event-invite-group-options">
+                          {[...new Set(Object.values(supporterInviteGroupsConfig).filter(Boolean))].map(
+                            (groupEmail) => (
+                              <option key={groupEmail} value={groupEmail} />
+                            ),
+                          )}
+                        </datalist>
+                        <p className="muted">
+                          Outlook opens with this group email in To: field for{' '}
+                          {getInviteAudienceLabel(outreachInviteForm.inviteAudience)}.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="form-grid__full muted">
+                        Audience group lists are used when channel is Email.
+                      </div>
+                    )}
+                    <select
+                      className="select"
+                      value="event"
+                      aria-label="Registration form type"
+                      onChange={() => {
+                        /* Event tab only offers event registration links */
+                      }}
+                    >
+                      <option value="event">Event registration</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={outreachInviteForm.channel}
+                      onChange={(event) =>
+                        setOutreachInviteForm((prev) => ({
+                          ...prev,
+                          channel: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="email">Email</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="slack">Slack</option>
+                    </select>
+                    <input
+                      className="input"
+                      placeholder="Notes (optional)"
+                      value={outreachInviteForm.notes}
+                      onChange={(event) =>
+                        setOutreachInviteForm((prev) => ({
+                          ...prev,
+                          notes: event.target.value,
+                        }))
+                      }
+                    />
+                  </form>
+                </div>
+                <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
+                  <h4 className="intake-section-title">Latest invite link</h4>
+                  <label className="label" htmlFor="crm-outreach-event-url">
+                    Invite URL
+                  </label>
+                  <input
+                    id="crm-outreach-event-url"
+                    className="input"
+                    readOnly
+                    value={outreachPublicLink}
+                    placeholder="Invite link appears here"
+                  />
+                  <div className="module-footer intake-invite-combined__footer">
+                    <span>
+                      <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
+                    </span>
+                    <span>
+                      <strong>Approved:</strong> {supporterInviteStats?.converted ?? 0}
+                    </span>
+                    <span>
+                      <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
+                    </span>
+                    <span>
+                      <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="intake-invite-combined__cta-row">
+                  <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
                   <button
-                    className="button"
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
                     type="button"
-                onClick={handleSendEventWhatsApp}
-                disabled={sendingEventWhatsApp || groups.length === 0 || !outreachEventId}
-              >
-                {sendingEventWhatsApp ? 'Sending…' : 'Send to WhatsApp'}
-              </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={handleSendEventSlack}
-                disabled={sendingEventSlack || !outreachEventId}
-              >
-                {sendingEventSlack ? 'Sending…' : 'Send to Slack'}
+                    onClick={handleCopyOutreachEventLink}
+                  >
+                    Copy link
                   </button>
+                  <button
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
+                    type="submit"
+                    form="crm-outreach-invite-form"
+                    disabled={!outreachEventId}
+                  >
+                    Send invite link
+                  </button>
+                  <a
+                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
+                    href={outreachPublicLink || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open latest form
+                  </a>
                 </div>
               </div>
+            </div>
+          </div>
         </div>
       )}
     </section>
