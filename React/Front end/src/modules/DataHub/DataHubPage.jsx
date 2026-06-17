@@ -7,12 +7,11 @@ import {
   forceSimulation,
 } from 'd3-force'
 import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/icons-react'
-import { getApiBaseUrl, getJson, requestForm, requestJson } from '../../services/api'
-import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
+import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
+import { CivicStatGrid, InfoHint, StatusMessage } from '../../ui'
 
 const VIEWS = ['explorer', 'connectors']
 const DEFAULT_LIMIT = 80
-const DATAHUB_CONFIG_STORAGE_KEY = 'fs.datahub.connectorDrafts'
 const INTAKE_MODULE_IDS = [
   'crm',
   'campaigns',
@@ -73,126 +72,11 @@ const getConnectorTone = (status) => {
   return 'default'
 }
 
-const MODULE_WORKSPACE_PRESETS = {
-  crm: {
-    entryModes: ['CSV upload', 'Public intake', 'Webhook', 'API sync', 'Manual entry'],
-    sourcePlaceholder: 'supporters.csv or public event intake',
-    destination: 'Neo4j people, events, segments, and outreach graph',
-    cadenceOptions: ['On demand', 'Daily', 'Weekly', 'Per event', 'Realtime'],
-    checklist: [
-      'Confirm people fields and dedupe keys',
-      'Validate event and outreach intake path',
-      'Enable enrichment and channel delivery only after import is stable',
-    ],
-  },
-  campaigns: {
-    entryModes: ['Public page', 'Payment webhook', 'Admin form', 'CSV upload'],
-    sourcePlaceholder: 'campaign public page, contribution webhook, or budget sheet',
-    destination: 'Neo4j campaign, volunteer, proof, and funding graph',
-    cadenceOptions: ['On demand', 'Daily', 'Per transaction', 'Per campaign milestone'],
-    checklist: [
-      'Define public contribution and volunteer intake path',
-      'Review transparency and proof workflow',
-      'Confirm payment and audit sync ownership',
-    ],
-  },
-  deliberation: {
-    entryModes: ['Public survey', 'CSV upload', 'Moderation queue', 'Report publish'],
-    sourcePlaceholder: 'survey link, imported dataset, or report share flow',
-    destination: 'Neo4j conversations, votes, comments, and reports',
-    cadenceOptions: ['On demand', 'Daily', 'Per survey response', 'Per report refresh'],
-    checklist: [
-      'Set conversation input source and moderation path',
-      'Confirm vote/comment capture and export readiness',
-      'Define public report refresh expectations',
-    ],
-  },
-  'due-diligence': {
-    entryModes: ['Watchlist feed', 'Manual case entry', 'File upload', 'API lookup'],
-    sourcePlaceholder: 'watchlist source, case dossier, or screening API',
-    destination: 'Neo4j diligence entities and generated reports',
-    cadenceOptions: ['On demand', 'Daily', 'Weekly', 'Per case'],
-    checklist: [
-      'Choose screening source and case intake owner',
-      'Define report output and approval path',
-      'Review what should stay as public-source enrichment only',
-    ],
-  },
-  'audience-discovery': {
-    entryModes: ['Crawler run', 'Seed URL list', 'Embedding API', 'LLM workflow'],
-    sourcePlaceholder: 'seed URLs, crawl sitemap, embedding provider, or LLM endpoint',
-    destination: 'Audience discovery runs, chunks, clusters, and segments',
-    cadenceOptions: ['On demand', 'Per run', 'Daily', 'Weekly'],
-    checklist: [
-      'Set crawl source and page limits',
-      'Verify embeddings and LLM provider settings',
-      'Confirm where validated outputs should land in the graph',
-    ],
-  },
-  'data-hub': {
-    entryModes: ['Internal graph sync', 'Connector registry', 'File staging', 'Manual mapping'],
-    sourcePlaceholder: 'graph snapshot query, staging file, or connector inventory',
-    destination: 'Shared graph explorer and connector workspace',
-    cadenceOptions: ['On demand', 'Daily', 'Per deployment'],
-    checklist: [
-      'Keep connector inventory current',
-      'Document staging rules before importing into Neo4j',
-      'Review graph explorer limits and label filters',
-    ],
-  },
-  admin: {
-    entryModes: ['Health check', 'SMTP', 'Slack webhook', 'Operator action'],
-    sourcePlaceholder: 'health endpoint, email setup, webhook config, or admin workflow',
-    destination: 'Admin status, feedback, notifications, and operator tooling',
-    cadenceOptions: ['On demand', 'Hourly', 'Daily', 'Per alert'],
-    checklist: [
-      'Assign owner for platform feedback and alerting',
-      'Verify operator endpoints and health probes',
-      'Document which channels are live versus pilot',
-    ],
-  },
-}
-
-const readConnectorDrafts = () => {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(DATAHUB_CONFIG_STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : {}
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-const buildModuleDraft = (moduleId, module, existing = {}) => {
-  const preset = MODULE_WORKSPACE_PRESETS[moduleId] || MODULE_WORKSPACE_PRESETS['data-hub']
-  return {
-    entryMode: existing.entryMode || preset.entryModes?.[0] || 'Manual entry',
-    sourceLocation: existing.sourceLocation || '',
-    refreshCadence: existing.refreshCadence || preset.cadenceOptions?.[0] || 'On demand',
-    destination: existing.destination || preset.destination || module?.moduleLabel || 'Neo4j',
-    owner: existing.owner || '',
-    readiness: existing.readiness || 'draft',
-    notes: existing.notes || '',
-    enabledConnectorIds:
-      existing.enabledConnectorIds && Array.isArray(existing.enabledConnectorIds)
-        ? existing.enabledConnectorIds
-        : (module?.connectors || []).map((connector) => connector.connectorId),
-  }
-}
-
-const getDraftProgress = (draft, module) => {
-  const connectors = module?.connectors || []
-  const checks = [
-    Boolean(draft?.entryMode),
-    Boolean(String(draft?.sourceLocation || '').trim()),
-    Boolean(String(draft?.owner || '').trim()),
-    Boolean(draft?.destination),
-    Boolean(draft?.readiness && draft.readiness !== 'draft'),
-    Boolean((draft?.enabledConnectorIds || []).length >= Math.min(1, connectors.length)),
-  ]
-  const completed = checks.filter(Boolean).length
-  return Math.round((completed / checks.length) * 100)
+const getDraftProgress = (module) => {
+  const active = (module?.connectors || []).filter((c) => c.status === 'active').length
+  const total = (module?.connectors || []).length
+  if (!total) return 0
+  return Math.round((active / total) * 100)
 }
 
 function DataHubGraph({
@@ -412,12 +296,6 @@ export function DataHubPage({
   const [selectedEdge, setSelectedEdge] = useState(null)
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [selectedModuleId, setSelectedModuleId] = useState('crm')
-  const [connectorDrafts, setConnectorDrafts] = useState(() => readConnectorDrafts())
-  const [workspaceStatus, setWorkspaceStatus] = useState('')
-  const [uploadFiles, setUploadFiles] = useState({})
-  const [uploadErrors, setUploadErrors] = useState({})
-  const [uploadingByModule, setUploadingByModule] = useState({})
-  const [uploadResults, setUploadResults] = useState({})
 
   const applyView = (viewId) => {
     if (!viewId) return
@@ -532,79 +410,14 @@ export function DataHubPage({
     }
   }, [intakeModules, selectedModuleId])
 
-  const updateModuleDraft = (moduleId, module, field, value) => {
-    if (!moduleId || !module) return
-    setConnectorDrafts((prev) => ({
-      ...prev,
-      [moduleId]: {
-        ...buildModuleDraft(moduleId, module, prev[moduleId] || {}),
-        [field]: value,
-      },
-    }))
-    setWorkspaceStatus('')
-  }
-
   const moduleWorkspaceStats = useMemo(
     () =>
-      intakeModules.map((module) => {
-        const draft = buildModuleDraft(
-          module.moduleId,
-          module,
-          connectorDrafts[module.moduleId] || {},
-        )
-        return {
-          module,
-          draft,
-          progress: getDraftProgress(draft, module),
-        }
-      }),
-    [connectorDrafts, intakeModules],
+      intakeModules.map((module) => ({
+        module,
+        progress: getDraftProgress(module),
+      })),
+    [intakeModules],
   )
-
-  const uploadModuleCsv = async (module) => {
-    if (!module) return
-    const file = uploadFiles[module.moduleId]
-    if (!file) {
-      setUploadErrors((prev) => ({
-        ...prev,
-        [module.moduleId]: 'Choose a CSV file before uploading.',
-      }))
-      return
-    }
-
-    const draft = buildModuleDraft(module.moduleId, module, connectorDrafts[module.moduleId] || {})
-    const formData = new FormData()
-    formData.append('moduleId', module.moduleId)
-    formData.append('sourceLocation', draft.sourceLocation || file.name)
-    formData.append('owner', draft.owner || '')
-    formData.append('notes', draft.notes || '')
-    formData.append('file', file)
-
-    setSelectedModuleId(module.moduleId)
-    setUploadErrors((prev) => ({ ...prev, [module.moduleId]: '' }))
-    setUploadingByModule((prev) => ({ ...prev, [module.moduleId]: true }))
-    try {
-      const payload = await requestForm('/data-hub/uploads/csv', { formData })
-      setUploadResults((prev) => ({ ...prev, [module.moduleId]: payload }))
-      setWorkspaceStatus(payload?.message || `${module.moduleLabel} uploaded to Neo4j.`)
-      setConnectorDrafts((prev) => ({
-        ...prev,
-        [module.moduleId]: {
-          ...buildModuleDraft(module.moduleId, module, prev[module.moduleId] || {}),
-          sourceLocation: draft.sourceLocation || file.name,
-          readiness: 'live',
-        },
-      }))
-      await loadGraph()
-    } catch (err) {
-      setUploadErrors((prev) => ({
-        ...prev,
-        [module.moduleId]: err?.message || `Unable to upload ${module.moduleLabel} CSV.`,
-      }))
-    } finally {
-      setUploadingByModule((prev) => ({ ...prev, [module.moduleId]: false }))
-    }
-  }
 
   useEffect(() => {
     if (selectedNode && !nodes.find((node) => node.id === selectedNode.id)) {
@@ -1136,18 +949,16 @@ export function DataHubPage({
           <div className="module-card module-card__wide">
             <div className="card-header">
               <div>
-                <h3>CSV intake gate to Neo4j</h3>
+                <h3>Data connectors</h3>
                 <p className="muted">
-                  Every module uploads CSV through Data Hub first. Each upload creates a batch in
-                  Neo4j plus one row node per CSV row, so the graph becomes the single shared
-                  platform datastore.
+                  All active connectors across every module. Data flows into the shared Neo4j graph.
                 </p>
               </div>
-              <div className="pill">Neo4j intake</div>
+              <div className="pill">Neo4j</div>
             </div>
             <div className="report-metrics">
               <div className="report-metric">
-                <span>Upload modules</span>
+                <span>Modules</span>
                 <strong>{formatNumber(intakeModules.length)}</strong>
               </div>
               <div className="report-metric">
@@ -1158,14 +969,7 @@ export function DataHubPage({
                 <span>Neo4j graph nodes</span>
                 <strong>{formatNumber(summary.nodeCount)}</strong>
               </div>
-              <div className="report-metric">
-                <span>Uploads this session</span>
-                <strong>
-                  {formatNumber(Object.keys(uploadResults).length)}
-                </strong>
-              </div>
             </div>
-            <StatusMessage tone="info" message={workspaceStatus} />
             <div className="filter-row">
               <button className="button-secondary" type="button" onClick={loadConnectorCatalog} disabled={catalogLoading}>
                 {catalogLoading ? 'Refreshing...' : 'Refresh catalog'}
@@ -1181,181 +985,65 @@ export function DataHubPage({
 
           {intakeModules.length ? (
             <div className="datahub-upload-grid">
-              {moduleWorkspaceStats.map(({ module, draft, progress }) => {
-                const modulePreset =
-                  MODULE_WORKSPACE_PRESETS[module.moduleId] || MODULE_WORKSPACE_PRESETS['data-hub']
-                const uploadResult = uploadResults[module.moduleId]
-                const uploadError = uploadErrors[module.moduleId]
-                const uploading = Boolean(uploadingByModule[module.moduleId])
-                const selectedFile = uploadFiles[module.moduleId]
-                return (
-                  <div
-                    className={`datahub-upload-tile ${
-                      selectedModule?.moduleId === module.moduleId ? 'is-active' : ''
-                    }`}
-                    key={module.moduleId}
-                  >
-                    <div className="cluster-card__header">
-                      <h3>{module.moduleLabel}</h3>
-                      <span
-                        className={`pill ${
-                          getConnectorTone(module.status) === 'success'
-                            ? 'pill--success'
-                            : getConnectorTone(module.status) === 'warning'
-                              ? 'pill--warning'
-                              : ''
-                        }`}
-                      >
-                        {module.status}
-                      </span>
-                    </div>
-                    <p className="muted">{module.description}</p>
-                    <div className="report-metrics">
-                      <div className="report-metric">
-                        <span>Readiness</span>
-                        <strong>{progress}%</strong>
-                      </div>
-                      <div className="report-metric">
-                        <span>Connectors</span>
-                        <strong>{formatNumber(module.connectors?.length)}</strong>
-                      </div>
-                      <div className="report-metric">
-                        <span>Target</span>
-                        <strong>Neo4j</strong>
-                      </div>
-                      <div className="report-metric">
-                        <span>Rows uploaded</span>
-                        <strong>{formatNumber(uploadResult?.rowCount || 0)}</strong>
-                      </div>
-                    </div>
-
-                    <FormSection
-                      title="CSV upload"
-                      description="Pick a CSV for this module. Data Hub will write the batch and rows directly into Neo4j."
+              {moduleWorkspaceStats.map(({ module, progress }) => (
+                <div
+                  className={`datahub-upload-tile ${
+                    selectedModule?.moduleId === module.moduleId ? 'is-active' : ''
+                  }`}
+                  key={module.moduleId}
+                >
+                  <div className="cluster-card__header">
+                    <h3>{module.moduleLabel}</h3>
+                    <span
+                      className={`pill ${
+                        getConnectorTone(module.status) === 'success'
+                          ? 'pill--success'
+                          : getConnectorTone(module.status) === 'warning'
+                            ? 'pill--warning'
+                            : ''
+                      }`}
                     >
-                      <div className="form-grid">
-                        <Field
-                          id={`datahub-source-${module.moduleId}`}
-                          label="Source / dataset name"
-                          helper="Optional context stored with the import batch."
-                        >
-                          <input
-                            className="input"
-                            value={draft.sourceLocation}
-                            placeholder={modulePreset.sourcePlaceholder}
-                            onChange={(event) =>
-                              updateModuleDraft(
-                                module.moduleId,
-                                module,
-                                'sourceLocation',
-                                event.target.value,
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field id={`datahub-owner-${module.moduleId}`} label="Owner">
-                          <input
-                            className="input"
-                            value={draft.owner}
-                            placeholder="Board owner or operator"
-                            onChange={(event) =>
-                              updateModuleDraft(module.moduleId, module, 'owner', event.target.value)
-                            }
-                          />
-                        </Field>
-                        <Field
-                          id={`datahub-notes-${module.moduleId}`}
-                          label="Import notes"
-                          className="form-grid__full"
-                        >
-                          <textarea
-                            className="textarea"
-                            rows="3"
-                            value={draft.notes}
-                            placeholder="Anything useful about this CSV upload."
-                            onChange={(event) =>
-                              updateModuleDraft(module.moduleId, module, 'notes', event.target.value)
-                            }
-                          />
-                        </Field>
-                        <Field
-                          id={`datahub-file-${module.moduleId}`}
-                          label="CSV file"
-                          helper="One file per upload. Every CSV row becomes a Neo4j row node."
-                          className="form-grid__full"
-                        >
-                          <input
-                            className="datahub-file-input"
-                            type="file"
-                            accept=".csv,text/csv"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] || null
-                              setSelectedModuleId(module.moduleId)
-                              setUploadFiles((prev) => ({ ...prev, [module.moduleId]: file }))
-                              setUploadErrors((prev) => ({ ...prev, [module.moduleId]: '' }))
-                            }}
-                          />
-                        </Field>
-                      </div>
-                    </FormSection>
-
-                    {selectedFile ? (
-                      <div className="metric-row">
-                        <span>Selected file</span>
-                        <strong>{selectedFile.name}</strong>
-                      </div>
-                    ) : null}
-
-                    <div className="cluster-tags">
-                      {(module.connectors || []).map((connector) => (
-                        <span className="cluster-tag" key={connector.connectorId}>
-                          {connector.name}
-                        </span>
-                      ))}
+                      {module.status}
+                    </span>
+                  </div>
+                  <p className="muted">{module.description}</p>
+                  <div className="report-metrics">
+                    <div className="report-metric">
+                      <span>Readiness</span>
+                      <strong>{progress}%</strong>
                     </div>
-
-                    <StatusMessage tone="error" message={uploadError} />
-                    <StatusMessage tone="info" message={uploadResult?.message || ''} />
-
-                    {uploadResult?.columns?.length ? (
-                      <div className="compact-list">
-                        <div className="metric-row">
-                          <span>Columns mapped</span>
-                          <strong>{formatNumber(uploadResult.columnCount)}</strong>
-                        </div>
-                        <div className="cluster-tags">
-                          {uploadResult.columns.slice(0, 8).map((column) => (
-                            <span className="cluster-tag" key={`${module.moduleId}-${column}`}>
-                              {column}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="datahub-upload-actions">
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => uploadModuleCsv(module)}
-                        disabled={uploading}
-                      >
-                        {uploading ? 'Uploading to Neo4j...' : 'Upload CSV to Neo4j'}
-                      </button>
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => {
-                          setSelectedModuleId(module.moduleId)
-                          applyView('explorer')
-                        }}
-                      >
-                        Inspect graph
-                      </button>
+                    <div className="report-metric">
+                      <span>Connectors</span>
+                      <strong>{formatNumber(module.connectors?.length)}</strong>
+                    </div>
+                    <div className="report-metric">
+                      <span>Target</span>
+                      <strong>Neo4j</strong>
                     </div>
                   </div>
-                )
-              })}
+
+                  <div className="cluster-tags">
+                    {(module.connectors || []).map((connector) => (
+                      <span className="cluster-tag" key={connector.connectorId}>
+                        {connector.name}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="datahub-upload-actions">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => {
+                        setSelectedModuleId(module.moduleId)
+                        applyView('explorer')
+                      }}
+                    >
+                      Inspect graph
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>

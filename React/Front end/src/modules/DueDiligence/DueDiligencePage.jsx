@@ -3,6 +3,8 @@ import { Card, Group, RingProgress, Text } from '@mantine/core'
 import { IconAlertTriangle, IconFileSearch, IconShieldCheck, IconUsers } from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, InfoBox } from '../../ui'
+import { DdAnalysisResultPanels } from './DdAnalysisResultPanels.jsx'
+import { normalizeStoredReportToAnalysisResult } from './duediligenceNormalize.js'
 
 export function DueDiligencePage({
   t,
@@ -93,6 +95,9 @@ export function DueDiligencePage({
   const [gmailTo, setGmailTo] = useState(
     () => localStorage.getItem('ddGmailTo') || '',
   )
+  const [selectedHistoryReportId, setSelectedHistoryReportId] = useState('')
+  const [archivedReportLoading, setArchivedReportLoading] = useState(false)
+  const [reportLoadError, setReportLoadError] = useState('')
 
   useEffect(() => {
     if (activeTabOverride && activeTabOverride !== activeTab) {
@@ -208,7 +213,7 @@ export function DueDiligencePage({
         setCompetitors(Array.isArray(payload) ? payload : [])
       })
       .catch((err) => {
-        setError(err.message || 'Unable to load competitors.')
+        setError(err.message || 'Unable to load watchlist.')
       })
   }
 
@@ -342,6 +347,8 @@ export function DueDiligencePage({
         payload: {
           status: caseStatus,
           owner: caseOwner.trim(),
+          subject: subjectName.trim(),
+          subjectType,
         },
       })
       setCases((prev) =>
@@ -488,11 +495,11 @@ export function DueDiligencePage({
       const people = await getJson(
         `/crm/people/summary?q=${encodeURIComponent(query)}&limit=200`,
       )
-      const competitorMatchesList = competitors.filter((item) =>
-        item.name?.toLowerCase().includes(query.toLowerCase()),
+      const watchlistMatches = await getJson(
+        `/due-diligence/watchlist-matches?q=${encodeURIComponent(query)}&limit=50`,
       )
       setCrmMatches(Array.isArray(people) ? people : [])
-      setCompetitorMatches(competitorMatchesList)
+      setCompetitorMatches(Array.isArray(watchlistMatches) ? watchlistMatches : [])
     } catch (err) {
       setError(err.message || 'Unable to run internal checks.')
     }
@@ -505,6 +512,8 @@ export function DueDiligencePage({
     }
     setStartMode('Analysis')
     setAnalysisError('')
+    setReportLoadError('')
+    setSelectedHistoryReportId('')
     setAnalysisResult(null)
     setAnalysisProgress(5)
     const caseId = await ensureActiveCase()
@@ -636,6 +645,61 @@ export function DueDiligencePage({
     }
   }
 
+  const handleOpenReportFromHistory = async (reportId) => {
+    if (!reportId) return
+    setArchivedReportLoading(true)
+    setReportLoadError('')
+    try {
+      const raw = await getJson(`/due-diligence/reports/${reportId}`)
+      const normalized = normalizeStoredReportToAnalysisResult(raw)
+      setAnalysisResult(normalized)
+      setSelectedHistoryReportId(reportId)
+      applyActiveTab('reports')
+    } catch (err) {
+      setReportLoadError(err.message || 'Unable to load report.')
+    } finally {
+      setArchivedReportLoading(false)
+    }
+  }
+
+  const handleSaveSubjectToCase = async () => {
+    if (!activeCaseId) {
+      setCaseNotice('Select a case first.')
+      return
+    }
+    if (!subjectName.trim()) {
+      setCaseNotice('Enter a subject name.')
+      return
+    }
+    setCaseSaving(true)
+    setCaseNotice('')
+    try {
+      const payload = await requestJson(`/due-diligence/cases/${activeCaseId}`, {
+        method: 'PATCH',
+        payload: {
+          subject: subjectName.trim(),
+          subjectType,
+          status: caseStatus,
+          owner: caseOwner.trim(),
+        },
+      })
+      setCases((prev) =>
+        prev.map((item) => (item.caseId === activeCaseId ? payload : item)),
+      )
+      setActiveCase(payload)
+      setSubjectName(payload.subject || '')
+      setSubjectType(payload.subjectType || 'Person')
+      setCaseStatus(payload.status || 'Draft')
+      setCaseOwner(payload.owner || '')
+      setCaseNotice('Subject saved to case.')
+      loadCases()
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to update case subject.')
+    } finally {
+      setCaseSaving(false)
+    }
+  }
+
   useEffect(() => {
     if (activeCaseId) {
       loadReportHistory(subjectName.trim(), activeCaseId)
@@ -650,10 +714,6 @@ export function DueDiligencePage({
 
   useEffect(() => {
     if (!cases.length) return
-    if (!activeCaseId && !subjectName.trim()) {
-      setActiveCaseId(cases[0].caseId)
-      return
-    }
     if (!activeCaseId && subjectName.trim()) {
       const match = cases.find((item) => item.subject === subjectName.trim())
       if (match) {
@@ -791,7 +851,7 @@ export function DueDiligencePage({
   const handleCreate = async (event) => {
     event.preventDefault()
     if (!name.trim()) {
-      setError('Competitor name is required.')
+      setError('Name is required.')
       return
     }
     setSaving(true)
@@ -809,7 +869,7 @@ export function DueDiligencePage({
       setNotes('')
       loadCompetitors()
     } catch (err) {
-      setError(err.message || 'Unable to save competitor.')
+      setError(err.message || 'Unable to save watchlist entry.')
     } finally {
       setSaving(false)
     }
@@ -853,7 +913,7 @@ export function DueDiligencePage({
       })
       loadCompetitors()
     } catch (err) {
-      setError(err.message || 'Unable to delete competitor.')
+      setError(err.message || 'Unable to delete watchlist entry.')
     }
   }
 
@@ -930,7 +990,7 @@ export function DueDiligencePage({
           })
           created += 1
         }
-        setImportStatus(`Imported ${created} competitors.`)
+        setImportStatus(`Imported ${created} watchlist entries.`)
         loadCompetitors()
       } catch (err) {
         setImportError(err.message || 'Import failed.')
@@ -967,7 +1027,7 @@ export function DueDiligencePage({
   const duePulseStats = useMemo(
     () => [
       {
-        label: 'Competitors',
+        label: 'Watchlist',
         value: summary?.competitors ?? '—',
         icon: <IconShieldCheck size={18} />,
         badge: 'Tracked',
@@ -1123,7 +1183,7 @@ export function DueDiligencePage({
             <div className="dashboard-detail__body">
               <div className="module-header__meta">
                 <div className="module-header__metric">
-                  <span>Competitors</span>
+                  <span>Watchlist</span>
                   <strong>{summary?.competitors ?? '—'}</strong>
                 </div>
                 <div className="module-header__metric">
@@ -1140,7 +1200,7 @@ export function DueDiligencePage({
 
           <CivicStatGrid
             title="Risk intelligence pulse"
-            description="Signals across competitors, watchlists, and internal matches."
+            description="Signals across watchlist, network matches, and internal checks."
             items={duePulseStats}
           />
 
@@ -1152,7 +1212,7 @@ export function DueDiligencePage({
                 { id: 'reports', label: 'Reports' },
                 { id: 'tasks', label: 'Tasks' },
                 { id: 'decision', label: 'Decision' },
-                { id: 'advanced', label: 'Advanced tools' },
+                { id: 'advanced', label: 'Tools' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1213,6 +1273,12 @@ export function DueDiligencePage({
                     <strong>{activeCaseId}</strong>
                   </div>
                   <div className="metric-row">
+                    <span>Subject</span>
+                    <strong>
+                      {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
+                    </strong>
+                  </div>
+                  <div className="metric-row">
                     <span>Status</span>
                     <strong>{caseStatus}</strong>
                   </div>
@@ -1229,6 +1295,20 @@ export function DueDiligencePage({
                     <strong>{activeCase?.lastReportAt || '—'}</strong>
                   </div>
                   <div className="filter-row">
+                    <input
+                      className="input"
+                      placeholder="Subject name"
+                      value={subjectName}
+                      onChange={(event) => setSubjectName(event.target.value)}
+                    />
+                    <select
+                      className="select"
+                      value={subjectType}
+                      onChange={(event) => setSubjectType(event.target.value)}
+                    >
+                      <option value="Person">Person</option>
+                      <option value="Organization">Organization</option>
+                    </select>
                     <select
                       className="select"
                       value={caseStatus}
@@ -1280,7 +1360,7 @@ export function DueDiligencePage({
                 <InfoBox
                   title="Quick steps"
                   summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
-                  hint="Internal checks scan Network + watchlist. External analysis pulls Wikidata, OpenSanctions, and News/Web."
+                  hint="Internal checks scan Network + watchlist (ranked server-side). External analysis pulls Wikidata, OpenSanctions, and News/Web."
                 />
                 <div className="filter-row">
                   <input
@@ -1288,13 +1368,11 @@ export function DueDiligencePage({
                     placeholder="Enter person or organization"
                     value={subjectName}
                     onChange={(event) => setSubjectName(event.target.value)}
-                    disabled={Boolean(activeCaseId)}
                   />
                   <select
                     className="select"
                     value={subjectType}
                     onChange={(event) => setSubjectType(event.target.value)}
-                    disabled={Boolean(activeCaseId)}
                   >
                     <option value="Person">Person</option>
                     <option value="Organization">Organization</option>
@@ -1307,13 +1385,23 @@ export function DueDiligencePage({
                     Check internal records
                   </button>
                   {activeCaseId ? (
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={handleClearCase}
-                    >
-                      Change subject
-                    </button>
+                    <>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={handleSaveSubjectToCase}
+                        disabled={caseSaving}
+                      >
+                        {caseSaving ? 'Saving…' : 'Save subject to case'}
+                      </button>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={handleClearCase}
+                      >
+                        Clear case
+                      </button>
+                    </>
                   ) : null}
                 </div>
                 <p className="muted">Internal checks look at Network + watchlist for matches.</p>
@@ -1445,6 +1533,10 @@ export function DueDiligencePage({
                 {analysisNotice ? <p className="muted">{analysisNotice}</p> : null}
                 {analysisProgress > 0 ? (
                   <div className="questionnaire-progress">
+                    <p className="muted" style={{ marginBottom: 8 }}>
+                      Estimated progress — the run completes when the server responds (not live
+                      streaming).
+                    </p>
                     <div className="questionnaire-progress__track">
                       <div
                         className="questionnaire-progress__bar"
@@ -1469,53 +1561,11 @@ export function DueDiligencePage({
                   </div>
                 ) : null}
                 {analysisResult ? (
-                  <div className="stack">
-                    <div className="module-alert module-alert--success">
-                      Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
-                      {analysisResult.summary?.total_hits ?? 0}
-                    </div>
-                    {analysisResult.summary?.risk_score !== undefined ? (
-                      <p className="muted">
-                        Risk score: {analysisResult.summary?.risk_score}/100
-                      </p>
-                    ) : null}
-                    {analysisResult.summary?.risk_rationale?.length ? (
-                      <ul className="compact-list">
-                        {analysisResult.summary.risk_rationale.map((item, idx) => (
-                          <li key={`${item}-${idx}`}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {analysisResult.warnings?.length ? (
-                      <div className="module-alert">
-                        {analysisResult.warnings.map((warning, idx) => (
-                          <div key={`${warning}-${idx}`}>{warning}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {analysisResult.reportId ? (
-                      <div className="filter-row">
-                        <a
-                          className="button-secondary"
-                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download PDF report
-                        </a>
-                        <button
-                          className="button-secondary"
-                          type="button"
-                          onClick={() => applyActiveTab('reports')}
-                        >
-                          View full sources
-                        </button>
-                        <span className="muted">
-                          Stored: {analysisResult.storedAt || '—'}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
+                  <DdAnalysisResultPanels
+                    analysisResult={analysisResult}
+                    onViewFullSources={() => applyActiveTab('reports')}
+                    showSourceDetails={false}
+                  />
                 ) : null}
               </div>
             </div>
@@ -1530,167 +1580,54 @@ export function DueDiligencePage({
                     <p className="muted">Review history and download PDFs.</p>
                   </div>
                 </div>
-                {!subjectName.trim() ? (
-                  <div className="module-alert">Select a case to view report history.</div>
+                {!activeCaseId && !subjectName.trim() ? (
+                  <div className="module-alert">
+                    Select a case (or enter a subject in Checks) to view report history.
+                  </div>
                 ) : null}
               </div>
+
+              {reportLoadError ? <div className="module-alert">{reportLoadError}</div> : null}
+
+              {selectedHistoryReportId ? (
+                <div className="module-alert module-alert--success">
+                  Viewing saved report <strong>{selectedHistoryReportId}</strong>
+                  <span className="filter-row" style={{ display: 'inline-flex', marginLeft: 12 }}>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => {
+                        setSelectedHistoryReportId('')
+                        setAnalysisResult(null)
+                      }}
+                    >
+                      Close detail
+                    </button>
+                  </span>
+                </div>
+              ) : null}
 
               {analysisResult ? (
                 <div className="module-card module-card__wide">
                   <div className="card-header">
                     <div>
-                      <h3>Latest analysis detail</h3>
-                      <p className="muted">Sources and evidence from the most recent run.</p>
-                    </div>
-                  </div>
-                  <div className="stack">
-                    <div className="module-alert module-alert--success">
-                      Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
-                      {analysisResult.summary?.total_hits ?? 0}
-                    </div>
-                    {analysisResult.summary?.risk_score !== undefined ? (
+                      <h3>{selectedHistoryReportId ? 'Report detail' : 'Latest analysis detail'}</h3>
                       <p className="muted">
-                        Risk score: {analysisResult.summary?.risk_score}/100
+                        {selectedHistoryReportId
+                          ? 'Loaded from history (GET /reports/:id).'
+                          : 'Sources and evidence from the most recent run.'}
                       </p>
-                    ) : null}
-                    {analysisResult.summary?.risk_rationale?.length ? (
-                      <ul className="compact-list">
-                        {analysisResult.summary.risk_rationale.map((item, idx) => (
-                          <li key={`${item}-${idx}`}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {analysisResult.warnings?.length ? (
-                      <div className="module-alert">
-                        {analysisResult.warnings.map((warning, idx) => (
-                          <div key={`${warning}-${idx}`}>{warning}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {analysisResult.reportId ? (
-                      <div className="filter-row">
-                        <a
-                          className="button-secondary"
-                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download PDF report
-                        </a>
-                        <span className="muted">
-                          Stored: {analysisResult.storedAt || '—'}
-                        </span>
-                      </div>
-                    ) : null}
-
-                    <details className="dashboard-detail" open>
-                      <summary>
-                        Wikidata results ({(analysisResult.wikidata || []).length})
-                      </summary>
-                      <div className="dashboard-detail__body">
-                        <div className="table">
-                          <div className="table-row table-head">
-                            <span>Label</span>
-                            <span>Description</span>
-                            <span>Link</span>
-                          </div>
-                          {(analysisResult.wikidata || []).length === 0 ? (
-                            <div className="table-row empty">No Wikidata matches.</div>
-                          ) : (
-                            analysisResult.wikidata.map((row) => (
-                              <div className="table-row" key={row.id || row.label}>
-                                <span>{row.label || '—'}</span>
-                                <span>{row.description || '—'}</span>
-                                <span>
-                                  {row.url ? (
-                                    <a href={row.url} target="_blank" rel="noreferrer">
-                                      View
-                                    </a>
-                                  ) : (
-                                    '—'
-                                  )}
-                                </span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </details>
-
-                    <details className="dashboard-detail" open>
-                      <summary>
-                        OpenSanctions results ({(analysisResult.opensanctions || []).length})
-                      </summary>
-                      <div className="dashboard-detail__body">
-                        <div className="table">
-                          <div className="table-row table-head">
-                            <span>Name</span>
-                            <span>Schema</span>
-                            <span>Datasets</span>
-                            <span>Score</span>
-                          </div>
-                          {(analysisResult.opensanctions || []).length === 0 ? (
-                            <div className="table-row empty">No OpenSanctions matches.</div>
-                          ) : (
-                            analysisResult.opensanctions.map((row) => (
-                              <div className="table-row" key={row.id || row.name}>
-                                <span>
-                                  {row.url ? (
-                                    <a href={row.url} target="_blank" rel="noreferrer">
-                                      {row.name || '—'}
-                                    </a>
-                                  ) : (
-                                    row.name || '—'
-                                  )}
-                                </span>
-                                <span>{row.schema || '—'}</span>
-                                <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
-                                <span>{row.score?.toFixed?.(2) ?? row.score ?? '—'}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </details>
-
-                    <details className="dashboard-detail" open>
-                      <summary>
-                        News / Web results ({(analysisResult.news || []).length})
-                      </summary>
-                      <div className="dashboard-detail__body">
-                        <div className="table">
-                          <div className="table-row table-head">
-                            <span>Headline</span>
-                            <span>Source</span>
-                            <span>Tone</span>
-                          </div>
-                          {(analysisResult.news || []).length === 0 ? (
-                            <div className="table-row empty">No recent news found.</div>
-                          ) : (
-                            analysisResult.news.map((row) => (
-                              <div className="table-row" key={row.url || row.title}>
-                                <span>
-                                  {row.url ? (
-                                    <a href={row.url} target="_blank" rel="noreferrer">
-                                      {row.title || '—'}
-                                    </a>
-                                  ) : (
-                                    row.title || '—'
-                                  )}
-                                </span>
-                                <span>{row.source || '—'}</span>
-                                <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '—'}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </details>
+                    </div>
                   </div>
+                  <DdAnalysisResultPanels
+                    analysisResult={analysisResult}
+                    showViewFullSourcesButton={false}
+                    showSourceDetails
+                  />
                 </div>
               ) : null}
 
-              {subjectName.trim() ? (
+              {activeCaseId || subjectName.trim() ? (
                 <details className="dashboard-detail" open>
                   <summary>Report history ({reportHistory.length})</summary>
                   <div className="dashboard-detail__body">
@@ -1700,12 +1637,13 @@ export function DueDiligencePage({
                         <span>Risk</span>
                         <span>Total hits</span>
                         <span>Sources</span>
-                        <span>Download</span>
+                        <span>Open</span>
+                        <span>PDF</span>
                       </div>
                       {historyLoading ? (
                         <div className="table-row empty">Loading report history…</div>
                       ) : reportHistory.length === 0 ? (
-                        <div className="table-row empty">No prior reports for this subject.</div>
+                        <div className="table-row empty">No prior reports for this case or subject.</div>
                       ) : (
                         reportHistory.map((row) => (
                           <div className="table-row" key={row.reportId}>
@@ -1713,6 +1651,16 @@ export function DueDiligencePage({
                             <span>{row.riskLevel || '—'}</span>
                             <span>{row.totalHits ?? 0}</span>
                             <span>{(row.sources || []).join(', ') || '—'}</span>
+                            <span>
+                              <button
+                                type="button"
+                                className="button-secondary"
+                                onClick={() => handleOpenReportFromHistory(row.reportId)}
+                                disabled={archivedReportLoading}
+                              >
+                                {archivedReportLoading ? 'Loading…' : 'Open'}
+                              </button>
+                            </span>
                             <span>
                               <a
                                 href={`${getApiBaseUrl()}/due-diligence/reports/${row.reportId}/pdf`}
@@ -1875,8 +1823,8 @@ export function DueDiligencePage({
                       </div>
                     </div>
                     <div className="module-card">
-                      <h3>Competitors</h3>
-                      <p className="muted">Pick a watchlist subject to use for analysis.</p>
+                      <h3>Watchlist</h3>
+                      <p className="muted">Pick a watchlist entry to use for analysis.</p>
                       <select
                         className="select"
                         value={subjectName}
@@ -1892,7 +1840,7 @@ export function DueDiligencePage({
                           )
                         }}
                       >
-                        <option value="">Select competitor</option>
+                        <option value="">Select watchlist entry</option>
                         {competitors.map((item) => (
                           <option key={item.competitorId} value={item.name}>
                             {item.name}
@@ -1922,7 +1870,7 @@ export function DueDiligencePage({
                   <form className="task-form" onSubmit={handleCreate}>
                     <input
                       className="input"
-                      placeholder="Competitor name"
+                      placeholder="Name"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                     />
@@ -1973,7 +1921,7 @@ export function DueDiligencePage({
                       <span>Action</span>
                     </div>
                     {competitors.length === 0 && (
-                      <div className="table-row empty">No competitors yet.</div>
+                      <div className="table-row empty">No watchlist entries yet.</div>
                     )}
                     {competitors.map((item) => (
                       <div className="table-row" key={item.competitorId}>

@@ -1142,6 +1142,60 @@ def delete_competitor(competitor_id: str):
     return {"deleted": True, "competitor_id": competitor_id}
 
 
+def _watchlist_match_score(query: str, name: str) -> float:
+    """Higher is better: exact, substring, token overlap, partial token match."""
+    q = _normalize_text(query)
+    n = _normalize_text(name)
+    if not q or not n:
+        return 0.0
+    if q == n:
+        return 100.0
+    if q in n or n in q:
+        return 85.0
+    q_tokens = {t for t in q.split() if len(t) >= 2}
+    n_tokens = {t for t in n.split() if len(t) >= 2}
+    if not q_tokens:
+        return 0.0
+    overlap = len(q_tokens & n_tokens)
+    if overlap:
+        return 45.0 + min(45.0, overlap * 12.0)
+    for qt in q_tokens:
+        if len(qt) < 3:
+            continue
+        for nt in n_tokens:
+            if qt in nt or nt in qt:
+                return 28.0
+    return 0.0
+
+
+@router.get("/watchlist-matches", response_model=List[CompetitorOut])
+def watchlist_matches(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Rank watchlist (Competitor) rows by relevance to the query (server-side)."""
+    driver = get_driver()
+    query = """
+    MATCH (c:Competitor)
+    RETURN
+      c.competitorId AS competitorId,
+      c.name AS name,
+      c.competitorType AS competitorType,
+      coalesce(c.notes, '') AS notes,
+      toString(c.updatedAt) AS updatedAt
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(session, query)
+    rows = [record.data() for record in records]
+    scored = []
+    for row in rows:
+        score = _watchlist_match_score(q, str(row.get("name") or ""))
+        if score > 0:
+            scored.append((score, row))
+    scored.sort(key=lambda item: (-item[0], str(item[1].get("name") or "")))
+    return [item[1] for item in scored[: int(limit)]]
+
+
 @router.post("/analyze", response_model=DueDiligenceAnalysisOut)
 def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     subject = payload.subject.strip()

@@ -4,10 +4,12 @@ import re
 from typing import List, Optional
 from uuid import uuid4
 
+import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from .db import get_active_database, get_driver
+from .routes_crm_helpers import _build_import_rows, _normalize_supporter_type
 
 router = APIRouter()
 INTAKE_MODULE_IDS = {
@@ -766,3 +768,100 @@ def get_graph_snapshot(
         summary = _load_graph_summary(session)
         nodes, edges = _load_graph_snapshot(session, limit=limit, label=label or "")
     return GraphSnapshotOut(summary=summary, nodes=nodes, edges=edges)
+
+
+class SupportersCsvImportOut(BaseModel):
+    import_id: str = Field(alias="importId")
+    file_name: str = Field(alias="fileName")
+    row_count: int = Field(alias="rowCount")
+    skipped: int
+    default_type: str = Field(alias="defaultType")
+    message: str
+
+
+@router.post("/uploads/supporters-csv", response_model=SupportersCsvImportOut)
+async def upload_supporters_csv(
+    file: UploadFile = File(...),
+    default_type: str = Form(default="Supporter", alias="defaultType"),
+    owner: str = Form(default=""),
+    notes: str = Form(default=""),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="CSV file name is required.")
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV uploads are supported.")
+
+    content = await file.read()
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {exc}")
+
+    safe_type = _normalize_supporter_type(default_type, "Supporter")
+    rows = _build_import_rows(df, safe_type)
+    skipped = max(0, len(df) - len(rows))
+
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid rows found. CSV must have an email column (email, primary_email, e_mail, or email_address).",
+        )
+
+    import_id = str(uuid4())
+    driver = get_driver()
+    with _db_session(driver) as session:
+        _execute_write(
+            session,
+            """
+            UNWIND $rows AS row
+            WITH row
+            WHERE row.email IS NOT NULL AND trim(row.email) <> ""
+            MERGE (p:Person {email: row.email})
+            ON CREATE SET p.personId = randomUUID(), p.createdAt = datetime()
+            SET p.firstName    = row.firstName,
+                p.lastName     = row.lastName,
+                p.gender       = row.gender,
+                p.age          = row.age,
+                p.phone        = row.phone,
+                p.lat          = row.lat,
+                p.lon          = row.lon,
+                p.effortHours          = coalesce(row.effortHours, p.effortHours),
+                p.eventsAttendedCount  = coalesce(row.eventsAttendedCount, p.eventsAttendedCount),
+                p.referralCount        = coalesce(row.referralCount, p.referralCount),
+                p.tasksCompleted       = coalesce(row.tasksCompleted, p.tasksCompleted),
+                p.timeAvailability     = coalesce(row.timeAvailability, p.timeAvailability),
+                p.importId     = $importId,
+                p.importedAt   = datetime(),
+                p.importOwner  = $owner,
+                p.importNotes  = $notes
+            WITH p, row
+            FOREACH (_ IN CASE WHEN row.education IS NULL OR row.education = '' THEN [] ELSE [1] END |
+                MERGE (ed:EducationLevel {name: row.education})
+                MERGE (p)-[:HAS_EDUCATION]->(ed)
+            )
+            FOREACH (skill IN coalesce(row.skills, []) |
+                MERGE (sk:Skill {name: skill})
+                MERGE (p)-[:CAN_CONTRIBUTE_WITH]->(sk)
+            )
+            MERGE (st:SupporterType {name: coalesce(row.supporterType, 'Supporter')})
+            MERGE (p)-[:CLASSIFIED_AS]->(st)
+            WITH p, row
+            FOREACH (_ IN CASE WHEN row.address IS NULL OR row.address = '' THEN [] ELSE [1] END |
+                MERGE (a:Address {fullAddress: row.address})
+                ON CREATE SET a.latitude = row.lat, a.longitude = row.lon
+                ON MATCH  SET a.latitude = coalesce(row.lat, a.latitude),
+                              a.longitude = coalesce(row.lon, a.longitude)
+                MERGE (p)-[:LIVES_AT]->(a)
+            )
+            """,
+            {"rows": rows, "importId": import_id, "owner": owner.strip()[:160], "notes": notes.strip()[:1000]},
+        )
+
+    return SupportersCsvImportOut(
+        importId=import_id,
+        fileName=file.filename,
+        rowCount=len(rows),
+        skipped=skipped,
+        defaultType=safe_type,
+        message=f"Imported {len(rows)} supporters into Neo4j as Person nodes.{f' {skipped} rows skipped (no email).' if skipped else ''}",
+    )

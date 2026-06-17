@@ -279,7 +279,7 @@ export const TRANSLATIONS = {
     'deliberation.tabs.participate': 'Participate',
     'dueDiligence.header.title': 'Due Diligence',
     'dueDiligence.header.subtitle':
-      'Select person/organization, check Network + competitors, run analysis, then launch the workflow.',
+      'Select a subject, run Network and watchlist checks, external analysis, then record tasks and decision.',
     'dueDiligence.tabs.how': 'How it works',
     'dueDiligence.tabs.analysis': 'Analysis',
     'dueDiligence.tabs.configure': 'Configure',
@@ -554,7 +554,7 @@ export const TRANSLATIONS = {
     'deliberation.tabs.participate': 'მონაწილეობა',
     'dueDiligence.header.title': 'სათანადო შემოწმება',
     'dueDiligence.header.subtitle':
-      'აირჩიე პირი/ორგანიზაცია, შეამოწმე ქსელი და კონკურენტები, გაუშვი ანალიზი, შემდეგ დაიწყო პროცესი.',
+      'აირჩიე სუბიექტი, შეამოწმე ქსელი და საკონტროლო სია, გაუშვი გარე ანალიზი, შემდეგ დააფიქსირე ამოცანები და გადაწყვეტილება.',
     'dueDiligence.tabs.how': 'როგორ მუშაობს',
     'dueDiligence.tabs.analysis': 'ანალიზი',
     'dueDiligence.tabs.configure': 'კონფიგურაცია',

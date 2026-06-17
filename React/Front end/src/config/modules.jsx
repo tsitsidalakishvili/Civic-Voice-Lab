@@ -80,7 +80,6 @@ export const buildModules = (t) => {
       id: 'due-diligence',
       label: t('module.dueDiligence'),
       description: t('module.dueDiligence.desc'),
-      status: 'In Progress',
       Component: DueDiligencePage,
     },
     {
@@ -195,7 +194,7 @@ export const MODULE_SECTIONS = {
       { label: 'Reports', type: 'tab', value: 'reports', hint: 'Review outputs.' },
       { label: 'Tasks', type: 'tab', value: 'tasks', hint: 'Assignment workflow.' },
       { label: 'Decision', type: 'tab', value: 'decision', hint: 'Finalize outcome.' },
-      { label: 'Advanced tools', type: 'tab', value: 'advanced', hint: 'Deep research.' },
+      { label: 'Tools', type: 'tab', value: 'advanced', hint: 'Watchlist, debate prep, integrations.' },
     ],
   },
   'audience-discovery': {

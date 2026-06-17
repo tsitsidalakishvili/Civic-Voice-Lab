@@ -145,6 +145,42 @@ def _sanitize_neo4j_row(row: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Geocoding helper (Nominatim / OpenStreetMap — no API key required)
+# ---------------------------------------------------------------------------
+
+_geocode_cache: dict[str, tuple[float, float] | None] = {}
+
+
+def geocode_address(address: str) -> tuple[float, float] | None:
+    """Return (lat, lon) for *address* using Nominatim, or None on failure.
+
+    Results are cached in-process so the same address is only looked up once
+    per server lifetime.  A 1-second timeout prevents slow rows from blocking
+    the whole import.
+    """
+    key = address.strip().lower()
+    if key in _geocode_cache:
+        return _geocode_cache[key]
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": address, "format": "json", "limit": 1},
+            headers={"User-Agent": "FreedomSquare/1.0 (admin@freedomsquare.ge)"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if results:
+            result = (float(results[0]["lat"]), float(results[0]["lon"]))
+            _geocode_cache[key] = result
+            return result
+    except Exception:
+        pass
+    _geocode_cache[key] = None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Text / data helpers
 # ---------------------------------------------------------------------------
 
@@ -1165,6 +1201,12 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
         lon_val = pd.to_numeric(row.get(col_lon), errors="coerce") if col_lon else None
         lat = float(lat_val) if lat_val is not None and not pd.isna(lat_val) else None
         lon = float(lon_val) if lon_val is not None and not pd.isna(lon_val) else None
+        if (lat is None or lon is None) and col_address:
+            address_text = _clean_text(row.get(col_address))
+            if address_text:
+                coords = geocode_address(address_text)
+                if coords:
+                    lat, lon = coords
         supporter_type = _clean_text(row.get(col_type)) if col_type else None
         effort_val = pd.to_numeric(row.get(col_effort), errors="coerce") if col_effort else None
         effort_hours = (
