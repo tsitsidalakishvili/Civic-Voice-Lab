@@ -1,0 +1,87 @@
+{
+  "id": "member_intake",
+  "title": "Freedom Square Membership Intake",
+  "description": "Short intake form for party membership candidates.",
+  "audience": ["member"],
+  "message_template": "Freedom Square membership questionnaire\n\nPlease fill the short form here:\n{link}",
+  "sections": [
+    {
+      "title": "Contact",
+      "fields": [
+        { "id": "full_name", "label": "Full name", "type": "text", "required": true },
+        { "id": "email", "label": "Email", "type": "text", "required": true },
+        { "id": "phone", "label": "Phone", "type": "text", "required": false },
+        { "id": "address", "label": "Neighborhood / Address", "type": "text", "required": false }
+      ]
+    },
+    {
+      "title": "Membership",
+      "fields": [
+        {
+          "id": "membership_interest",
+          "label": "Why do you want to become a member?",
+          "type": "textarea",
+          "required": true
+        },
+        {
+          "id": "leadership_interest",
+          "label": "Would you consider a leadership or coordination role?",
+          "type": "select",
+          "options": ["", "Yes", "No", "Maybe"]
+        }
+      ]
+    },
+    {
+      "title": "Engagement",
+      "fields": [
+        {
+          "id": "time_availability",
+          "label": "Time availability",
+          "type": "select",
+          "options": ["", "Weekends", "Evenings", "Full-time", "Ad-hoc"]
+        },
+        {
+          "id": "involvement",
+          "label": "Preferred involvement",
+          "type": "multiselect",
+          "options": [
+            "Field organizing",
+            "Leadership/coordination",
+            "Event support",
+            "Fundraising",
+            "Communications",
+            "Policy research",
+            "Data/tech"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Priorities",
+      "fields": [
+        {
+          "id": "issues",
+          "label": "Top issues you want us to focus on",
+          "type": "multiselect",
+          "options": [
+            "Anti-corruption",
+            "Local community services",
+            "Economic fairness",
+            "Education",
+            "Healthcare",
+            "Environmental protection",
+            "Youth engagement"
+          ]
+        },
+        { "id": "motivation", "label": "What should Freedom Square do differently?", "type": "textarea" }
+      ]
+    },
+    {
+      "title": "Comments",
+      "fields": [
+        { "id": "comment_one", "label": "What should be our main policy priority?", "type": "textarea" },
+        { "id": "comment_two", "label": "How should we engage young voters?", "type": "textarea" }
+      ]
+    }
+  ]
+}

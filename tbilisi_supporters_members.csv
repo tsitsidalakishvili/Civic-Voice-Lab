@@ -1,0 +1,301 @@
+email,first_name,last_name,gender,age,phone,address,lat,lon,supporter_type,effort_hours,events_attended,referral_count,education,skills
+salome.gelashvili0@gmail.com,Salome,Gelashvili,Female,54,995518882417,"Rustaveli Ave 29, Tbilisi, Georgia",41.698128663638464,44.80046101650456,Member,113,38,0,Master,"Fundraising, Data, Organizing"
+levan.beridze1@gmail.com,Levan,Beridze,Female,41,995596435356,"Vake Park Area 7, Tbilisi, Georgia",41.70786419337305,44.74199378467596,Supporter,240,24,12,PhD,Organizing
+mariam.tsiklauri2@gmail.com,Mariam,Tsiklauri,Male,38,995550611699,"Chavchavadze Ave 40, Tbilisi, Georgia",41.70913960085963,44.75459633220086,Member,58,27,14,PhD,"Organizing, Fundraising"
+nino.lomidze3@gmail.com,Nino,Lomidze,Female,55,995591940518,"Guramishvili Ave 95, Tbilisi, Georgia",41.74121436111772,44.7820599562997,Supporter,230,26,3,Bachelor,"Fundraising, Data"
+zura.beridze4@gmail.com,Zura,Beridze,Female,48,995522187790,"Guramishvili Ave 71, Tbilisi, Georgia",41.73906883719282,44.78169002144269,Supporter,230,24,12,High School,"Fundraising, Organizing"
+ana.beridze5@gmail.com,Ana,Beridze,Other,47,995584120795,"Marjanishvili St 43, Tbilisi, Georgia",41.71569842825711,44.8024031890523,Supporter,144,37,17,High School,"Organizing, Data, Fundraising"
+giorgi.japaridze6@gmail.com,Giorgi,Japaridze,Female,50,995534865197,"Abashidze St 13, Tbilisi, Georgia",41.70837012502268,44.75618537016527,Supporter,220,23,18,High School,Data
+giorgi.kiknadze7@gmail.com,Giorgi,Kiknadze,Other,66,995516736377,"Chavchavadze Ave 29, Tbilisi, Georgia",41.711159317010086,44.75547005974775,Member,59,31,4,Master,"Organizing, Data"
+zura.kiknadze8@gmail.com,Zura,Kiknadze,Other,29,995566411355,"Guramishvili Ave 27, Tbilisi, Georgia",41.73941062576979,44.78325172989123,Supporter,165,0,9,PhD,Organizing
+zura.mchedlishvili9@gmail.com,Zura,Mchedlishvili,Female,66,995536257077,"Guramishvili Ave 75, Tbilisi, Georgia",41.73937786361858,44.78242755807896,Supporter,66,33,12,High School,"Organizing, Fundraising"
+tekla.mchedlishvili10@gmail.com,Tekla,Mchedlishvili,Male,31,995586190962,"Chavchavadze Ave 77, Tbilisi, Georgia",41.70977219398771,44.753608374883335,Supporter,155,11,8,High School,"Data, Fundraising"
+nino.lomidze11@gmail.com,Nino,Lomidze,Male,20,995597250394,"Freedom Square 54, Tbilisi, Georgia",41.69391626194218,44.80051040281063,Supporter,136,32,18,PhD,"Fundraising, Organizing, Data"
+salome.mchedlishvili12@gmail.com,Salome,Mchedlishvili,Other,25,995517563784,"Guramishvili Ave 23, Tbilisi, Georgia",41.74044489735482,44.78199501785805,Member,223,37,5,PhD,Organizing
+giorgi.tsiklauri13@gmail.com,Giorgi,Tsiklauri,Male,67,995590641920,"Guramishvili Ave 107, Tbilisi, Georgia",41.740878056730544,44.78186488289269,Supporter,183,4,25,PhD,"Organizing, Fundraising"
+davit.gelashvili14@gmail.com,Davit,Gelashvili,Female,24,995511991805,"Guramishvili Ave 53, Tbilisi, Georgia",41.74024402823218,44.782846583526776,Member,211,18,8,High School,"Data, Fundraising, Organizing"
+zura.beridze15@gmail.com,Zura,Beridze,Female,65,995587240237,"Freedom Square 102, Tbilisi, Georgia",41.69298966195591,44.80102534155322,Member,98,12,15,High School,"Data, Organizing"
+levan.kiknadze16@gmail.com,Levan,Kiknadze,Other,33,995575376354,"Guramishvili Ave 18, Tbilisi, Georgia",41.73881271441613,44.78174013958135,Member,124,2,6,Master,"Fundraising, Organizing, Data"
+zura.chikovani17@gmail.com,Zura,Chikovani,Male,21,995567312043,"Chavchavadze Ave 35, Tbilisi, Georgia",41.71111743422341,44.75553864369826,Member,227,37,9,PhD,"Data, Organizing, Fundraising"
+irakli.lomidze18@gmail.com,Irakli,Lomidze,Female,40,995561240582,"Kazbegi Ave 24, Tbilisi, Georgia",41.72491300189255,44.762924888011504,Member,186,12,20,High School,Fundraising
+salome.ashordia19@gmail.com,Salome,Ashordia,Male,54,995527212492,"Abashidze St 91, Tbilisi, Georgia",41.70841684196519,44.75448153034224,Supporter,18,17,9,Master,"Organizing, Fundraising"
+irakli.tsiklauri20@gmail.com,Irakli,Tsiklauri,Male,49,995585985766,"Marjanishvili St 11, Tbilisi, Georgia",41.71598460559301,44.80285248199105,Supporter,63,11,11,Bachelor,"Organizing, Fundraising, Data"
+ana.japaridze21@gmail.com,Ana,Japaridze,Other,64,995574329313,"Abashidze St 12, Tbilisi, Georgia",41.70793492478401,44.75525391313671,Supporter,103,24,19,Master,"Data, Fundraising, Organizing"
+salome.tsiklauri22@gmail.com,Salome,Tsiklauri,Female,62,995555542501,"Pekini Ave 100, Tbilisi, Georgia",41.72727761860857,44.77700238671233,Supporter,1,0,19,Master,Organizing
+mariam.ashordia23@gmail.com,Mariam,Ashordia,Other,57,995540531303,"Pekini Ave 64, Tbilisi, Georgia",41.72716630161552,44.77767685769864,Member,25,25,12,Master,Fundraising
+mariam.lomidze24@gmail.com,Mariam,Lomidze,Male,31,995570828922,"Freedom Square 20, Tbilisi, Georgia",41.6942864822501,44.80029546079106,Member,84,40,10,Bachelor,"Organizing, Fundraising, Data"
+levan.ashordia25@gmail.com,Levan,Ashordia,Female,53,995512975058,"Agmashenebeli Ave 21, Tbilisi, Georgia",41.72220523780565,44.80450114957376,Member,71,33,8,High School,"Data, Fundraising"
+davit.ashordia26@gmail.com,Davit,Ashordia,Male,54,995591829390,"Chavchavadze Ave 120, Tbilisi, Georgia",41.71068001437023,44.754253592806094,Supporter,221,18,9,High School,"Organizing, Fundraising"
+irakli.japaridze27@gmail.com,Irakli,Japaridze,Female,69,995529902403,"Abashidze St 90, Tbilisi, Georgia",41.709010140508354,44.75354073994534,Supporter,81,16,5,Bachelor,"Organizing, Fundraising, Data"
+ana.lomidze28@gmail.com,Ana,Lomidze,Female,46,995524458991,"Marjanishvili St 4, Tbilisi, Georgia",41.71588339509386,44.80167062224415,Supporter,68,34,4,Master,Data
+salome.ashordia29@gmail.com,Salome,Ashordia,Other,69,995550739584,"Kazbegi Ave 52, Tbilisi, Georgia",41.72549013503034,44.76291725284809,Supporter,49,4,9,Master,"Organizing, Fundraising"
+salome.kiknadze30@gmail.com,Salome,Kiknadze,Female,39,995582021227,"Vake Park Area 29, Tbilisi, Georgia",41.70926129426074,44.74175892157643,Member,157,8,24,Bachelor,Fundraising
+salome.mchedlishvili31@gmail.com,Salome,Mchedlishvili,Other,20,995513354780,"Rustaveli Ave 19, Tbilisi, Georgia",41.69839852779017,44.80085599929001,Member,44,39,0,High School,"Fundraising, Data"
+zura.mchedlishvili32@gmail.com,Zura,Mchedlishvili,Other,45,995523159101,"Marjanishvili St 14, Tbilisi, Georgia",41.71693924958666,44.80283129180602,Member,122,29,2,Bachelor,"Fundraising, Organizing"
+levan.kiknadze33@gmail.com,Levan,Kiknadze,Male,55,995594185012,"Vake Park Area 10, Tbilisi, Georgia",41.707607217155925,44.74416872901534,Member,52,5,14,High School,"Organizing, Data, Fundraising"
+nino.kapanadze34@gmail.com,Nino,Kapanadze,Female,47,995547244337,"Agmashenebeli Ave 30, Tbilisi, Georgia",41.72176403372004,44.80596892922613,Member,152,36,12,PhD,"Fundraising, Data"
+irakli.japaridze35@gmail.com,Irakli,Japaridze,Other,34,995523919378,"Pekini Ave 8, Tbilisi, Georgia",41.72747934839519,44.77711935091617,Supporter,221,23,6,PhD,"Organizing, Data"
+tekla.japaridze36@gmail.com,Tekla,Japaridze,Other,22,995572867817,"Marjanishvili St 114, Tbilisi, Georgia",41.71648053049994,44.80339359097378,Supporter,32,11,2,High School,Data
+ana.tsiklauri37@gmail.com,Ana,Tsiklauri,Other,66,995513787344,"Guramishvili Ave 15, Tbilisi, Georgia",41.73907556774024,44.78310687740227,Supporter,235,21,25,Bachelor,"Data, Organizing"
+nino.japaridze38@gmail.com,Nino,Japaridze,Other,58,995536010724,"Vake Park Area 76, Tbilisi, Georgia",41.70970661435208,44.743361155738064,Supporter,73,23,3,High School,"Fundraising, Organizing, Data"
+nino.kiknadze39@gmail.com,Nino,Kiknadze,Female,63,995519298885,"Guramishvili Ave 79, Tbilisi, Georgia",41.74134902875939,44.783069328142766,Member,78,37,10,High School,Fundraising
+zura.mchedlishvili40@gmail.com,Zura,Mchedlishvili,Female,25,995549009678,"Pekini Ave 114, Tbilisi, Georgia",41.72716162475093,44.777812905715656,Member,52,17,8,Bachelor,"Fundraising, Data"
+davit.beridze41@gmail.com,Davit,Beridze,Other,41,995592237003,"Chavchavadze Ave 50, Tbilisi, Georgia",41.70861270330752,44.75392647228618,Supporter,164,22,5,PhD,Data
+nino.kapanadze42@gmail.com,Nino,Kapanadze,Other,24,995570701824,"Guramishvili Ave 66, Tbilisi, Georgia",41.73961696182181,44.78346674373826,Supporter,207,8,3,Master,Data
+davit.kapanadze43@gmail.com,Davit,Kapanadze,Male,23,995565294555,"Marjanishvili St 79, Tbilisi, Georgia",41.716494882776175,44.80063530921144,Member,93,4,11,High School,"Fundraising, Data"
+giorgi.kapanadze44@gmail.com,Giorgi,Kapanadze,Female,51,995551374195,"Kazbegi Ave 70, Tbilisi, Georgia",41.7236922649864,44.76279755697981,Member,130,26,15,Master,"Fundraising, Organizing"
+zura.kapanadze45@gmail.com,Zura,Kapanadze,Other,42,995592248269,"Freedom Square 90, Tbilisi, Georgia",41.69340633700551,44.8029088285007,Member,100,9,12,Bachelor,"Fundraising, Organizing, Data"
+irakli.tsiklauri46@gmail.com,Irakli,Tsiklauri,Female,26,995535823762,"Freedom Square 94, Tbilisi, Georgia",41.69464931341442,44.801854151566,Member,202,24,21,High School,"Fundraising, Organizing, Data"
+irakli.kiknadze47@gmail.com,Irakli,Kiknadze,Other,57,995522415704,"Guramishvili Ave 78, Tbilisi, Georgia",41.7395638196936,44.78207119748605,Member,55,21,2,Bachelor,"Fundraising, Data, Organizing"
+tekla.beridze48@gmail.com,Tekla,Beridze,Male,19,995592413404,"Pekini Ave 50, Tbilisi, Georgia",41.725346721955525,44.777310587521264,Member,105,40,13,Master,Data
+salome.beridze49@gmail.com,Salome,Beridze,Other,47,995545773413,"Marjanishvili St 70, Tbilisi, Georgia",41.71698100518545,44.800737988541854,Supporter,137,27,21,PhD,"Fundraising, Organizing, Data"
+tekla.beridze50@gmail.com,Tekla,Beridze,Other,40,995547239586,"Guramishvili Ave 119, Tbilisi, Georgia",41.73960960076816,44.78100613338568,Member,194,10,0,High School,"Organizing, Fundraising"
+giorgi.gelashvili51@gmail.com,Giorgi,Gelashvili,Female,49,995594541881,"Marjanishvili St 105, Tbilisi, Georgia",41.7144982014281,44.80329946238522,Member,61,29,25,Bachelor,Fundraising
+irakli.japaridze52@gmail.com,Irakli,Japaridze,Female,66,995578153757,"Kazbegi Ave 12, Tbilisi, Georgia",41.72499168635681,44.76399873906215,Member,72,38,18,PhD,Organizing
+davit.ashordia53@gmail.com,Davit,Ashordia,Male,20,995528329947,"Kazbegi Ave 68, Tbilisi, Georgia",41.72363719741251,44.76367915139747,Member,89,15,15,Bachelor,"Fundraising, Data, Organizing"
+levan.beridze54@gmail.com,Levan,Beridze,Other,53,995569467058,"Vake Park Area 44, Tbilisi, Georgia",41.70928380553217,44.74202237411738,Member,62,3,24,High School,Fundraising
+salome.gelashvili55@gmail.com,Salome,Gelashvili,Male,39,995544148765,"Guramishvili Ave 85, Tbilisi, Georgia",41.73980849206647,44.78168081913993,Supporter,175,39,20,Master,Fundraising
+irakli.gelashvili56@gmail.com,Irakli,Gelashvili,Male,52,995599425216,"Marjanishvili St 70, Tbilisi, Georgia",41.716419362869104,44.80058842467746,Member,118,12,18,Bachelor,"Organizing, Fundraising, Data"
+nino.mchedlishvili57@gmail.com,Nino,Mchedlishvili,Male,46,995546906223,"Rustaveli Ave 62, Tbilisi, Georgia",41.69909683346001,44.80076986489247,Member,4,11,19,Master,Fundraising
+irakli.japaridze58@gmail.com,Irakli,Japaridze,Other,42,995543078866,"Rustaveli Ave 12, Tbilisi, Georgia",41.6961680899427,44.80207381771182,Member,180,31,24,Bachelor,"Organizing, Data"
+salome.chikovani59@gmail.com,Salome,Chikovani,Other,47,995591930485,"Chavchavadze Ave 71, Tbilisi, Georgia",41.71067663580323,44.75375311751432,Supporter,118,11,15,Bachelor,Data
+mariam.chikovani60@gmail.com,Mariam,Chikovani,Male,51,995520920093,"Marjanishvili St 112, Tbilisi, Georgia",41.71453287132201,44.80112985733749,Supporter,241,26,5,High School,Fundraising
+salome.gelashvili61@gmail.com,Salome,Gelashvili,Male,53,995513598444,"Pekini Ave 92, Tbilisi, Georgia",41.726635900467535,44.77853967584242,Member,40,6,24,Bachelor,Organizing
+nino.kapanadze62@gmail.com,Nino,Kapanadze,Other,44,995528309247,"Pekini Ave 34, Tbilisi, Georgia",41.72543938349318,44.778950353409314,Supporter,32,32,5,PhD,Fundraising
+ana.beridze63@gmail.com,Ana,Beridze,Female,52,995524618678,"Pekini Ave 86, Tbilisi, Georgia",41.72728034017614,44.779389390533005,Member,63,36,8,PhD,"Data, Organizing, Fundraising"
+irakli.beridze64@gmail.com,Irakli,Beridze,Other,62,995536723720,"Marjanishvili St 33, Tbilisi, Georgia",41.715255138752845,44.80337558728799,Supporter,64,24,21,High School,Data
+zura.ashordia65@gmail.com,Zura,Ashordia,Female,26,995596562835,"Pekini Ave 25, Tbilisi, Georgia",41.72480990052337,44.77933311062374,Supporter,73,10,10,Bachelor,"Data, Organizing, Fundraising"
+zura.kapanadze66@gmail.com,Zura,Kapanadze,Female,51,995578501269,"Guramishvili Ave 1, Tbilisi, Georgia",41.73960797851154,44.78245731731583,Member,183,19,12,Master,"Data, Fundraising, Organizing"
+zura.beridze67@gmail.com,Zura,Beridze,Female,65,995598675917,"Pekini Ave 67, Tbilisi, Georgia",41.72466270286881,44.778660205692766,Member,190,22,9,High School,"Fundraising, Organizing"
+tekla.mchedlishvili68@gmail.com,Tekla,Mchedlishvili,Other,54,995582605290,"Pekini Ave 50, Tbilisi, Georgia",41.7267876355934,44.77858524158743,Supporter,156,29,10,Bachelor,"Organizing, Data, Fundraising"
+davit.kiknadze69@gmail.com,Davit,Kiknadze,Other,37,995554825923,"Agmashenebeli Ave 111, Tbilisi, Georgia",41.71993554942203,44.805051507039856,Supporter,50,22,21,High School,"Organizing, Fundraising, Data"
+tekla.lomidze70@gmail.com,Tekla,Lomidze,Other,23,995597752161,"Abashidze St 83, Tbilisi, Georgia",41.707817730152,44.75480506006888,Member,224,20,25,High School,"Data, Organizing"
+giorgi.kapanadze71@gmail.com,Giorgi,Kapanadze,Male,23,995526719464,"Agmashenebeli Ave 63, Tbilisi, Georgia",41.72208361190479,44.80430901311585,Member,50,11,5,Master,Data
+salome.kiknadze72@gmail.com,Salome,Kiknadze,Female,54,995550493671,"Pekini Ave 20, Tbilisi, Georgia",41.726397531940144,44.77920758012738,Member,223,19,22,PhD,"Organizing, Data, Fundraising"
+nino.gelashvili73@gmail.com,Nino,Gelashvili,Male,35,995547243038,"Rustaveli Ave 73, Tbilisi, Georgia",41.69667701693523,44.80289566481881,Member,37,3,2,High School,"Fundraising, Organizing"
+zura.mchedlishvili74@gmail.com,Zura,Mchedlishvili,Other,40,995585158839,"Vake Park Area 42, Tbilisi, Georgia",41.70763749627758,44.74322447127992,Member,147,31,16,PhD,"Organizing, Fundraising"
+nino.kapanadze75@gmail.com,Nino,Kapanadze,Other,45,995522794695,"Agmashenebeli Ave 75, Tbilisi, Georgia",41.72005943101494,44.80437029563141,Member,57,2,21,PhD,"Organizing, Data, Fundraising"
+tekla.lomidze76@gmail.com,Tekla,Lomidze,Female,68,995541766460,"Kazbegi Ave 27, Tbilisi, Georgia",41.72504807102488,44.76476791692178,Supporter,183,30,5,Master,Fundraising
+davit.beridze77@gmail.com,Davit,Beridze,Male,19,995583400299,"Rustaveli Ave 60, Tbilisi, Georgia",41.69758945021702,44.8001184101551,Member,25,12,10,Master,"Data, Fundraising"
+ana.gelashvili78@gmail.com,Ana,Gelashvili,Male,35,995544952312,"Pekini Ave 91, Tbilisi, Georgia",41.7251724951421,44.77691357859466,Member,45,24,2,Bachelor,Fundraising
+irakli.mchedlishvili79@gmail.com,Irakli,Mchedlishvili,Other,36,995578833218,"Freedom Square 53, Tbilisi, Georgia",41.69423703148215,44.80155500858534,Member,169,29,13,PhD,Fundraising
+zura.beridze80@gmail.com,Zura,Beridze,Female,44,995578369542,"Vake Park Area 54, Tbilisi, Georgia",41.70903001114056,44.74325728201624,Member,63,35,2,High School,"Organizing, Fundraising"
+tekla.mchedlishvili81@gmail.com,Tekla,Mchedlishvili,Male,29,995562332123,"Agmashenebeli Ave 109, Tbilisi, Georgia",41.72105956712141,44.803817785048864,Member,153,28,25,Bachelor,"Data, Fundraising"
+ana.mchedlishvili82@gmail.com,Ana,Mchedlishvili,Male,67,995572850261,"Vake Park Area 113, Tbilisi, Georgia",41.70769431844624,44.7419425267158,Supporter,88,32,19,Bachelor,"Data, Organizing, Fundraising"
+irakli.japaridze83@gmail.com,Irakli,Japaridze,Female,63,995554177578,"Kazbegi Ave 115, Tbilisi, Georgia",41.72320020014145,44.76465413507241,Supporter,142,13,15,PhD,Data
+levan.mchedlishvili84@gmail.com,Levan,Mchedlishvili,Female,68,995568110766,"Chavchavadze Ave 70, Tbilisi, Georgia",41.71128383447755,44.75320095417461,Supporter,63,29,18,Master,Data
+mariam.kiknadze85@gmail.com,Mariam,Kiknadze,Male,37,995524518277,"Agmashenebeli Ave 89, Tbilisi, Georgia",41.72063274285336,44.8057419707437,Member,143,14,24,Bachelor,"Fundraising, Data, Organizing"
+salome.kapanadze86@gmail.com,Salome,Kapanadze,Other,60,995561707626,"Kazbegi Ave 47, Tbilisi, Georgia",41.72351048100634,44.76432138527834,Member,53,10,13,Bachelor,"Fundraising, Organizing"
+levan.gelashvili87@gmail.com,Levan,Gelashvili,Male,18,995527984403,"Rustaveli Ave 51, Tbilisi, Georgia",41.698280103757305,44.800226065364605,Member,27,36,2,PhD,Organizing
+mariam.mchedlishvili88@gmail.com,Mariam,Mchedlishvili,Other,57,995594669784,"Agmashenebeli Ave 105, Tbilisi, Georgia",41.720443454708565,44.80359427889992,Supporter,172,7,20,Bachelor,Organizing
+tekla.japaridze89@gmail.com,Tekla,Japaridze,Other,29,995536156153,"Pekini Ave 58, Tbilisi, Georgia",41.72450947548008,44.778507040552704,Member,220,4,21,Master,Organizing
+tekla.kapanadze90@gmail.com,Tekla,Kapanadze,Other,22,995541716287,"Freedom Square 13, Tbilisi, Georgia",41.69204808771491,44.8008357130356,Supporter,247,15,9,Bachelor,"Data, Fundraising, Organizing"
+ana.ashordia91@gmail.com,Ana,Ashordia,Other,36,995528567701,"Rustaveli Ave 16, Tbilisi, Georgia",41.69821959457423,44.802633496482784,Supporter,188,2,22,PhD,Data
+salome.chikovani92@gmail.com,Salome,Chikovani,Other,28,995569081687,"Agmashenebeli Ave 84, Tbilisi, Georgia",41.72197276443042,44.80585531459777,Supporter,141,8,2,Master,Fundraising
+tekla.gelashvili93@gmail.com,Tekla,Gelashvili,Male,30,995531266063,"Freedom Square 80, Tbilisi, Georgia",41.69359145455944,44.80195190879423,Member,203,8,6,Bachelor,"Organizing, Fundraising, Data"
+giorgi.japaridze94@gmail.com,Giorgi,Japaridze,Male,19,995571122403,"Marjanishvili St 31, Tbilisi, Georgia",41.71565312976534,44.80277103301714,Member,4,31,23,High School,Organizing
+irakli.kapanadze95@gmail.com,Irakli,Kapanadze,Male,63,995593299711,"Freedom Square 113, Tbilisi, Georgia",41.692662682162165,44.8027255160279,Supporter,185,19,19,Bachelor,"Fundraising, Data, Organizing"
+irakli.kapanadze96@gmail.com,Irakli,Kapanadze,Other,70,995528873115,"Vake Park Area 115, Tbilisi, Georgia",41.70910808819357,44.74373116128477,Supporter,131,24,12,High School,Organizing
+nino.gelashvili97@gmail.com,Nino,Gelashvili,Other,50,995566591764,"Freedom Square 48, Tbilisi, Georgia",41.694142510931904,44.8001151709409,Supporter,42,17,16,Master,"Fundraising, Data"
+davit.mchedlishvili98@gmail.com,Davit,Mchedlishvili,Other,58,995538319218,"Marjanishvili St 36, Tbilisi, Georgia",41.71443746341221,44.80131416553376,Member,94,8,2,PhD,"Fundraising, Data, Organizing"
+nino.gelashvili99@gmail.com,Nino,Gelashvili,Other,22,995518893035,"Freedom Square 71, Tbilisi, Georgia",41.69438359401808,44.8019244989313,Member,75,3,8,High School,Data
+tekla.kapanadze100@gmail.com,Tekla,Kapanadze,Male,53,995597805235,"Freedom Square 32, Tbilisi, Georgia",41.69287611678423,44.80111371920038,Member,25,32,3,PhD,"Organizing, Data"
+mariam.gelashvili101@gmail.com,Mariam,Gelashvili,Male,25,995561277311,"Vake Park Area 111, Tbilisi, Georgia",41.70935739356253,44.74279434832104,Member,244,31,12,PhD,"Organizing, Fundraising"
+tekla.ashordia102@gmail.com,Tekla,Ashordia,Other,39,995546066761,"Vake Park Area 7, Tbilisi, Georgia",41.70998854523189,44.74127298060539,Supporter,83,36,14,PhD,"Data, Organizing, Fundraising"
+mariam.kapanadze103@gmail.com,Mariam,Kapanadze,Female,29,995513702612,"Marjanishvili St 100, Tbilisi, Georgia",41.71517068964864,44.80340195287321,Member,224,17,11,Master,"Fundraising, Data, Organizing"
+mariam.gelashvili104@gmail.com,Mariam,Gelashvili,Female,65,995578855175,"Pekini Ave 75, Tbilisi, Georgia",41.72691762579024,44.77872754584049,Member,4,37,15,Master,Data
+davit.japaridze105@gmail.com,Davit,Japaridze,Female,42,995521978227,"Vake Park Area 75, Tbilisi, Georgia",41.70998560909637,44.74245540898851,Supporter,84,12,23,Bachelor,"Fundraising, Organizing, Data"
+levan.lomidze106@gmail.com,Levan,Lomidze,Male,28,995572882655,"Rustaveli Ave 106, Tbilisi, Georgia",41.69851899985917,44.80279688043377,Member,48,10,12,Bachelor,"Fundraising, Data, Organizing"
+nino.lomidze107@gmail.com,Nino,Lomidze,Male,51,995591095487,"Marjanishvili St 16, Tbilisi, Georgia",41.71575969835503,44.80209163783311,Supporter,201,34,20,PhD,"Organizing, Data, Fundraising"
+mariam.tsiklauri108@gmail.com,Mariam,Tsiklauri,Other,18,995514761602,"Freedom Square 94, Tbilisi, Georgia",41.69289751753546,44.80149901278834,Member,193,19,15,High School,"Fundraising, Data"
+levan.mchedlishvili109@gmail.com,Levan,Mchedlishvili,Other,42,995556637729,"Kazbegi Ave 2, Tbilisi, Georgia",41.7245163392563,44.7624137228323,Member,144,4,24,Master,Fundraising
+tekla.chikovani110@gmail.com,Tekla,Chikovani,Male,54,995584989625,"Vake Park Area 94, Tbilisi, Georgia",41.70996169064519,44.74322773776833,Member,229,37,10,PhD,Organizing
+salome.tsiklauri111@gmail.com,Salome,Tsiklauri,Other,55,995541667506,"Abashidze St 36, Tbilisi, Georgia",41.70996609308325,44.755828616051446,Supporter,9,16,6,Master,"Data, Organizing"
+mariam.chikovani112@gmail.com,Mariam,Chikovani,Other,53,995538335325,"Abashidze St 88, Tbilisi, Georgia",41.708330245089066,44.7545330624792,Member,86,24,14,Master,Organizing
+levan.kiknadze113@gmail.com,Levan,Kiknadze,Male,39,995562438031,"Kazbegi Ave 108, Tbilisi, Georgia",41.724127378226825,44.7653111117813,Member,236,29,3,Master,"Fundraising, Organizing, Data"
+davit.ashordia114@gmail.com,Davit,Ashordia,Female,63,995554921479,"Agmashenebeli Ave 31, Tbilisi, Georgia",41.72024069507267,44.80498186446436,Supporter,241,7,15,PhD,"Data, Organizing, Fundraising"
+ana.ashordia115@gmail.com,Ana,Ashordia,Female,19,995515748337,"Rustaveli Ave 33, Tbilisi, Georgia",41.696166394800535,44.80090671608048,Member,43,8,19,PhD,"Data, Organizing, Fundraising"
+zura.ashordia116@gmail.com,Zura,Ashordia,Female,60,995551265044,"Vake Park Area 39, Tbilisi, Georgia",41.7081493051423,44.74278382244346,Member,129,37,9,PhD,"Data, Fundraising, Organizing"
+mariam.tsiklauri117@gmail.com,Mariam,Tsiklauri,Other,48,995575003637,"Rustaveli Ave 109, Tbilisi, Georgia",41.69885188249729,44.80177192143567,Member,103,7,7,Master,"Fundraising, Data"
+zura.lomidze118@gmail.com,Zura,Lomidze,Female,51,995514274163,"Freedom Square 28, Tbilisi, Georgia",41.69369066126348,44.80297060371139,Member,193,7,21,PhD,"Data, Fundraising"
+salome.mchedlishvili119@gmail.com,Salome,Mchedlishvili,Female,49,995517875195,"Abashidze St 99, Tbilisi, Georgia",41.70810783609964,44.75401078118116,Supporter,155,15,13,Master,"Data, Organizing, Fundraising"
+mariam.lomidze120@gmail.com,Mariam,Lomidze,Other,21,995539780885,"Guramishvili Ave 49, Tbilisi, Georgia",41.7413478167455,44.78094802803304,Supporter,197,2,23,PhD,Data
+salome.beridze121@gmail.com,Salome,Beridze,Male,58,995515455146,"Chavchavadze Ave 30, Tbilisi, Georgia",41.70886253419129,44.75544217832135,Member,49,35,16,Bachelor,"Data, Fundraising"
+zura.beridze122@gmail.com,Zura,Beridze,Female,34,995515582263,"Pekini Ave 33, Tbilisi, Georgia",41.72656567267416,44.77735292168711,Supporter,175,28,11,Bachelor,Data
+irakli.tsiklauri123@gmail.com,Irakli,Tsiklauri,Female,50,995510595687,"Guramishvili Ave 3, Tbilisi, Georgia",41.74015355717157,44.782251480613645,Member,221,36,11,Master,Fundraising
+giorgi.japaridze124@gmail.com,Giorgi,Japaridze,Other,50,995528773346,"Rustaveli Ave 106, Tbilisi, Georgia",41.697370261288526,44.80207590032733,Member,90,1,15,Bachelor,"Organizing, Fundraising"
+davit.ashordia125@gmail.com,Davit,Ashordia,Other,33,995539775104,"Chavchavadze Ave 101, Tbilisi, Georgia",41.70864190990779,44.75358423045836,Member,156,0,0,Master,"Organizing, Data"
+tekla.kapanadze126@gmail.com,Tekla,Kapanadze,Female,63,995537585077,"Marjanishvili St 11, Tbilisi, Georgia",41.71523756265224,44.802847820514415,Supporter,103,33,17,High School,"Organizing, Data"
+giorgi.beridze127@gmail.com,Giorgi,Beridze,Male,49,995523595423,"Agmashenebeli Ave 43, Tbilisi, Georgia",41.72231160466967,44.80611899382811,Supporter,166,27,16,High School,Data
+levan.kiknadze128@gmail.com,Levan,Kiknadze,Other,52,995512533713,"Chavchavadze Ave 16, Tbilisi, Georgia",41.710129600941336,44.75339205039664,Member,6,40,20,Master,"Organizing, Fundraising, Data"
+tekla.ashordia129@gmail.com,Tekla,Ashordia,Male,30,995524321987,"Kazbegi Ave 28, Tbilisi, Georgia",41.72578226616984,44.76330110247921,Supporter,207,6,2,High School,Fundraising
+nino.gelashvili130@gmail.com,Nino,Gelashvili,Male,40,995547243148,"Freedom Square 19, Tbilisi, Georgia",41.69386418743314,44.80152919886224,Supporter,82,17,21,Bachelor,"Organizing, Fundraising"
+irakli.mchedlishvili131@gmail.com,Irakli,Mchedlishvili,Male,18,995583020833,"Chavchavadze Ave 90, Tbilisi, Georgia",41.71049907709556,44.75531438315792,Supporter,249,29,25,Bachelor,"Data, Fundraising"
+zura.chikovani132@gmail.com,Zura,Chikovani,Male,39,995566818853,"Guramishvili Ave 100, Tbilisi, Georgia",41.74050394656596,44.782325792867546,Supporter,154,9,24,PhD,"Fundraising, Data"
+tekla.japaridze133@gmail.com,Tekla,Japaridze,Female,21,995567695860,"Guramishvili Ave 26, Tbilisi, Georgia",41.74129199901192,44.78233290240649,Member,212,27,2,Master,"Fundraising, Organizing, Data"
+davit.kapanadze134@gmail.com,Davit,Kapanadze,Male,33,995567821203,"Guramishvili Ave 24, Tbilisi, Georgia",41.74134807611359,44.78354154292095,Supporter,140,8,5,Master,"Fundraising, Organizing, Data"
+nino.lomidze135@gmail.com,Nino,Lomidze,Male,34,995565506392,"Rustaveli Ave 21, Tbilisi, Georgia",41.69852408785554,44.80070583537412,Member,235,24,0,PhD,"Fundraising, Organizing, Data"
+salome.kiknadze136@gmail.com,Salome,Kiknadze,Other,57,995518171896,"Marjanishvili St 37, Tbilisi, Georgia",41.7157574707615,44.80241251205434,Member,45,2,24,Master,"Organizing, Fundraising, Data"
+zura.chikovani137@gmail.com,Zura,Chikovani,Male,27,995587945384,"Agmashenebeli Ave 23, Tbilisi, Georgia",41.7219295048002,44.805591290265625,Supporter,128,28,13,PhD,Data
+nino.tsiklauri138@gmail.com,Nino,Tsiklauri,Male,20,995562973770,"Guramishvili Ave 52, Tbilisi, Georgia",41.74116082788733,44.783361568513584,Supporter,60,30,19,PhD,"Data, Fundraising"
+davit.beridze139@gmail.com,Davit,Beridze,Male,49,995570336177,"Pekini Ave 1, Tbilisi, Georgia",41.72680177450125,44.777362981528064,Supporter,19,20,0,High School,Organizing
+davit.lomidze140@gmail.com,Davit,Lomidze,Other,39,995574314013,"Kazbegi Ave 49, Tbilisi, Georgia",41.72432963191412,44.76463614620607,Member,177,32,23,Master,"Data, Organizing, Fundraising"
+ana.japaridze141@gmail.com,Ana,Japaridze,Female,38,995536988169,"Guramishvili Ave 36, Tbilisi, Georgia",41.740674418662174,44.78149855619768,Member,153,9,7,Bachelor,"Data, Fundraising"
+irakli.ashordia142@gmail.com,Irakli,Ashordia,Female,64,995514265314,"Marjanishvili St 118, Tbilisi, Georgia",41.71601840749125,44.80342063751642,Supporter,120,35,10,High School,"Fundraising, Data, Organizing"
+zura.tsiklauri143@gmail.com,Zura,Tsiklauri,Female,51,995537420125,"Vake Park Area 34, Tbilisi, Georgia",41.70768454498027,44.74372002211976,Supporter,230,40,15,PhD,"Fundraising, Organizing, Data"
+giorgi.gelashvili144@gmail.com,Giorgi,Gelashvili,Male,49,995575792229,"Pekini Ave 53, Tbilisi, Georgia",41.72495100426165,44.77751465519957,Supporter,188,26,7,High School,Organizing
+ana.kiknadze145@gmail.com,Ana,Kiknadze,Other,22,995554494169,"Rustaveli Ave 81, Tbilisi, Georgia",41.696542295318,44.80243113611199,Member,202,13,18,Master,"Organizing, Fundraising"
+mariam.tsiklauri146@gmail.com,Mariam,Tsiklauri,Female,36,995596766272,"Abashidze St 18, Tbilisi, Georgia",41.70835359788123,44.7551206410588,Member,142,7,14,Master,Fundraising
+ana.kiknadze147@gmail.com,Ana,Kiknadze,Other,32,995553782869,"Pekini Ave 59, Tbilisi, Georgia",41.72668059018781,44.77678223883421,Member,74,39,19,Bachelor,Organizing
+salome.mchedlishvili148@gmail.com,Salome,Mchedlishvili,Male,61,995595695836,"Abashidze St 82, Tbilisi, Georgia",41.70957425197167,44.75570172068576,Supporter,239,37,19,High School,Fundraising
+levan.kiknadze149@gmail.com,Levan,Kiknadze,Other,37,995552279114,"Pekini Ave 59, Tbilisi, Georgia",41.72633912175697,44.777207109342406,Member,34,6,1,High School,"Fundraising, Organizing, Data"
+giorgi.kapanadze150@gmail.com,Giorgi,Kapanadze,Female,29,995526497934,"Rustaveli Ave 41, Tbilisi, Georgia",41.698010284413904,44.800894479328186,Member,79,28,13,Bachelor,"Organizing, Fundraising"
+nino.beridze151@gmail.com,Nino,Beridze,Male,29,995512090623,"Guramishvili Ave 18, Tbilisi, Georgia",41.74114548964814,44.78267058787379,Member,203,4,21,PhD,Fundraising
+mariam.ashordia152@gmail.com,Mariam,Ashordia,Male,45,995587598928,"Pekini Ave 117, Tbilisi, Georgia",41.72514393302813,44.77748742983038,Member,188,35,19,PhD,"Fundraising, Organizing"
+ana.kiknadze153@gmail.com,Ana,Kiknadze,Female,20,995536261645,"Abashidze St 81, Tbilisi, Georgia",41.70989243105429,44.75597683700692,Member,27,15,12,High School,"Fundraising, Organizing"
+mariam.mchedlishvili154@gmail.com,Mariam,Mchedlishvili,Other,54,995533214940,"Pekini Ave 39, Tbilisi, Georgia",41.72674748030845,44.777128957017226,Supporter,241,17,2,Bachelor,"Organizing, Data"
+zura.lomidze155@gmail.com,Zura,Lomidze,Male,64,995590162348,"Freedom Square 78, Tbilisi, Georgia",41.6921943364455,44.80268795120031,Member,199,13,6,Master,"Fundraising, Data, Organizing"
+zura.japaridze156@gmail.com,Zura,Japaridze,Other,69,995518273411,"Rustaveli Ave 113, Tbilisi, Georgia",41.69738930821044,44.801531444417016,Supporter,173,1,20,PhD,"Data, Organizing, Fundraising"
+salome.ashordia157@gmail.com,Salome,Ashordia,Male,48,995573004858,"Guramishvili Ave 81, Tbilisi, Georgia",41.74170775962188,44.78157705655729,Member,71,14,21,Master,"Organizing, Fundraising, Data"
+davit.ashordia158@gmail.com,Davit,Ashordia,Female,63,995573779222,"Pekini Ave 117, Tbilisi, Georgia",41.72717998766894,44.77902907455525,Member,123,0,15,Bachelor,"Organizing, Fundraising, Data"
+zura.ashordia159@gmail.com,Zura,Ashordia,Other,30,995532622724,"Chavchavadze Ave 111, Tbilisi, Georgia",41.71104051091515,44.75519562491397,Supporter,35,12,17,Master,"Data, Fundraising, Organizing"
+mariam.kiknadze160@gmail.com,Mariam,Kiknadze,Female,55,995537815175,"Pekini Ave 111, Tbilisi, Georgia",41.72615678312759,44.77706533341757,Member,79,37,24,PhD,Fundraising
+levan.japaridze161@gmail.com,Levan,Japaridze,Female,22,995553891128,"Pekini Ave 111, Tbilisi, Georgia",41.72745420458676,44.7786195458801,Member,223,23,2,PhD,"Data, Organizing"
+tekla.chikovani162@gmail.com,Tekla,Chikovani,Male,60,995567766825,"Freedom Square 44, Tbilisi, Georgia",41.693154622114456,44.80046686198216,Member,22,24,9,PhD,Data
+levan.japaridze163@gmail.com,Levan,Japaridze,Male,32,995556004162,"Abashidze St 80, Tbilisi, Georgia",41.70783739104151,44.75512256216823,Supporter,224,11,0,High School,Organizing
+salome.beridze164@gmail.com,Salome,Beridze,Other,68,995545496793,"Guramishvili Ave 26, Tbilisi, Georgia",41.74134328401394,44.78242659405441,Member,206,31,1,Master,Data
+mariam.lomidze165@gmail.com,Mariam,Lomidze,Male,41,995564141467,"Agmashenebeli Ave 13, Tbilisi, Georgia",41.72102494190365,44.80598181561229,Supporter,41,12,20,Bachelor,"Organizing, Data, Fundraising"
+davit.lomidze166@gmail.com,Davit,Lomidze,Male,66,995584925187,"Marjanishvili St 73, Tbilisi, Georgia",41.71530745831224,44.80057667244499,Supporter,241,35,19,Master,"Organizing, Data"
+mariam.chikovani167@gmail.com,Mariam,Chikovani,Female,42,995597119334,"Pekini Ave 85, Tbilisi, Georgia",41.72517337736564,44.777262866387545,Member,77,36,22,Bachelor,"Fundraising, Data, Organizing"
+levan.japaridze168@gmail.com,Levan,Japaridze,Other,47,995512349451,"Guramishvili Ave 53, Tbilisi, Georgia",41.74138894634237,44.783347847863446,Member,231,16,1,High School,Organizing
+giorgi.kiknadze169@gmail.com,Giorgi,Kiknadze,Male,66,995553539764,"Abashidze St 40, Tbilisi, Georgia",41.70988961354216,44.75456639838548,Member,223,5,1,Master,"Data, Fundraising, Organizing"
+nino.gelashvili170@gmail.com,Nino,Gelashvili,Female,33,995514774965,"Rustaveli Ave 79, Tbilisi, Georgia",41.69901940221973,44.80193136538232,Member,73,39,11,High School,"Data, Organizing"
+nino.beridze171@gmail.com,Nino,Beridze,Male,31,995576278605,"Abashidze St 74, Tbilisi, Georgia",41.7098328441916,44.7552520228118,Supporter,157,20,6,Master,"Organizing, Data, Fundraising"
+davit.tsiklauri172@gmail.com,Davit,Tsiklauri,Other,60,995578051006,"Kazbegi Ave 54, Tbilisi, Georgia",41.72479211930465,44.76526950543519,Member,243,16,23,Bachelor,"Data, Fundraising"
+mariam.tsiklauri173@gmail.com,Mariam,Tsiklauri,Other,70,995510121403,"Abashidze St 39, Tbilisi, Georgia",41.70974465892469,44.755335444988845,Member,46,15,18,PhD,"Fundraising, Data"
+levan.mchedlishvili174@gmail.com,Levan,Mchedlishvili,Male,22,995596087951,"Kazbegi Ave 5, Tbilisi, Georgia",41.72591757504773,44.76462907813538,Member,9,6,6,PhD,Data
+nino.kapanadze175@gmail.com,Nino,Kapanadze,Other,30,995580707078,"Rustaveli Ave 44, Tbilisi, Georgia",41.698491660080606,44.80219038089109,Member,135,21,7,PhD,"Organizing, Fundraising, Data"
+ana.ashordia176@gmail.com,Ana,Ashordia,Female,21,995510861334,"Agmashenebeli Ave 77, Tbilisi, Georgia",41.72222210152648,44.80456416307644,Supporter,166,37,7,High School,Organizing
+irakli.ashordia177@gmail.com,Irakli,Ashordia,Female,32,995577964274,"Chavchavadze Ave 104, Tbilisi, Georgia",41.70894516852464,44.754097898586856,Supporter,43,2,18,Master,"Fundraising, Organizing"
+zura.chikovani178@gmail.com,Zura,Chikovani,Male,49,995585692731,"Marjanishvili St 39, Tbilisi, Georgia",41.71643273925063,44.80347609483216,Member,223,12,23,Master,"Organizing, Data"
+zura.gelashvili179@gmail.com,Zura,Gelashvili,Male,24,995557668449,"Guramishvili Ave 7, Tbilisi, Georgia",41.74063411320695,44.783020272053406,Member,1,40,8,High School,Organizing
+mariam.tsiklauri180@gmail.com,Mariam,Tsiklauri,Other,21,995596062246,"Guramishvili Ave 115, Tbilisi, Georgia",41.74173680695464,44.78285300088861,Member,215,2,11,PhD,Fundraising
+tekla.kapanadze181@gmail.com,Tekla,Kapanadze,Other,23,995556014729,"Vake Park Area 35, Tbilisi, Georgia",41.70740521359036,44.74162912843665,Supporter,201,7,13,High School,"Organizing, Fundraising, Data"
+tekla.beridze182@gmail.com,Tekla,Beridze,Female,26,995588554804,"Abashidze St 69, Tbilisi, Georgia",41.70974074177804,44.7541434057399,Member,66,14,4,High School,"Data, Organizing, Fundraising"
+levan.tsiklauri183@gmail.com,Levan,Tsiklauri,Female,29,995599313161,"Kazbegi Ave 2, Tbilisi, Georgia",41.725952161331904,44.763618512905545,Member,20,5,11,Master,"Fundraising, Organizing"
+levan.kiknadze184@gmail.com,Levan,Kiknadze,Other,68,995539813138,"Freedom Square 115, Tbilisi, Georgia",41.69203940654074,44.80162863408369,Member,238,25,20,PhD,"Data, Fundraising, Organizing"
+levan.gelashvili185@gmail.com,Levan,Gelashvili,Other,25,995562081596,"Agmashenebeli Ave 34, Tbilisi, Georgia",41.72008899053143,44.80496320106425,Member,88,4,10,PhD,"Data, Fundraising"
+salome.mchedlishvili186@gmail.com,Salome,Mchedlishvili,Male,53,995517849582,"Guramishvili Ave 23, Tbilisi, Georgia",41.74058054808372,44.783890015285216,Member,69,40,15,PhD,Organizing
+salome.gelashvili187@gmail.com,Salome,Gelashvili,Male,29,995573065176,"Freedom Square 101, Tbilisi, Georgia",41.69270514929604,44.80213306925259,Supporter,30,32,6,Bachelor,Data
+levan.mchedlishvili188@gmail.com,Levan,Mchedlishvili,Male,41,995561110262,"Rustaveli Ave 1, Tbilisi, Georgia",41.69691325232508,44.80071949167134,Member,84,32,24,High School,Fundraising
+salome.japaridze189@gmail.com,Salome,Japaridze,Male,49,995582628008,"Abashidze St 100, Tbilisi, Georgia",41.70832137773616,44.754509575475126,Supporter,55,16,0,Master,"Fundraising, Organizing, Data"
+giorgi.tsiklauri190@gmail.com,Giorgi,Tsiklauri,Female,68,995557932430,"Agmashenebeli Ave 84, Tbilisi, Georgia",41.721210832504,44.80382753458306,Member,194,35,2,PhD,"Fundraising, Organizing"
+irakli.kiknadze191@gmail.com,Irakli,Kiknadze,Female,38,995552305660,"Agmashenebeli Ave 2, Tbilisi, Georgia",41.7203006811214,44.80548107857053,Supporter,244,29,19,High School,"Fundraising, Data"
+ana.japaridze192@gmail.com,Ana,Japaridze,Other,54,995515506457,"Abashidze St 107, Tbilisi, Georgia",41.70834855084313,44.75527234338067,Supporter,97,20,11,High School,"Data, Fundraising"
+salome.beridze193@gmail.com,Salome,Beridze,Female,34,995585864057,"Agmashenebeli Ave 45, Tbilisi, Georgia",41.72050541918833,44.80625967200413,Supporter,68,25,2,PhD,"Organizing, Data"
+davit.kapanadze194@gmail.com,Davit,Kapanadze,Male,39,995562088220,"Rustaveli Ave 48, Tbilisi, Georgia",41.69722046870415,44.802714378143655,Supporter,114,14,4,High School,"Organizing, Data, Fundraising"
+zura.kapanadze195@gmail.com,Zura,Kapanadze,Male,61,995568656580,"Marjanishvili St 88, Tbilisi, Georgia",41.71572640514248,44.80104016403882,Supporter,49,22,4,High School,"Data, Fundraising"
+zura.chikovani196@gmail.com,Zura,Chikovani,Female,40,995563829595,"Pekini Ave 49, Tbilisi, Georgia",41.72576612061708,44.77740731512165,Member,104,35,3,Master,Fundraising
+tekla.ashordia197@gmail.com,Tekla,Ashordia,Female,19,995560299505,"Kazbegi Ave 51, Tbilisi, Georgia",41.72305394995514,44.764573457540735,Member,191,15,0,High School,"Organizing, Data"
+davit.mchedlishvili198@gmail.com,Davit,Mchedlishvili,Female,62,995595798623,"Guramishvili Ave 79, Tbilisi, Georgia",41.73902625878398,44.78134659405309,Member,21,36,6,High School,"Fundraising, Data"
+tekla.kiknadze199@gmail.com,Tekla,Kiknadze,Other,20,995550620719,"Rustaveli Ave 68, Tbilisi, Georgia",41.697577612975,44.80113630304817,Supporter,127,16,10,High School,"Fundraising, Organizing, Data"
+davit.kiknadze200@gmail.com,Davit,Kiknadze,Female,36,995563837331,"Agmashenebeli Ave 105, Tbilisi, Georgia",41.72102821616121,44.806263107235566,Member,208,8,0,Bachelor,"Organizing, Data, Fundraising"
+mariam.gelashvili201@gmail.com,Mariam,Gelashvili,Male,44,995514604821,"Marjanishvili St 10, Tbilisi, Georgia",41.71535461185771,44.80277630524979,Supporter,180,6,7,Master,"Data, Fundraising"
+nino.ashordia202@gmail.com,Nino,Ashordia,Male,68,995541423116,"Freedom Square 9, Tbilisi, Georgia",41.69429326865463,44.80170850560647,Supporter,166,13,24,PhD,"Organizing, Fundraising"
+ana.lomidze203@gmail.com,Ana,Lomidze,Male,33,995530690498,"Kazbegi Ave 76, Tbilisi, Georgia",41.72491506313362,44.7647471976378,Supporter,46,33,11,High School,"Organizing, Data"
+mariam.beridze204@gmail.com,Mariam,Beridze,Other,67,995591084178,"Agmashenebeli Ave 58, Tbilisi, Georgia",41.7221634185858,44.80574797634949,Member,159,11,21,PhD,"Organizing, Fundraising"
+nino.ashordia205@gmail.com,Nino,Ashordia,Male,43,995597443865,"Rustaveli Ave 21, Tbilisi, Georgia",41.69833944489285,44.8001530328538,Member,235,9,11,High School,"Fundraising, Data"
+mariam.lomidze206@gmail.com,Mariam,Lomidze,Female,27,995592017170,"Vake Park Area 41, Tbilisi, Georgia",41.70797495520468,44.74163937440304,Supporter,31,37,20,Bachelor,"Data, Fundraising"
+levan.gelashvili207@gmail.com,Levan,Gelashvili,Other,40,995574230033,"Abashidze St 35, Tbilisi, Georgia",41.710152903802296,44.75546403304602,Member,76,12,8,Bachelor,Fundraising
+nino.kiknadze208@gmail.com,Nino,Kiknadze,Other,41,995558810976,"Chavchavadze Ave 38, Tbilisi, Georgia",41.7101340183948,44.7544946489037,Member,176,5,8,PhD,"Organizing, Data, Fundraising"
+salome.japaridze209@gmail.com,Salome,Japaridze,Female,59,995516371235,"Chavchavadze Ave 103, Tbilisi, Georgia",41.70932950819181,44.753307455744576,Member,31,5,19,Bachelor,"Fundraising, Organizing"
+salome.kiknadze210@gmail.com,Salome,Kiknadze,Other,68,995565608952,"Agmashenebeli Ave 107, Tbilisi, Georgia",41.72159095734201,44.80518506918551,Member,40,40,24,Bachelor,Organizing
+salome.beridze211@gmail.com,Salome,Beridze,Female,25,995541651932,"Rustaveli Ave 64, Tbilisi, Georgia",41.697117975888574,44.80063354182264,Supporter,209,20,2,Master,Fundraising
+zura.ashordia212@gmail.com,Zura,Ashordia,Female,67,995545322749,"Agmashenebeli Ave 91, Tbilisi, Georgia",41.72196428377578,44.80344124216527,Member,144,6,1,High School,"Data, Organizing, Fundraising"
+salome.kiknadze213@gmail.com,Salome,Kiknadze,Female,57,995541914896,"Marjanishvili St 47, Tbilisi, Georgia",41.71426485992899,44.801661745292975,Supporter,115,29,1,High School,"Fundraising, Data, Organizing"
+mariam.mchedlishvili214@gmail.com,Mariam,Mchedlishvili,Other,54,995538126183,"Pekini Ave 7, Tbilisi, Georgia",41.726768128312926,44.77960506140459,Supporter,12,28,16,Master,"Fundraising, Organizing"
+nino.lomidze215@gmail.com,Nino,Lomidze,Other,49,995571781706,"Freedom Square 21, Tbilisi, Georgia",41.69472554251702,44.80220964878052,Supporter,138,12,13,Bachelor,"Data, Organizing, Fundraising"
+giorgi.mchedlishvili216@gmail.com,Giorgi,Mchedlishvili,Male,61,995531721973,"Guramishvili Ave 24, Tbilisi, Georgia",41.74146867462709,44.7820563147196,Member,96,16,11,High School,Fundraising
+levan.ashordia217@gmail.com,Levan,Ashordia,Male,36,995539025973,"Marjanishvili St 39, Tbilisi, Georgia",41.71530357407857,44.80326486350147,Supporter,249,35,2,Bachelor,Fundraising
+ana.lomidze218@gmail.com,Ana,Lomidze,Female,40,995595075394,"Pekini Ave 21, Tbilisi, Georgia",41.72732527570778,44.77679956362306,Supporter,52,18,20,Master,Fundraising
+irakli.ashordia219@gmail.com,Irakli,Ashordia,Female,37,995570628299,"Kazbegi Ave 52, Tbilisi, Georgia",41.72476062695666,44.76465114572266,Supporter,31,39,21,Master,"Fundraising, Data, Organizing"
+levan.kapanadze220@gmail.com,Levan,Kapanadze,Other,69,995566229860,"Pekini Ave 1, Tbilisi, Georgia",41.72490930193311,44.77911811744297,Member,165,23,5,Bachelor,Data
+nino.gelashvili221@gmail.com,Nino,Gelashvili,Female,63,995537213046,"Marjanishvili St 85, Tbilisi, Georgia",41.716397277801775,44.80091102801127,Member,47,6,10,PhD,"Data, Organizing, Fundraising"
+mariam.mchedlishvili222@gmail.com,Mariam,Mchedlishvili,Other,40,995544340380,"Rustaveli Ave 34, Tbilisi, Georgia",41.69902396022524,44.80122985028764,Member,69,10,6,Master,"Fundraising, Organizing"
+ana.lomidze223@gmail.com,Ana,Lomidze,Other,32,995551607812,"Vake Park Area 55, Tbilisi, Georgia",41.70961357117574,44.74301647203772,Member,126,13,22,Bachelor,Organizing
+irakli.kapanadze224@gmail.com,Irakli,Kapanadze,Male,27,995560989058,"Abashidze St 23, Tbilisi, Georgia",41.70848928745694,44.75480043304991,Supporter,109,27,16,High School,"Fundraising, Data, Organizing"
+ana.kapanadze225@gmail.com,Ana,Kapanadze,Other,57,995584870519,"Agmashenebeli Ave 111, Tbilisi, Georgia",41.72160497673877,44.80479580491371,Member,204,31,11,PhD,Fundraising
+irakli.kiknadze226@gmail.com,Irakli,Kiknadze,Male,41,995511130775,"Guramishvili Ave 74, Tbilisi, Georgia",41.73924292547839,44.78205688428468,Member,144,40,2,Bachelor,"Organizing, Fundraising, Data"
+zura.kiknadze227@gmail.com,Zura,Kiknadze,Female,65,995559098278,"Abashidze St 24, Tbilisi, Georgia",41.70959906436924,44.75599535123828,Member,198,10,1,Master,"Data, Fundraising, Organizing"
+zura.japaridze228@gmail.com,Zura,Japaridze,Female,33,995567416093,"Marjanishvili St 28, Tbilisi, Georgia",41.71421719158374,44.80343255065563,Supporter,141,24,9,High School,"Fundraising, Organizing"
+ana.kapanadze229@gmail.com,Ana,Kapanadze,Other,30,995567008340,"Abashidze St 94, Tbilisi, Georgia",41.70975567183384,44.75412430277528,Member,209,25,0,Bachelor,"Data, Organizing, Fundraising"
+giorgi.beridze230@gmail.com,Giorgi,Beridze,Female,49,995592381279,"Vake Park Area 76, Tbilisi, Georgia",41.70788334057585,44.74207568716041,Member,191,33,4,Bachelor,Organizing
+zura.lomidze231@gmail.com,Zura,Lomidze,Female,47,995555331764,"Kazbegi Ave 78, Tbilisi, Georgia",41.7254866205376,44.76507596317917,Supporter,142,14,5,Bachelor,"Organizing, Fundraising, Data"
+davit.gelashvili232@gmail.com,Davit,Gelashvili,Other,57,995526053313,"Freedom Square 117, Tbilisi, Georgia",41.69275829295734,44.801988007385575,Supporter,116,1,25,Bachelor,Organizing
+ana.tsiklauri233@gmail.com,Ana,Tsiklauri,Female,62,995511747011,"Marjanishvili St 77, Tbilisi, Georgia",41.71651676516486,44.80123172739036,Supporter,17,14,22,Bachelor,"Fundraising, Organizing, Data"
+zura.kiknadze234@gmail.com,Zura,Kiknadze,Female,41,995552050987,"Pekini Ave 100, Tbilisi, Georgia",41.72716929836113,44.77736932457347,Supporter,30,8,20,Master,"Organizing, Fundraising"
+levan.beridze235@gmail.com,Levan,Beridze,Other,52,995598292139,"Rustaveli Ave 114, Tbilisi, Georgia",41.69684007526876,44.80137385697382,Member,151,40,5,Bachelor,"Fundraising, Organizing"
+zura.beridze236@gmail.com,Zura,Beridze,Male,63,995583970907,"Marjanishvili St 60, Tbilisi, Georgia",41.71602116498463,44.8024835857173,Member,13,12,12,Master,"Organizing, Fundraising, Data"
+salome.ashordia237@gmail.com,Salome,Ashordia,Other,42,995561899818,"Pekini Ave 92, Tbilisi, Georgia",41.72574541208726,44.777841483571606,Supporter,165,32,13,PhD,"Organizing, Data, Fundraising"
+levan.chikovani238@gmail.com,Levan,Chikovani,Female,44,995556260036,"Guramishvili Ave 42, Tbilisi, Georgia",41.74143657317632,44.78303073925076,Supporter,167,12,6,High School,Organizing
+giorgi.mchedlishvili239@gmail.com,Giorgi,Mchedlishvili,Male,34,995532416803,"Abashidze St 38, Tbilisi, Georgia",41.71034264434061,44.7538633806457,Member,79,10,7,Master,"Data, Fundraising, Organizing"
+irakli.beridze240@gmail.com,Irakli,Beridze,Other,31,995511481013,"Marjanishvili St 96, Tbilisi, Georgia",41.71598378462113,44.80246490861589,Member,163,4,8,Master,Organizing
+zura.ashordia241@gmail.com,Zura,Ashordia,Other,61,995527170112,"Vake Park Area 87, Tbilisi, Georgia",41.7087935746316,44.74200197543298,Supporter,175,21,24,High School,"Fundraising, Data"
+ana.tsiklauri242@gmail.com,Ana,Tsiklauri,Female,56,995524360165,"Chavchavadze Ave 74, Tbilisi, Georgia",41.709927397951766,44.75528677354802,Member,225,36,5,PhD,"Organizing, Fundraising"
+giorgi.beridze243@gmail.com,Giorgi,Beridze,Female,58,995557802718,"Freedom Square 99, Tbilisi, Georgia",41.69228772699904,44.80062373788566,Supporter,13,13,13,PhD,"Data, Fundraising, Organizing"
+levan.japaridze244@gmail.com,Levan,Japaridze,Other,60,995547394712,"Agmashenebeli Ave 88, Tbilisi, Georgia",41.720009433787936,44.80553121279674,Member,59,20,13,Master,Fundraising
+irakli.beridze245@gmail.com,Irakli,Beridze,Other,56,995580190717,"Marjanishvili St 112, Tbilisi, Georgia",41.71538777541856,44.80103765294994,Supporter,75,38,9,Master,"Organizing, Fundraising, Data"
+giorgi.mchedlishvili246@gmail.com,Giorgi,Mchedlishvili,Male,61,995571939371,"Agmashenebeli Ave 97, Tbilisi, Georgia",41.72038487336611,44.80485853972781,Supporter,22,27,7,Bachelor,Fundraising
+davit.gelashvili247@gmail.com,Davit,Gelashvili,Female,58,995527720190,"Freedom Square 105, Tbilisi, Georgia",41.694912667214304,44.80139385062287,Supporter,167,19,3,High School,"Fundraising, Organizing"
+ana.tsiklauri248@gmail.com,Ana,Tsiklauri,Female,38,995585373068,"Guramishvili Ave 25, Tbilisi, Georgia",41.74167566076756,44.78337646973908,Supporter,107,11,2,Master,"Organizing, Fundraising, Data"
+irakli.mchedlishvili249@gmail.com,Irakli,Mchedlishvili,Other,68,995537918817,"Guramishvili Ave 102, Tbilisi, Georgia",41.74075141300997,44.78379594538524,Supporter,233,33,17,Bachelor,"Data, Organizing"
+giorgi.kapanadze250@gmail.com,Giorgi,Kapanadze,Male,60,995510298857,"Kazbegi Ave 53, Tbilisi, Georgia",41.72459160242161,44.76395219643331,Supporter,159,29,0,High School,"Fundraising, Organizing, Data"
+mariam.mchedlishvili251@gmail.com,Mariam,Mchedlishvili,Male,47,995541146824,"Vake Park Area 65, Tbilisi, Georgia",41.710233784894,44.74164695692389,Supporter,179,20,0,High School,"Data, Organizing, Fundraising"
+zura.beridze252@gmail.com,Zura,Beridze,Other,60,995562968591,"Abashidze St 112, Tbilisi, Georgia",41.70953918834222,44.75587447853388,Member,125,21,7,High School,Data
+zura.beridze253@gmail.com,Zura,Beridze,Male,49,995529694317,"Pekini Ave 31, Tbilisi, Georgia",41.725880019776895,44.777438862537885,Member,209,18,18,High School,"Organizing, Fundraising"
+giorgi.beridze254@gmail.com,Giorgi,Beridze,Other,19,995545474144,"Vake Park Area 25, Tbilisi, Georgia",41.70947956838024,44.74272394967336,Supporter,123,3,19,High School,Data
+zura.mchedlishvili255@gmail.com,Zura,Mchedlishvili,Male,45,995572044677,"Marjanishvili St 102, Tbilisi, Georgia",41.71440025252896,44.80055297916689,Member,114,30,17,Bachelor,Fundraising
+mariam.mchedlishvili256@gmail.com,Mariam,Mchedlishvili,Female,62,995548826895,"Rustaveli Ave 24, Tbilisi, Georgia",41.6984046574192,44.80262474273929,Supporter,114,16,1,Master,"Organizing, Fundraising"
+mariam.lomidze257@gmail.com,Mariam,Lomidze,Other,32,995594772052,"Chavchavadze Ave 24, Tbilisi, Georgia",41.7092773162064,44.755105179504994,Supporter,123,33,5,PhD,"Fundraising, Data, Organizing"
+mariam.ashordia258@gmail.com,Mariam,Ashordia,Male,59,995539040643,"Guramishvili Ave 85, Tbilisi, Georgia",41.74005817011385,44.78125946210199,Supporter,185,16,24,PhD,"Data, Fundraising"
+mariam.lomidze259@gmail.com,Mariam,Lomidze,Other,18,995536889635,"Vake Park Area 66, Tbilisi, Georgia",41.70846310970441,44.74123564735168,Member,20,37,11,High School,"Data, Organizing, Fundraising"
+salome.kiknadze260@gmail.com,Salome,Kiknadze,Male,62,995548816684,"Marjanishvili St 55, Tbilisi, Georgia",41.7154733236674,44.80079270250398,Member,54,25,4,Master,Data
+nino.gelashvili261@gmail.com,Nino,Gelashvili,Other,61,995569229624,"Vake Park Area 63, Tbilisi, Georgia",41.71022951248609,44.74176420375557,Supporter,172,6,11,PhD,Data
+davit.kiknadze262@gmail.com,Davit,Kiknadze,Male,25,995593261973,"Agmashenebeli Ave 92, Tbilisi, Georgia",41.72087973018392,44.80343032985404,Supporter,136,20,4,PhD,"Organizing, Data, Fundraising"
+levan.kapanadze263@gmail.com,Levan,Kapanadze,Male,59,995588918739,"Abashidze St 24, Tbilisi, Georgia",41.71030645750722,44.75515969535356,Member,64,3,1,PhD,"Fundraising, Data, Organizing"
+irakli.lomidze264@gmail.com,Irakli,Lomidze,Male,64,995562280996,"Agmashenebeli Ave 13, Tbilisi, Georgia",41.72199873654196,44.80420478584988,Supporter,206,3,14,Bachelor,"Data, Fundraising"
+salome.beridze265@gmail.com,Salome,Beridze,Other,34,995589585130,"Abashidze St 91, Tbilisi, Georgia",41.7087146154264,44.75397990978811,Member,94,32,4,High School,Fundraising
+mariam.lomidze266@gmail.com,Mariam,Lomidze,Female,60,995594391492,"Guramishvili Ave 55, Tbilisi, Georgia",41.7411769958901,44.78365609833476,Member,69,18,7,Bachelor,Organizing
+tekla.gelashvili267@gmail.com,Tekla,Gelashvili,Other,48,995551373959,"Freedom Square 13, Tbilisi, Georgia",41.69216924461301,44.80282593476349,Member,152,25,7,Master,"Data, Fundraising"
+giorgi.kiknadze268@gmail.com,Giorgi,Kiknadze,Other,33,995525334690,"Guramishvili Ave 47, Tbilisi, Georgia",41.73959436972477,44.7825446472238,Member,108,20,21,High School,Data
+davit.japaridze269@gmail.com,Davit,Japaridze,Male,36,995554905185,"Rustaveli Ave 50, Tbilisi, Georgia",41.69850828793364,44.802870179664254,Supporter,117,35,8,Bachelor,Data
+ana.japaridze270@gmail.com,Ana,Japaridze,Other,35,995530683251,"Kazbegi Ave 47, Tbilisi, Georgia",41.72462859966974,44.76358448351392,Supporter,148,35,11,PhD,Data
+mariam.gelashvili271@gmail.com,Mariam,Gelashvili,Other,27,995515568503,"Chavchavadze Ave 14, Tbilisi, Georgia",41.711061446036815,44.7552941965624,Supporter,11,32,6,Master,"Fundraising, Data, Organizing"
+irakli.kapanadze272@gmail.com,Irakli,Kapanadze,Male,55,995513673854,"Rustaveli Ave 90, Tbilisi, Georgia",41.69863640347895,44.80033916147556,Supporter,20,36,4,High School,"Data, Organizing"
+nino.mchedlishvili273@gmail.com,Nino,Mchedlishvili,Male,61,995574597470,"Pekini Ave 15, Tbilisi, Georgia",41.726308097436494,44.77716380782732,Supporter,26,21,23,Master,"Fundraising, Data, Organizing"
+zura.japaridze274@gmail.com,Zura,Japaridze,Female,23,995523041356,"Vake Park Area 8, Tbilisi, Georgia",41.70746551207002,44.74355207086972,Supporter,103,10,5,Master,"Fundraising, Organizing, Data"
+salome.japaridze275@gmail.com,Salome,Japaridze,Female,69,995520472274,"Guramishvili Ave 68, Tbilisi, Georgia",41.74034236905812,44.78317473861247,Member,107,16,5,High School,Organizing
+zura.lomidze276@gmail.com,Zura,Lomidze,Male,41,995553824100,"Agmashenebeli Ave 53, Tbilisi, Georgia",41.71978523413368,44.805332562483386,Supporter,48,2,16,High School,"Organizing, Fundraising"
+levan.gelashvili277@gmail.com,Levan,Gelashvili,Male,70,995519140765,"Pekini Ave 35, Tbilisi, Georgia",41.7274008507357,44.77763854719596,Member,71,9,12,Master,"Fundraising, Data"
+nino.mchedlishvili278@gmail.com,Nino,Mchedlishvili,Other,58,995567201913,"Guramishvili Ave 118, Tbilisi, Georgia",41.74134552067796,44.781103569916006,Member,38,6,0,PhD,Organizing
+salome.tsiklauri279@gmail.com,Salome,Tsiklauri,Female,52,995577194815,"Chavchavadze Ave 28, Tbilisi, Georgia",41.71137632911062,44.75550205625111,Member,90,40,24,High School,Data
+ana.ashordia280@gmail.com,Ana,Ashordia,Male,25,995525901107,"Marjanishvili St 34, Tbilisi, Georgia",41.71619097438086,44.8010233651982,Supporter,48,9,11,Bachelor,"Fundraising, Organizing, Data"
+giorgi.mchedlishvili281@gmail.com,Giorgi,Mchedlishvili,Male,45,995528552038,"Kazbegi Ave 110, Tbilisi, Georgia",41.72542008491144,44.7651267286397,Member,10,4,6,PhD,Organizing
+mariam.tsiklauri282@gmail.com,Mariam,Tsiklauri,Other,65,995552535135,"Rustaveli Ave 72, Tbilisi, Georgia",41.698777113779904,44.800605975299526,Member,34,18,15,Bachelor,"Fundraising, Organizing"
+tekla.chikovani283@gmail.com,Tekla,Chikovani,Female,65,995535093053,"Guramishvili Ave 71, Tbilisi, Georgia",41.740852623634,44.783137366611776,Member,247,13,24,Bachelor,Organizing
+irakli.kiknadze284@gmail.com,Irakli,Kiknadze,Other,42,995555683209,"Abashidze St 74, Tbilisi, Georgia",41.70889693367273,44.75611696803721,Member,120,35,4,PhD,"Data, Fundraising, Organizing"
+tekla.japaridze285@gmail.com,Tekla,Japaridze,Other,62,995513736410,"Guramishvili Ave 79, Tbilisi, Georgia",41.741223034633805,44.783746083878654,Member,240,17,1,Bachelor,"Fundraising, Data"
+davit.japaridze286@gmail.com,Davit,Japaridze,Other,29,995519439246,"Kazbegi Ave 12, Tbilisi, Georgia",41.72441805753319,44.76349474997929,Member,76,14,10,Bachelor,"Fundraising, Data"
+levan.chikovani287@gmail.com,Levan,Chikovani,Female,37,995523633636,"Pekini Ave 73, Tbilisi, Georgia",41.72615478815542,44.777139379826245,Supporter,13,9,6,High School,"Organizing, Fundraising"
+ana.ashordia288@gmail.com,Ana,Ashordia,Other,36,995551518101,"Rustaveli Ave 35, Tbilisi, Georgia",41.69854052590431,44.80032742010766,Member,153,24,8,Bachelor,Organizing
+mariam.kapanadze289@gmail.com,Mariam,Kapanadze,Female,49,995579179192,"Kazbegi Ave 23, Tbilisi, Georgia",41.72325326216026,44.764206627686846,Member,53,9,10,Master,Organizing
+mariam.kiknadze290@gmail.com,Mariam,Kiknadze,Male,33,995560793852,"Chavchavadze Ave 80, Tbilisi, Georgia",41.71081685689752,44.75391645441724,Member,103,5,2,PhD,"Fundraising, Organizing"
+tekla.chikovani291@gmail.com,Tekla,Chikovani,Other,35,995579494829,"Rustaveli Ave 18, Tbilisi, Georgia",41.6975005625559,44.80131139096991,Supporter,180,5,8,Bachelor,"Organizing, Data, Fundraising"
+salome.chikovani292@gmail.com,Salome,Chikovani,Other,25,995589634032,"Agmashenebeli Ave 115, Tbilisi, Georgia",41.72243890490355,44.805932372249664,Member,123,24,2,PhD,"Organizing, Fundraising"
+salome.mchedlishvili293@gmail.com,Salome,Mchedlishvili,Other,19,995534390630,"Agmashenebeli Ave 117, Tbilisi, Georgia",41.72176065858575,44.80439880250143,Supporter,37,6,11,PhD,"Organizing, Fundraising"
+ana.kiknadze294@gmail.com,Ana,Kiknadze,Other,69,995554984243,"Abashidze St 79, Tbilisi, Georgia",41.71022819586888,44.756238080692846,Supporter,89,2,0,High School,"Fundraising, Data"
+zura.kiknadze295@gmail.com,Zura,Kiknadze,Female,56,995517351505,"Kazbegi Ave 44, Tbilisi, Georgia",41.72523015681139,44.76362229443156,Supporter,75,4,1,PhD,Organizing
+mariam.lomidze296@gmail.com,Mariam,Lomidze,Male,69,995527062742,"Agmashenebeli Ave 9, Tbilisi, Georgia",41.720793490958044,44.80412353565935,Supporter,223,14,17,Bachelor,"Data, Organizing"
+davit.tsiklauri297@gmail.com,Davit,Tsiklauri,Male,28,995516160996,"Marjanishvili St 40, Tbilisi, Georgia",41.715876537817714,44.80290454597385,Supporter,28,37,0,PhD,"Fundraising, Data"
+mariam.chikovani298@gmail.com,Mariam,Chikovani,Male,25,995593867713,"Guramishvili Ave 112, Tbilisi, Georgia",41.741728667329575,44.78144408205832,Supporter,198,6,12,Master,"Data, Organizing"
+zura.tsiklauri299@gmail.com,Zura,Tsiklauri,Other,56,995519711521,"Pekini Ave 115, Tbilisi, Georgia",41.726351893966,44.77689700758202,Supporter,146,21,17,High School,Fundraising

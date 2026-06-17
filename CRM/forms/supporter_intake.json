@@ -1,0 +1,69 @@
+{
+  "id": "supporter_intake",
+  "title": "Freedom Square Supporter Intake",
+  "description": "Short intake form for new supporters.",
+  "audience": ["supporter"],
+  "message_template": "Freedom Square supporter questionnaire\n\nPlease fill the short form here:\n{link}",
+  "sections": [
+    {
+      "title": "Contact",
+      "fields": [
+        { "id": "full_name", "label": "Full name", "type": "text", "required": true },
+        { "id": "email", "label": "Email", "type": "text", "required": true },
+        { "id": "phone", "label": "Phone", "type": "text", "required": false },
+        { "id": "address", "label": "Neighborhood / Address", "type": "text", "required": false }
+      ]
+    },
+    {
+      "title": "Engagement",
+      "fields": [
+        {
+          "id": "time_availability",
+          "label": "Time availability",
+          "type": "select",
+          "options": ["", "Weekends", "Evenings", "Full-time", "Ad-hoc"]
+        },
+        {
+          "id": "involvement",
+          "label": "Preferred involvement",
+          "type": "multiselect",
+          "options": [
+            "Field organizing",
+            "Event support",
+            "Fundraising",
+            "Communications",
+            "Policy research",
+            "Data/tech"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Priorities",
+      "fields": [
+        {
+          "id": "issues",
+          "label": "Which issues matter most to you?",
+          "type": "multiselect",
+          "options": [
+            "Anti-corruption",
+            "Local community services",
+            "Economic fairness",
+            "Education",
+            "Healthcare",
+            "Environmental protection",
+            "Youth engagement"
+          ]
+        },
+        { "id": "motivation", "label": "Why do you want to get involved?", "type": "textarea" }
+      ]
+    },
+    {
+      "title": "Comments",
+      "fields": [
+        { "id": "comment_one", "label": "Your thoughts on the current situation in Georgia", "type": "textarea" },
+        { "id": "comment_two", "label": "How should Freedom Square act in the next 6 months?", "type": "textarea" }
+      ]
+    }
+  ]
+}
