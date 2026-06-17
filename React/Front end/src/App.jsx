@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Accordion,
   ActionIcon,
   Affix,
   AppShell,
@@ -25,7 +26,7 @@ import {
   IconSearch,
 } from '@tabler/icons-react'
 import { AppProvider, useApp } from './context/AppContext'
-import { buildModules, HUB_MODULE_IDS, MODULE_SECTIONS, renderModuleIcon } from './config/modules'
+import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from './config/modules'
 import { FeedbackDrawer } from './components/FeedbackDrawer'
 import { PublicEventRegistration } from './views/PublicEventRegistration'
 import { PublicSupporterSignup } from './views/PublicSupporterSignup'
@@ -63,6 +64,7 @@ function AppShell_() {
     isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport || isSupporterSignup
 
   const modules = useMemo(() => buildModules(t), [t])
+  const MODULE_SECTIONS = useMemo(() => buildModuleSections(t), [t])
   const hubModules = useMemo(
     () => modules.filter((m) => HUB_MODULE_IDS.includes(m.id)),
     [modules],
@@ -240,8 +242,8 @@ function AppShell_() {
     >
       <Spotlight
         actions={spotlightActions}
-        searchProps={{ placeholder: 'Search modules and sections...' }}
-        nothingFoundMessage="No matches yet"
+        searchProps={{ placeholder: t('app.searchPlaceholder') }}
+        nothingFoundMessage={t('app.nothingFound')}
         highlightQuery
       />
       <AppShell.Header className="app-shell__topbar">
@@ -258,22 +260,22 @@ function AppShell_() {
             </Group>
             <div className="topbar__center">
               <Badge variant="light" color="civic">
-                {activeModule ? activeModule.label : 'Module hub'}
+                {activeModule ? activeModule.label : t('app.moduleHub')}
               </Badge>
               {activeModule ? (
                 <Button variant="light" size="xs" onClick={() => setActiveModuleId(null)}>
-                  Back to Modules
+                  {t('app.backToModules')}
                 </Button>
               ) : null}
             </div>
           </Group>
           <Group gap="sm" wrap="nowrap" className="topbar__actions topbar__actions--right">
-            <Tooltip label="Search modules">
+            <Tooltip label={t('app.searchModules')}>
               <ActionIcon variant="light" size="lg" onClick={() => spotlight.open()}>
                 <IconSearch size={18} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="How it works">
+            <Tooltip label={t('app.howItWorks')}>
               <ActionIcon variant="light" size="lg" onClick={() => setActiveModuleId('how-it-works')}>
                 <IconBulb size={18} />
               </ActionIcon>
@@ -302,8 +304,8 @@ function AppShell_() {
           <Stack gap="lg">
             <div className="module-hub">
               <div className="module-hub__header">
-                <h1>Pick a module</h1>
-                <p className="muted">Choose where you want to work right now.</p>
+                <h1>{t('app.pickModule')}</h1>
+                <p className="muted">{t('app.pickModuleDesc')}</p>
               </div>
               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" className="module-tiles">
                 {hubModules.map((module) => {
@@ -346,11 +348,11 @@ function AppShell_() {
                             size="xs"
                             rightSection={<IconArrowRight size={14} />}
                           >
-                            Open
+                            {t('app.open')}
                           </Button>
                         ) : (
                           <Button variant="light" size="xs" disabled>
-                            In progress
+                            {t('app.inProgress')}
                           </Button>
                         )}
                       </Group>
@@ -359,12 +361,90 @@ function AppShell_() {
                 })}
               </SimpleGrid>
             </div>
+            <Accordion variant="separated" radius="md" className="about-accordion">
+              <Accordion.Item value="about">
+                <Accordion.Control>
+                  <Stack gap={2} align="center">
+                    <Text fw={600}>About Freedom Square</Text>
+                    <Text size="xs" c="dimmed">Platform overview &amp; capabilities</Text>
+                  </Stack>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <div className="platform-description">
+                    <h2>Freedom Square – Civic Engagement Suite</h2>
+
+                    <h3>Executive Summary</h3>
+                    <p>Freedom Square is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
+                    <p>The platform helps organizations build stronger relationships with supporters, understand community priorities, coordinate campaigns, and make transparent, evidence-based decisions. By bringing together data, participation, and analytics, Freedom Square reduces reliance on multiple disconnected tools and creates a more efficient and democratic way of organizing communities.</p>
+
+                    <hr />
+
+                    <h3>Network Management (CRM)</h3>
+                    <p>The Network module serves as the central database for supporters, members, volunteers, partners, and stakeholders. Organizations can manage contacts, track engagement history, visualize communities geographically, and build targeted outreach strategies.</p>
+                    <p>This creates a complete picture of the organization's community and strengthens long-term engagement.</p>
+
+                    <hr />
+
+                    <h3>Campaign Management</h3>
+                    <p>The Campaign module enables organizations to plan, coordinate, and monitor political, advocacy, awareness, and community campaigns. Teams can define objectives, track progress, manage activities, and measure campaign performance from a single workspace.</p>
+                    <p>The module improves coordination and provides leadership with clear visibility into campaign effectiveness.</p>
+
+                    <hr />
+
+                    <h3>Survey &amp; Consensus</h3>
+                    <p>The Survey &amp; Consensus module helps organizations understand what their communities think and where common ground exists. Beyond traditional surveys, the platform identifies patterns in responses, groups participants by shared perspectives, and highlights areas of agreement and disagreement.</p>
+                    <p>This enables organizations to make decisions that are genuinely informed by their members and supporters.</p>
+
+                    <hr />
+
+                    <h3>Deliberation &amp; Collective Decision-Making</h3>
+                    <p>Freedom Square provides structured spaces for dialogue where participants can discuss issues, evaluate alternatives, and collaboratively develop solutions.</p>
+                    <p>The module supports transparent and participatory governance by ensuring that organizational priorities can be traced back to real community input rather than top-down decision-making.</p>
+
+                    <hr />
+
+                    <h3>Due Diligence &amp; Risk Intelligence</h3>
+                    <p>The Due Diligence module helps organizations assess potential partners, stakeholders, and individuals before engagement or collaboration. It supports background research, risk identification, reputation assessment, and watchlist management.</p>
+                    <p>This strengthens organizational governance and reduces reputational and operational risks.</p>
+
+                    <hr />
+
+                    <h3>Audience Discovery</h3>
+                    <p>The Audience Discovery module uses AI-assisted analysis to identify potential supporter groups, understand their interests, and improve communication strategies. Organizations can better understand who they are trying to reach and which messages are most likely to resonate with different audiences.</p>
+                    <p>This improves outreach effectiveness and campaign impact.</p>
+
+                    <hr />
+
+                    <h3>Data Hub &amp; Analytics</h3>
+                    <p>The Data Hub acts as the platform's central information layer, connecting data from spreadsheets, external systems, and internal modules into a unified database.</p>
+                    <p>Combined with analytics dashboards and reporting tools, it provides leadership teams with real-time insights into supporter engagement, campaign performance, participation trends, and organizational growth.</p>
+
+                    <hr />
+
+                    <h3>Artificial Intelligence Layer</h3>
+                    <p>Artificial Intelligence enhances the platform by helping organizations process large volumes of information, identify patterns, and generate actionable insights.</p>
+                    <p>AI capabilities include survey analysis, discussion summarization, audience segmentation, trend detection, and decision-support recommendations. The technology is designed to support human decision-making, making participation at scale both practical and manageable.</p>
+
+                    <hr />
+
+                    <h3>Expected Impact</h3>
+                    <p>Freedom Square strengthens democratic participation within organizations by enabling communities to actively shape priorities, policies, and campaigns. The platform promotes transparency, accountability, and evidence-based decision-making while helping organizations build stronger, more engaged supporter networks.</p>
+                    <p>By combining participation, campaigning, analytics, and AI-powered insights in a single solution, Freedom Square enables civic and political organizations to operate more effectively and democratically in the digital age.</p>
+
+                    <div className="platform-description__principle">
+                      <p><strong>Core Principle</strong></p>
+                      <p><strong>People should not only receive information—they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
+                    </div>
+                  </div>
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
           </Stack>
         ) : (
           <div className="module-view">
             <aside className="module-view__sidebar">
               <div className="module-view__card">
-                <span className="module-view__eyebrow">Active module</span>
+                <span className="module-view__eyebrow">{t('app.activeModule')}</span>
                 <h3>{activeModuleConfig?.title || activeModule?.label}</h3>
                 <p className="muted">{activeModuleConfig?.description || activeModule?.description}</p>
                 {activeModuleConfig?.flowTitle ? (
@@ -378,7 +458,7 @@ function AppShell_() {
               </div>
               {activeModuleConfig?.sections?.length ? (
                 <div className="module-view__card">
-                  <span className="module-nav__title">Sections</span>
+                  <span className="module-nav__title">{t('app.sections')}</span>
                   <div className="module-view__sections">
                     {activeModuleConfig.sections.map((section) => {
                       const isActive =

@@ -1422,6 +1422,58 @@
   font-weight: 700;
 }
 
+.about-accordion .mantine-Accordion-label {
+  display: flex;
+  justify-content: center;
+  text-align: center;
+}
+
+.platform-description {
+  max-width: 820px;
+  line-height: 1.75;
+  color: var(--color-text, #1e293b);
+}
+
+.platform-description h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.platform-description h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 20px 0 6px;
+  color: var(--mantine-color-civic-7, #1d4ed8);
+}
+
+.platform-description p {
+  margin: 0 0 10px;
+  font-size: 0.925rem;
+}
+
+.platform-description hr {
+  border: none;
+  border-top: 1px solid var(--mantine-color-gray-2, #e2e8f0);
+  margin: 20px 0;
+}
+
+.platform-description__principle {
+  margin-top: 24px;
+  padding: 16px 20px;
+  background: var(--mantine-color-blue-0, #eff6ff);
+  border-left: 4px solid var(--mantine-color-civic-6, #2563eb);
+  border-radius: 4px;
+}
+
+.platform-description__principle p {
+  margin: 0 0 6px;
+}
+
+.platform-description__principle p:last-child {
+  margin: 0;
+}
+
 .module-view {
   display: grid;
   grid-template-columns: 312px minmax(0, 1fr);
