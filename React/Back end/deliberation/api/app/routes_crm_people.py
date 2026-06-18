@@ -174,6 +174,7 @@ class MapPersonOut(BaseModel):
     involvement_label: str = Field(alias="involvementLabel")
     involvement_title: str = Field(alias="involvementTitle")
     address_label: str = Field(alias="addressLabel")
+    rating: Optional[str] = None
     rating_stars: Optional[str] = Field(alias="ratingStars", default=None)
     effort_hours: float = Field(alias="effortHours")
     event_attend_count: int = Field(alias="eventAttendCount")
@@ -426,18 +427,22 @@ def _load_map_data_df() -> pd.DataFrame:
     df["email"] = df["email"].fillna("")
     df["firstName"] = df["firstName"].fillna("")
     df["lastName"] = df["lastName"].fillna("")
-    # Normalize gender values to F/M/Unspecified (handle numeric codes 1/2 and malformed data)
+    # Normalize gender values to F/M/U (1.0=Female, nan/string=Male, empty=Unknown)
     def _normalize_gender(g):
-        if pd.isna(g) or str(g).lower() in ('', 'nan', 'unspecified', 'none', 'null'):
+        if pd.isna(g) or str(g).lower() in ('', 'none', 'null', 'unspecified'):
             return 'U'
         s = str(g).lower()
-        if 'female' in s or s in ('1', '1.0', 'f'):
+        # Female: 1, 1.0, 'female', 'f'
+        if s in ('1', '1.0') or 'female' in s or s == 'f':
             return 'F'
-        if 'male' in s or s in ('2', '2.0', 'm'):
+        # Male: 2, 2.0, 'male', 'm', OR any other value including 'nan'
+        if s in ('2', '2.0') or 'male' in s or s == 'm' or s == 'nan':
             return 'M'
-        if 'other' in s or s in ('3', '3.0'):
+        # Other explicit values
+        if s in ('3', '3.0') or 'other' in s or s == 'o':
             return 'O'
-        return 'U'
+        # Default to Male for any unrecognized value
+        return 'M'
     df["gender"] = df["gender"].apply(_normalize_gender)
     df["timeAvailability"] = df["timeAvailability"].fillna("Unspecified")
     df["about"] = df["about"].fillna("")
@@ -1593,17 +1598,17 @@ def crm_dashboard():
         if not df.empty
         else []
     )
-    # Gender distribution - direct Neo4j query for accurate counts (F/M/O/U format)
+    # Gender distribution - treat 'nan' as Male, '1.0' as Female, empty as Unknown
     gender_counts = _query_df(
         """
         MATCH (p:Person)
         WITH p,
           CASE 
-            WHEN p.gender IS NULL OR p.gender = '' OR p.gender = 'nan' THEN 'U'
-            WHEN toLower(toString(p.gender)) CONTAINS 'female' OR toString(p.gender) IN ['1', '1.0', 'Female', 'F'] THEN 'F'
-            WHEN toLower(toString(p.gender)) CONTAINS 'male' OR toString(p.gender) IN ['2', '2.0', 'Male', 'M'] THEN 'M'
-            WHEN toLower(toString(p.gender)) CONTAINS 'other' OR toString(p.gender) IN ['3', '3.0', 'Other', 'O'] THEN 'O'
-            ELSE 'U'
+            WHEN p.gender IS NULL OR p.gender = '' THEN 'U'
+            WHEN toString(p.gender) IN ['1', '1.0'] OR toLower(toString(p.gender)) CONTAINS 'female' THEN 'F'
+            WHEN toString(p.gender) = 'nan' OR toString(p.gender) IN ['2', '2.0'] OR toLower(toString(p.gender)) CONTAINS 'male' THEN 'M'
+            WHEN toString(p.gender) IN ['3', '3.0'] OR toLower(toString(p.gender)) CONTAINS 'other' THEN 'O'
+            ELSE 'M'
           END AS normalizedGender
         RETURN normalizedGender AS gender, count(*) AS count
         ORDER BY count DESC
