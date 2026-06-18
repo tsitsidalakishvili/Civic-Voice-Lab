@@ -1788,7 +1788,7 @@ def crm_dashboard():
         """
     ).to_dict(orient="records")
 
-    # Simplified region grouping for overview chart
+    # Region grouping with major cities shown individually
     region_grouped = _query_df(
         """
         MATCH (p:Person)
@@ -1802,8 +1802,27 @@ def crm_dashboard():
         WITH address,
           CASE 
             WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi'
+            WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' THEN 'Batumi'
+            WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' THEN 'Kutaisi'
+            WHEN toLower(address) CONTAINS 'რუსთავი' OR toLower(address) CONTAINS 'rustavi' THEN 'Rustavi'
+            WHEN toLower(address) CONTAINS 'გორი' OR toLower(address) CONTAINS 'gori' THEN 'Gori'
+            WHEN toLower(address) CONTAINS 'ზუგდიდი' OR toLower(address) CONTAINS 'zugdidi' THEN 'Zugdidi'
+            WHEN toLower(address) CONTAINS 'თელავი' OR toLower(address) CONTAINS 'telavi' THEN 'Telavi'
+            WHEN toLower(address) CONTAINS 'ახმეტა' OR toLower(address) CONTAINS 'akhmeta' THEN 'Akhmeta'
+            WHEN toLower(address) CONTAINS 'ოზურგეთი' OR toLower(address) CONTAINS 'ozurgeti' THEN 'Ozurgeti'
+            WHEN toLower(address) CONTAINS 'ხაშური' OR toLower(address) CONTAINS 'khashuri' THEN 'Khashuri'
+            WHEN toLower(address) CONTAINS 'ჭიათურა' OR toLower(address) CONTAINS 'chiatura' THEN 'Chiatura'
+            WHEN toLower(address) CONTAINS 'მცხეთა' OR toLower(address) CONTAINS 'mtskheta' THEN 'Mtskheta'
+            WHEN toLower(address) CONTAINS 'მარტვილი' OR toLower(address) CONTAINS 'martvili' THEN 'Martvili'
+            WHEN toLower(address) CONTAINS 'სამტრედია' OR toLower(address) CONTAINS 'samtredia' THEN 'Samtredia'
+            WHEN toLower(address) CONTAINS 'თეძამი' OR toLower(address) CONTAINS 'tedzami' THEN 'Tedzami'
+            WHEN toLower(address) CONTAINS 'საგარეჯო' OR toLower(address) CONTAINS 'sagarejo' THEN 'Sagarejo'
+            WHEN toLower(address) CONTAINS 'სიღნაღი' OR toLower(address) CONTAINS 'sighnaghi' THEN 'Sighnaghi'
+            WHEN toLower(address) CONTAINS 'ქობულეთი' OR toLower(address) CONTAINS 'kobuleti' THEN 'Kobuleti'
+            WHEN toLower(address) CONTAINS 'ფოთი' OR toLower(address) CONTAINS 'poti' THEN 'Poti'
+            WHEN toLower(address) CONTAINS 'სოხუმი' OR toLower(address) CONTAINS 'sukhumi' THEN 'Sukhumi'
             WHEN address = '' OR address IS NULL THEN 'Unknown'
-            ELSE 'Other Cities'
+            ELSE 'Other Regions'
           END AS regionGroup
         RETURN regionGroup AS group, count(*) AS count
         ORDER BY count DESC
