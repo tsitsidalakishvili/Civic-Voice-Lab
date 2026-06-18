@@ -4125,13 +4125,23 @@ function CRMDashboardTab() {
               <div className="chart-frame chart-frame--tall">
                 <Bar
                   data={{
-                    labels: combinedExpertise.map(d => d.expertise),
+                    labels: combinedExpertise.map(d => d.expertise.length > 30 ? d.expertise.substring(0, 30) + '...' : d.expertise),
                     datasets: [{
+                      label: 'People',
                       data: combinedExpertise.map(d => d.count),
                       backgroundColor: pickColors(combinedExpertise.length),
                     }]
                   }}
-                  options={dashboardBarOptions}
+                  options={{
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                      x: { beginAtZero: true, ticks: { stepSize: 1 } },
+                      y: { ticks: { font: { size: 10 } } }
+                    }
+                  }}
                 />
               </div>
             ) : (
