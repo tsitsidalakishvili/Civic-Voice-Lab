@@ -36,6 +36,7 @@ export const renderModuleIcon = (moduleId, size = 18) => {
   return <Icon size={size} />
 }
 
+// All modules shown, only Network/CRM is fully active
 export const HUB_MODULE_IDS = [
   'crm',
   'campaigns',
@@ -45,6 +46,7 @@ export const HUB_MODULE_IDS = [
   'data-hub',
 ]
 
+// All modules shown, only Network/CRM is fully active (others show "In Progress")
 export const buildModules = (t) => {
   const CampaignsModule = (props) => (
     <CRMPage {...props} initialTab="campaigns" hideTabs />
@@ -62,11 +64,14 @@ export const buildModules = (t) => {
       label: t('module.network'),
       description: t('module.network.desc'),
       Component: CRMPage,
+      // No status = Ready/Active
     },
+    // INACTIVE MODULES - shown but not clickable (status: 'In Progress')
     {
       id: 'deliberation',
       label: t('module.deliberation'),
       description: t('module.deliberation.desc'),
+      status: 'In Progress',
       Component: DeliberationPage,
     },
     {
@@ -80,6 +85,7 @@ export const buildModules = (t) => {
       id: 'due-diligence',
       label: t('module.dueDiligence'),
       description: t('module.dueDiligence.desc'),
+      status: 'In Progress',
       Component: DueDiligencePage,
     },
     {
@@ -93,6 +99,7 @@ export const buildModules = (t) => {
       id: 'data-hub',
       label: t('module.dataHub'),
       description: t('module.dataHub.desc'),
+      status: 'In Progress',
       Component: DataHubPage,
     },
     {

@@ -76,6 +76,17 @@ class PersonProfileOut(BaseModel):
     tags: List[str] = []
     skills: List[str] = []
     involvement_areas: List[str] = Field(alias="involvementAreas", default_factory=list)
+    # New Georgian fields
+    profession: Optional[str] = None
+    social_media: Optional[str] = Field(alias="socialMedia", default=None)
+    was_party_member: Optional[bool] = Field(alias="wasPartyMember", default=None)
+    party_details: Optional[str] = Field(alias="partyDetails", default=None)
+    how_to_help: Optional[str] = Field(alias="howToHelp", default=None)
+    additional_comments: Optional[str] = Field(alias="additionalComments", default=None)
+    personal_id: Optional[str] = Field(alias="personalId", default=None)
+    whatsapp_chat: Optional[str] = Field(alias="whatsappChat", default=None)
+    date_of_birth: Optional[str] = Field(alias="dateOfBirth", default=None)
+    topics_of_interest: List[str] = Field(alias="topicsOfInterest", default_factory=list)
 
 
 class PersonProfileUpdate(BaseModel):
@@ -149,14 +160,15 @@ class DashboardOut(BaseModel):
 
 
 class MapPersonOut(BaseModel):
+    person_id: Optional[str] = Field(alias="personId", default=None)
     full_name: str = Field(alias="fullName")
-    email: str
+    email: str = ""
     group: str
     lat: float
     lon: float
     time_availability: str = Field(alias="timeAvailability")
     age_group: str = Field(alias="ageGroup")
-    gender: str
+    gender: str = "Unspecified"
     skills: List[str] = []
     skills_label: str = Field(alias="skillsLabel")
     involvement_label: str = Field(alias="involvementLabel")
@@ -348,11 +360,12 @@ def _load_map_data_df() -> pd.DataFrame:
     df = _query_df(
         """
         MATCH (p:Person)
-        OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
+        OPTIONAL MATCH (p)-[:LIVES_AT]->(addr:Address)
         WITH p,
-             coalesce(p.lat, a.latitude) AS lat,
-             coalesce(p.lon, a.longitude) AS lon,
-             coalesce(p.address, a.fullAddress) AS address
+             coalesce(p.personId, p.email, elementId(p)) AS personId,
+             coalesce(p.lat, addr.lat, addr.latitude) AS lat,
+             coalesce(p.lon, addr.lon, addr.longitude) AS lon,
+             coalesce(p.address, addr.fullAddress) AS address
         OPTIONAL MATCH (p)-[:IS_SUPPORTER]->(s:Supporter)
         OPTIONAL MATCH (p)-[:CLASSIFIED_AS]->(st:SupporterType)
         OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(a:Activity)
@@ -362,7 +375,7 @@ def _load_map_data_df() -> pd.DataFrame:
         OPTIONAL MATCH (p)-[:INTERESTED_IN]->(ia:InvolvementArea)
         OPTIONAL MATCH (p)<-[:REFERRED_BY]-(refP:Person)
         OPTIONAL MATCH (s)-[:RECRUITED]->(sr:Supporter)
-        WITH p, s, lat, lon, address,
+        WITH p, s, personId, lat, lon, address,
              collect(DISTINCT st.name) AS types,
              collect(DISTINCT ed.name) AS educationLevels,
              collect(DISTINCT ia.name) AS involvementAreas,
@@ -373,6 +386,7 @@ def _load_map_data_df() -> pd.DataFrame:
              count(DISTINCT refP) AS referredCount,
              count(DISTINCT sr) AS recruitedCount
         RETURN
+          personId,
           lat,
           lon,
           address AS address,
@@ -408,6 +422,23 @@ def _load_map_data_df() -> pd.DataFrame:
     df = df.dropna(subset=["lat", "lon"])
     df = df[df["lat"].between(-90, 90) & df["lon"].between(-180, 180)]
     df = df[~((df["lat"].abs() < 1e-6) & (df["lon"].abs() < 1e-6))]
+    df["personId"] = df["personId"].fillna(df["email"]).fillna("")
+    df["email"] = df["email"].fillna("")
+    df["firstName"] = df["firstName"].fillna("")
+    df["lastName"] = df["lastName"].fillna("")
+    # Normalize gender values to F/M/Unspecified (handle numeric codes 1/2 and malformed data)
+    def _normalize_gender(g):
+        if pd.isna(g) or str(g).lower() in ('', 'nan', 'unspecified', 'none', 'null'):
+            return 'U'
+        s = str(g).lower()
+        if 'female' in s or s in ('1', '1.0', 'f'):
+            return 'F'
+        if 'male' in s or s in ('2', '2.0', 'm'):
+            return 'M'
+        if 'other' in s or s in ('3', '3.0'):
+            return 'O'
+        return 'U'
+    df["gender"] = df["gender"].apply(_normalize_gender)
     df["timeAvailability"] = df["timeAvailability"].fillna("Unspecified")
     df["about"] = df["about"].fillna("")
     df["address"] = df["address"].fillna("")
@@ -1449,9 +1480,9 @@ def bulk_upsert_people(payload: PeopleBulkImport):
             WITH p, row
             FOREACH (_ IN CASE WHEN row.address IS NULL OR row.address = '' THEN [] ELSE [1] END |
                 MERGE (a:Address {fullAddress: row.address})
-                ON CREATE SET a.latitude = row.lat, a.longitude = row.lon
-                ON MATCH SET a.latitude = coalesce(row.lat, a.latitude),
-                            a.longitude = coalesce(row.lon, a.longitude)
+                ON CREATE SET a.lat = row.lat, a.lon = row.lon
+                ON MATCH SET a.lat = coalesce(row.lat, a.lat),
+                            a.lon = coalesce(row.lon, a.lon)
                 MERGE (p)-[:LIVES_AT]->(a)
             )
             """,
@@ -1493,7 +1524,20 @@ async def import_people_file(
                 p.eventsAttendedCount = coalesce(row.eventsAttendedCount, p.eventsAttendedCount),
                 p.referralCount = coalesce(row.referralCount, p.referralCount),
                 p.tasksCompleted = coalesce(row.tasksCompleted, p.tasksCompleted),
-                p.timeAvailability = coalesce(row.timeAvailability, p.timeAvailability)
+                p.timeAvailability = coalesce(row.timeAvailability, p.timeAvailability),
+                // New Georgian fields
+                p.profession = coalesce(row.profession, p.profession),
+                p.socialMedia = coalesce(row.socialMedia, p.socialMedia),
+                p.wasPartyMember = coalesce(row.wasPartyMember, p.wasPartyMember),
+                p.partyDetails = coalesce(row.partyDetails, p.partyDetails),
+                p.about = coalesce(row.about, p.about),
+                p.howToHelp = coalesce(row.howToHelp, p.howToHelp),
+                p.additionalComments = coalesce(row.additionalComments, p.additionalComments),
+                p.agreesWithManifesto = coalesce(row.agreesWithManifesto, p.agreesWithManifesto),
+                p.interestedInMembership = coalesce(row.interestedInMembership, p.interestedInMembership),
+                p.personalId = coalesce(row.personalId, p.personalId),
+                p.whatsappChat = coalesce(row.whatsappChat, p.whatsappChat),
+                p.dateOfBirth = coalesce(row.dateOfBirth, p.dateOfBirth)
             WITH p, row
             FOREACH (_ IN CASE WHEN row.education IS NULL OR row.education = '' THEN [] ELSE [1] END |
                 MERGE (ed:EducationLevel {name: row.education})
@@ -1503,14 +1547,22 @@ async def import_people_file(
                 MERGE (sk:Skill {name: skill})
                 MERGE (p)-[:CAN_CONTRIBUTE_WITH]->(sk)
             )
+            FOREACH (topic IN coalesce(row.topicsOfInterest, []) |
+                MERGE (t:Topic {name: topic})
+                MERGE (p)-[:INTERESTED_IN]->(t)
+            )
+            FOREACH (area IN coalesce(row.involvementAreas, []) |
+                MERGE (ia:InvolvementArea {name: area})
+                MERGE (p)-[:WANTS_TO_HELP_WITH]->(ia)
+            )
             MERGE (st:SupporterType {name: coalesce(row.supporterType, 'Supporter')})
             MERGE (p)-[:CLASSIFIED_AS]->(st)
             WITH p, row
             FOREACH (_ IN CASE WHEN row.address IS NULL OR row.address = '' THEN [] ELSE [1] END |
                 MERGE (a:Address {fullAddress: row.address})
-                ON CREATE SET a.latitude = row.lat, a.longitude = row.lon
-                ON MATCH SET a.latitude = coalesce(row.lat, a.latitude),
-                            a.longitude = coalesce(row.lon, a.longitude)
+                ON CREATE SET a.lat = row.lat, a.lon = row.lon
+                ON MATCH SET a.lat = coalesce(row.lat, a.lat),
+                            a.lon = coalesce(row.lon, a.lon)
                 MERGE (p)-[:LIVES_AT]->(a)
             )
             """,
@@ -1522,10 +1574,15 @@ async def import_people_file(
 @router.get("/dashboard", response_model=DashboardOut)
 def crm_dashboard():
     df = _load_supporter_summary_df()
-    total_people = int(len(df))
+    # Get accurate total from Neo4j if DataFrame is empty
+    if df.empty:
+        total_df = _query_df("MATCH (p:Person) RETURN count(p) AS cnt")
+        total_people = int(total_df.iloc[0]["cnt"]) if not total_df.empty else 0
+    else:
+        total_people = int(len(df))
     supporters = int((df["group"] == "Supporter").sum()) if not df.empty else 0
     members = int((df["group"] == "Member").sum()) if not df.empty else 0
-    avg_effort = float(df["effortScore"].mean()) if total_people else 0.0
+    avg_effort = float(df["effortScore"].mean()) if total_people and not df.empty else 0.0
 
     group_counts = (
         df["group"]
@@ -1536,16 +1593,22 @@ def crm_dashboard():
         if not df.empty
         else []
     )
-    gender_counts = (
-        df["gender"]
-        .fillna("Unspecified")
-        .value_counts()
-        .rename_axis("gender")
-        .reset_index(name="count")
-        .to_dict(orient="records")
-        if not df.empty
-        else []
-    )
+    # Gender distribution - direct Neo4j query for accurate counts (F/M/O/U format)
+    gender_counts = _query_df(
+        """
+        MATCH (p:Person)
+        WITH p,
+          CASE 
+            WHEN p.gender IS NULL OR p.gender = '' OR p.gender = 'nan' THEN 'U'
+            WHEN toLower(toString(p.gender)) CONTAINS 'female' OR toString(p.gender) IN ['1', '1.0', 'Female', 'F'] THEN 'F'
+            WHEN toLower(toString(p.gender)) CONTAINS 'male' OR toString(p.gender) IN ['2', '2.0', 'Male', 'M'] THEN 'M'
+            WHEN toLower(toString(p.gender)) CONTAINS 'other' OR toString(p.gender) IN ['3', '3.0', 'Other', 'O'] THEN 'O'
+            ELSE 'U'
+          END AS normalizedGender
+        RETURN normalizedGender AS gender, count(*) AS count
+        ORDER BY count DESC
+        """
+    ).to_dict(orient="records")
     rating_counts = (
         df["rating"]
         .value_counts()
@@ -1632,6 +1695,258 @@ def crm_dashboard():
         """
     ).to_dict(orient="records")
 
+    # New Georgian data queries
+    age_groups = _query_df(
+        """
+        MATCH (p:Person)
+        WITH toInteger(p.age) AS calculatedAge
+        WHERE calculatedAge IS NOT NULL AND calculatedAge >= 0
+        WITH calculatedAge,
+          CASE
+            WHEN calculatedAge < 18 THEN 'Under 18'
+            WHEN calculatedAge <= 30 THEN '18-30'
+            WHEN calculatedAge <= 45 THEN '31-45'
+            WHEN calculatedAge <= 60 THEN '46-60'
+            ELSE '60+'
+          END AS ageGroup
+        RETURN ageGroup AS group, count(*) AS count
+        ORDER BY
+          CASE ageGroup
+            WHEN 'Under 18' THEN 0
+            WHEN '18-30' THEN 1
+            WHEN '31-45' THEN 2
+            WHEN '46-60' THEN 3
+            WHEN '60+' THEN 4
+            ELSE 5
+          END
+        """
+    ).to_dict(orient="records")
+
+    # Top professions
+    profession_counts = _query_df(
+        """
+        MATCH (p:Person)
+        WHERE p.profession IS NOT NULL AND p.profession <> ''
+        RETURN p.profession AS profession, count(*) AS count
+        ORDER BY count DESC
+        LIMIT 10
+        """
+    ).to_dict(orient="records")
+
+    # Region distribution with detailed Tbilisi districts
+    region_counts = _query_df(
+        """
+        MATCH (p:Person)
+        OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
+        WITH p, 
+          CASE 
+            WHEN a.fullAddress IS NOT NULL AND a.fullAddress <> '' THEN a.fullAddress
+            WHEN p.address IS NOT NULL AND p.address <> '' THEN p.address
+            ELSE ''
+          END AS address
+        WITH address,
+          CASE 
+            WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' THEN 'Batumi'
+            WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' THEN 'Kutaisi'
+            WHEN toLower(address) CONTAINS 'რუსთავი' OR toLower(address) CONTAINS 'rustavi' THEN 'Rustavi'
+            WHEN toLower(address) CONTAINS 'გორი' OR toLower(address) CONTAINS 'gori' THEN 'Gori'
+            WHEN toLower(address) CONTAINS 'ზუგდიდი' OR toLower(address) CONTAINS 'zugdidi' THEN 'Zugdidi'
+            WHEN toLower(address) CONTAINS 'თელავი' OR toLower(address) CONTAINS 'telavi' THEN 'Telavi'
+            WHEN toLower(address) CONTAINS 'ახმეტა' OR toLower(address) CONTAINS 'akhmeta' THEN 'Akhmeta'
+            WHEN toLower(address) CONTAINS 'ოზურგეთი' OR toLower(address) CONTAINS 'ozurgeti' THEN 'Ozurgeti'
+            WHEN toLower(address) CONTAINS 'ხაშური' OR toLower(address) CONTAINS 'khashuri' THEN 'Khashuri'
+            WHEN toLower(address) CONTAINS 'ჭიათურა' OR toLower(address) CONTAINS 'chiatura' THEN 'Chiatura'
+            WHEN toLower(address) CONTAINS 'მცხეთა' OR toLower(address) CONTAINS 'mtskheta' THEN 'Mtskheta'
+            WHEN toLower(address) CONTAINS 'მარტვილი' OR toLower(address) CONTAINS 'martvili' THEN 'Martvili'
+            WHEN toLower(address) CONTAINS 'ტყიბული' OR toLower(address) CONTAINS 'tkibuli' THEN 'Tkibuli'
+            WHEN toLower(address) CONTAINS 'საგარეჯო' OR toLower(address) CONTAINS 'sagarejo' THEN 'Sagarejo'
+            WHEN toLower(address) CONTAINS 'სიღნაღი' OR toLower(address) CONTAINS 'sighnaghi' THEN 'Sighnaghi'
+            WHEN toLower(address) CONTAINS 'ქობულეთი' OR toLower(address) CONTAINS 'kobuleti' THEN 'Kobuleti'
+            WHEN toLower(address) CONTAINS 'ვაკე' THEN 'Tbilisi - Vake'
+            WHEN toLower(address) CONTAINS 'საბურთალო' THEN 'Tbilisi - Saburtalo'
+            WHEN toLower(address) CONTAINS 'დიღომი' OR toLower(address) CONTAINS 'dighomi' THEN 'Tbilisi - Dighomi'
+            WHEN toLower(address) CONTAINS 'მუხიანი' OR toLower(address) CONTAINS 'mukhiani' THEN 'Tbilisi - Mukhiani'
+            WHEN toLower(address) CONTAINS 'ვარკეთილი' OR toLower(address) CONTAINS 'varketili' THEN 'Tbilisi - Varketili'
+            WHEN toLower(address) CONTAINS 'გლდანი' OR toLower(address) CONTAINS 'gldani' THEN 'Tbilisi - Gldani'
+            WHEN toLower(address) CONTAINS 'სამგორი' OR toLower(address) CONTAINS 'samgori' THEN 'Tbilisi - Samgori'
+            WHEN toLower(address) CONTAINS 'ნაძალადევი' OR toLower(address) CONTAINS 'nadzaladevi' THEN 'Tbilisi - Nadzaladevi'
+            WHEN toLower(address) CONTAINS 'ისანი' OR toLower(address) CONTAINS 'isani' THEN 'Tbilisi - Isani'
+            WHEN toLower(address) CONTAINS 'კრწანისი' OR toLower(address) CONTAINS 'krtsanisi' THEN 'Tbilisi - Krtsanisi'
+            WHEN toLower(address) CONTAINS 'მთაწმინდა' OR toLower(address) CONTAINS 'mtatsminda' THEN 'Tbilisi - Mtatsminda'
+            WHEN toLower(address) CONTAINS 'სოლოლაკი' OR toLower(address) CONTAINS 'sololaki' THEN 'Tbilisi - Sololaki'
+            WHEN toLower(address) CONTAINS 'ვერა' OR toLower(address) CONTAINS 'vera' THEN 'Tbilisi - Vera'
+            WHEN toLower(address) CONTAINS 'დიდუბე' OR toLower(address) CONTAINS 'didube' THEN 'Tbilisi - Didube'
+            WHEN toLower(address) CONTAINS 'ჩუღურეთი' OR toLower(address) CONTAINS 'chugureti' THEN 'Tbilisi - Chugureti'
+            WHEN toLower(address) CONTAINS 'აბანოთუბანი' OR toLower(address) CONTAINS 'abanotubani' THEN 'Tbilisi - Abanotubani'
+            WHEN toLower(address) CONTAINS 'ვაზისუბანი' OR toLower(address) CONTAINS 'vazisubani' THEN 'Tbilisi - Vazisubani'
+            WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi (Other)'
+            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            ELSE 'Other Regions'
+          END AS region
+        RETURN region AS region, count(*) AS count
+        ORDER BY count DESC
+        """
+    ).to_dict(orient="records")
+
+    # Simplified region grouping for overview chart
+    region_grouped = _query_df(
+        """
+        MATCH (p:Person)
+        OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
+        WITH p, 
+          CASE 
+            WHEN a.fullAddress IS NOT NULL AND a.fullAddress <> '' THEN a.fullAddress
+            WHEN p.address IS NOT NULL AND p.address <> '' THEN p.address
+            ELSE ''
+          END AS address
+        WITH address,
+          CASE 
+            WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi'
+            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            ELSE 'Other Cities'
+          END AS regionGroup
+        RETURN regionGroup AS group, count(*) AS count
+        ORDER BY count DESC
+        """
+    ).to_dict(orient="records")
+
+    # Party membership history
+    party_membership = _query_df(
+        """
+        MATCH (p:Person)
+        WITH p,
+          CASE WHEN p.wasPartyMember = true THEN 'Former Party Member'
+               ELSE 'No Party History'
+          END AS partyStatus
+        RETURN partyStatus AS status, count(*) AS count
+        """
+    ).to_dict(orient="records")
+
+    # Involvement areas (what people want to help with)
+    involvement_areas = _query_df(
+        """
+        MATCH (p:Person)-[:WANTS_TO_HELP_WITH]->(ia:InvolvementArea)
+        RETURN ia.name AS area, count(*) AS count
+        ORDER BY count DESC
+        LIMIT 10
+        """
+    ).to_dict(orient="records")
+
+    # Combined expertise (Skills + InvolvementAreas + Topics)
+    combined_expertise = _query_df(
+        """
+        MATCH (p:Person)
+        OPTIONAL MATCH (p)-[:CAN_CONTRIBUTE_WITH]->(s:Skill)
+        OPTIONAL MATCH (p)-[:WANTS_TO_HELP_WITH]->(ia:InvolvementArea)
+        OPTIONAL MATCH (p)-[:INTERESTED_IN]->(t:Topic)
+        WITH p, s, ia, t
+        WHERE s IS NOT NULL OR ia IS NOT NULL OR t IS NOT NULL
+        WITH 
+          CASE 
+            WHEN s IS NOT NULL THEN s.name
+            WHEN ia IS NOT NULL THEN ia.name
+            WHEN t IS NOT NULL THEN t.name
+          END AS expertise
+        RETURN expertise, count(*) AS count
+        ORDER BY count DESC
+        LIMIT 15
+        """
+    ).to_dict(orient="records")
+
+    # Detailed regional breakdown (Georgian regions)
+    region_detail = _query_df(
+        """
+        MATCH (p:Person)
+        OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
+        WITH p, coalesce(a.fullAddress, p.address, '') AS address
+        WITH p, address,
+          CASE 
+            WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi'
+            WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' OR toLower(address) CONTAINS 'აჭარა' THEN 'Adjara (Batumi)'
+            WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' OR toLower(address) CONTAINS 'იმერეთი' THEN 'Imereti (Kutaisi)'
+            WHEN toLower(address) CONTAINS 'თელავი' OR toLower(address) CONTAINS 'telavi' OR toLower(address) CONTAINS 'კახეთი' THEN 'Kakheti (Telavi)'
+            WHEN toLower(address) CONTAINS 'გორი' OR toLower(address) CONTAINS 'gori' OR toLower(address) CONTAINS 'შიდა ქართლი' THEN 'Shida Kartli (Gori)'
+            WHEN toLower(address) CONTAINS 'რუსთავი' OR toLower(address) CONTAINS 'rustavi' OR toLower(address) CONTAINS 'ქვემო ქართლი' THEN 'Kvemo Kartli (Rustavi)'
+            WHEN toLower(address) CONTAINS 'ზუგდიდი' OR toLower(address) CONTAINS 'zugdidi' OR toLower(address) CONTAINS 'სამეგრელო' THEN 'Samegrelo (Zugdidi)'
+            WHEN toLower(address) CONTAINS 'პანკისი' OR toLower(address) CONTAINS 'pankisi' OR toLower(address) CONTAINS 'ხევსურეთი' THEN 'Other Regions'
+            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            ELSE 'Other Regions'
+          END AS region
+        RETURN region AS region, count(*) AS count
+        ORDER BY count DESC
+        """
+    ).to_dict(orient="records")
+
+    # Membership growth by join date
+    membership_growth = _query_df(
+        """
+        MATCH (p:Person)
+        WHERE p.joinDate IS NOT NULL AND p.joinDate <> ''
+        WITH p,
+          CASE 
+            WHEN p.joinDate CONTAINS '2024' THEN '2024'
+            WHEN p.joinDate CONTAINS '17.11.2025' OR p.joinDate CONTAINS '17.11.2045' THEN 'Nov 2025'
+            WHEN p.joinDate CONTAINS '2025' THEN '2025'
+            ELSE 'Other'
+          END AS joinPeriod
+        RETURN joinPeriod AS period, count(*) AS count
+        ORDER BY 
+          CASE joinPeriod
+            WHEN '2024' THEN 1
+            WHEN '2025' THEN 2
+            WHEN 'Nov 2025' THEN 3
+            ELSE 4
+          END
+        """
+    ).to_dict(orient="records")
+
+    # Engagement readiness (high potential supporters)
+    engagement_ready = _query_df(
+        """
+        MATCH (p:Person)
+        WHERE p.age IS NOT NULL 
+          AND (p.timeAvailability IS NOT NULL AND p.timeAvailability <> '')
+          AND (p.profession IS NOT NULL AND p.profession <> '')
+        WITH p,
+          CASE 
+            WHEN p.age <= 40 AND (toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'შაბათ' OR toLower(p.timeAvailability) CONTAINS 'თავისუფალი') THEN 'High Engagement'
+            WHEN p.age <= 50 AND (toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'შაბათ') THEN 'Medium Engagement'
+            ELSE 'Low Engagement'
+          END AS engagement
+        RETURN engagement AS level, count(*) AS count
+        ORDER BY 
+          CASE engagement
+            WHEN 'High Engagement' THEN 1
+            WHEN 'Medium Engagement' THEN 2
+            WHEN 'Low Engagement' THEN 3
+            ELSE 4
+          END
+        """
+    ).to_dict(orient="records")
+
+    # Time availability grouped into Weekends vs Weekdays
+    time_availability_grouped = _query_df(
+        """
+        MATCH (p:Person)
+        WHERE p.timeAvailability IS NOT NULL AND p.timeAvailability <> ''
+        WITH p,
+          CASE 
+            WHEN toLower(p.timeAvailability) CONTAINS 'შაბათ' OR toLower(p.timeAvailability) CONTAINS 'კვირას' THEN 'Weekends'
+            WHEN toLower(p.timeAvailability) CONTAINS 'სამუშაო' OR toLower(p.timeAvailability) CONTAINS 'ორშაბათი' OR toLower(p.timeAvailability) CONTAINS 'სამშაბათს' OR toLower(p.timeAvailability) CONTAINS 'ხუთშაბათს' THEN 'Weekdays'
+            WHEN toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ' OR toLower(p.timeAvailability) CONTAINS 'თავისუფალი' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ დროს' THEN 'Flexible'
+            ELSE 'Other/Unspecified'
+          END AS timeGroup
+        RETURN timeGroup AS group, count(*) AS count
+        ORDER BY 
+          CASE timeGroup
+            WHEN 'Weekends' THEN 1
+            WHEN 'Weekdays' THEN 2
+            WHEN 'Flexible' THEN 3
+            ELSE 4
+          END
+        """
+    ).to_dict(orient="records")
+
     return {
         "metrics": {
             "total_people": total_people,
@@ -1642,13 +1957,23 @@ def crm_dashboard():
         "charts": {
             "groupCounts": group_counts,
             "genderCounts": gender_counts,
-            "ratingCounts": rating_counts,
+            "ageGroups": age_groups,
+            "professionCounts": profession_counts,
+            "regionCounts": region_counts,
+            "regionGrouped": region_grouped,
+            "regionDetail": region_detail,
+            "partyMembership": party_membership,
+            "involvementAreas": involvement_areas,
+            "membershipGrowth": membership_growth,
+            "engagementReady": engagement_ready,
             "manifesto": manifesto_df.to_dict(orient="records") if not manifesto_df.empty else [],
             "membership": membership_df.to_dict(orient="records") if not membership_df.empty else [],
             "facebook": facebook_df.to_dict(orient="records") if not facebook_df.empty else [],
             "timeAvailability": time_df.to_dict(orient="records") if not time_df.empty else [],
+            "timeAvailabilityGrouped": time_availability_grouped,
             "involvement": involve_df.to_dict(orient="records") if not involve_df.empty else [],
             "skills": skills_df.to_dict(orient="records") if not skills_df.empty else [],
+            "combinedExpertise": combined_expertise,
             "taskFeed": task_feed,
         },
     }
@@ -1659,6 +1984,8 @@ def crm_map_data():
     df = _load_map_data_df()
     if df.empty:
         return []
+    # Filter to only include records with valid coordinates
+    df = df[df["lat"].notna() & df["lon"].notna()]
     df = df.where(pd.notnull(df), None)
     return df.to_dict(orient="records")
 

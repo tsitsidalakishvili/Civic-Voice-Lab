@@ -3912,9 +3912,21 @@ function CRMDashboardTab() {
   }, [])
 
   const groupCounts = dashboard?.charts?.groupCounts || []
-  const ratingCounts = dashboard?.charts?.ratingCounts || []
+  const genderCounts = dashboard?.charts?.genderCounts || []
+  const ageGroups = dashboard?.charts?.ageGroups || []
+  const professionCounts = dashboard?.charts?.professionCounts || []
+  const regionCounts = dashboard?.charts?.regionCounts || []
+  const regionDetail = dashboard?.charts?.regionDetail || []
+  const partyMembership = dashboard?.charts?.partyMembership || []
+  const involvementAreas = dashboard?.charts?.involvementAreas || []
+  const membershipGrowth = dashboard?.charts?.membershipGrowth || []
+  const engagementReady = dashboard?.charts?.engagementReady || []
+  const manifesto = dashboard?.charts?.manifesto || []
+  const membershipInterest = dashboard?.charts?.membership || []
   const timeAvailability = dashboard?.charts?.timeAvailability || []
-  const topSkills = dashboard?.charts?.skills || []
+  const timeAvailabilityGrouped = dashboard?.charts?.timeAvailabilityGrouped || []
+  const regionGrouped = dashboard?.charts?.regionGrouped || []
+  const combinedExpertise = dashboard?.charts?.combinedExpertise || []
 
   const chartPalette = [
     '#2563eb',
@@ -3928,6 +3940,24 @@ function CRMDashboardTab() {
     '#64748b',
     '#ec4899',
   ]
+
+  // Georgian to English translations for Involvement Areas
+  const involvementAreaTranslations = {
+    'ექსპერტული მხარდაჭერა თქვენს სფეროში': 'Expert Support',
+    'საინფორმაციო და საგანმანათლებლო შეხვედრებში მონაწილეობა': 'Educational Events',
+    'ონლაინ კამპანიაში მონაწილეობა/ ინფორმაციის გავრცელებაში დახმარება': 'Online Campaign',
+    'ევენტების ორგანიზება': 'Event Organization',
+    'ადგილზე მხარდაჭერა მიტინგებსა და სხვა ღონისძიებებზე': 'On-site Support',
+    'სხვა': 'Other',
+  }
+
+  // Translate involvement areas for display
+  const translateInvolvementAreas = (areas) => {
+    return areas.map(area => ({
+      ...area,
+      area: involvementAreaTranslations[area.area] || area.area
+    }))
+  }
 
   const pickColors = (count) =>
     Array.from({ length: count }, (_, idx) => chartPalette[idx % chartPalette.length])
@@ -4020,12 +4050,24 @@ function CRMDashboardTab() {
             )}
           </div>
           <div className="module-card dashboard-chart">
-            <h3>Rating</h3>
-            {ratingCounts.length > 0 ? (
+            <h3>Gender distribution</h3>
+            {genderCounts.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
-                <PolarArea
-                  data={radialData(ratingCounts, 'rating', 'count')}
-                  options={dashboardPolarOptions}
+                <Pie
+                  data={{
+                    labels: genderCounts.map(d => 
+                      d.gender === 'F' ? 'Female' : 
+                      d.gender === 'M' ? 'Male' : 
+                      d.gender === 'O' ? 'Other' : 
+                      d.gender === 'U' ? 'Unspecified' : d.gender
+                    ),
+                    datasets: [{
+                      data: genderCounts.map(d => d.count),
+                      backgroundColor: pickColors(genderCounts.length),
+                      borderWidth: 1,
+                    }]
+                  }}
+                  options={dashboardPieOptions}
                 />
               </div>
             ) : (
@@ -4033,25 +4075,63 @@ function CRMDashboardTab() {
             )}
           </div>
           <div className="module-card dashboard-chart">
-            <h3>Time availability</h3>
-            {timeAvailability.length > 0 ? (
-              <div className="chart-frame chart-frame--tall">
-                <PolarArea
-                  data={radialData(timeAvailability, 'availability', 'count')}
-                  options={dashboardPolarOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Top skills</h3>
-            {topSkills.length > 0 ? (
+            <h3>Age groups</h3>
+            {ageGroups.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
                 <Bar
-                  data={barData(topSkills.slice(0, 8), 'skill', 'count', 'People')}
-                  options={dashboardHorizontalBarOptions}
+                  data={{
+                    labels: ageGroups.map(d => d.group),
+                    datasets: [{
+                      data: ageGroups.map(d => d.count),
+                      backgroundColor: ['#3182ce', '#38a169', '#d69e2e', '#e53e3e']
+                    }]
+                  }}
+                  options={dashboardBarOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
+          <div className="module-card dashboard-chart">
+            <h3>Time availability (Grouped)</h3>
+            {timeAvailabilityGrouped.length > 0 ? (
+              <div className="chart-frame chart-frame--tall">
+                <Pie
+                  data={radialData(timeAvailabilityGrouped, 'group', 'count')}
+                  options={dashboardPieOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
+          <div className="module-card dashboard-chart">
+            <h3>Region distribution</h3>
+            {regionGrouped.length > 0 ? (
+              <div className="chart-frame">
+                <Pie
+                  data={radialData(regionGrouped, 'group', 'count')}
+                  options={dashboardPieOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
+          <div className="module-card dashboard-chart">
+            <h3>Combined Expertise</h3>
+            {combinedExpertise.length > 0 ? (
+              <div className="chart-frame chart-frame--tall">
+                <Bar
+                  data={{
+                    labels: combinedExpertise.map(d => d.expertise),
+                    datasets: [{
+                      data: combinedExpertise.map(d => d.count),
+                      backgroundColor: pickColors(combinedExpertise.length),
+                    }]
+                  }}
+                  options={dashboardBarOptions}
                 />
               </div>
             ) : (
@@ -4064,19 +4144,6 @@ function CRMDashboardTab() {
               <div className="chart-frame">
                 <Pie
                   data={radialData(dashboard.charts.manifesto, 'agrees', 'count')}
-                  options={dashboardPieOptions}
-                />
-              </div>
-            ) : (
-              <p className="muted">No data.</p>
-            )}
-          </div>
-          <div className="module-card dashboard-chart">
-            <h3>Membership interest</h3>
-            {dashboard?.charts?.membership?.length ? (
-              <div className="chart-frame">
-                <Doughnut
-                  data={radialData(dashboard.charts.membership, 'interested', 'count')}
                   options={dashboardPieOptions}
                 />
               </div>
@@ -7784,7 +7851,7 @@ function CRMMapTab() {
                 >
                   {genderOptions.map((gender) => (
                     <option key={gender} value={gender}>
-                      {gender}
+                      {gender === 'F' ? 'Female' : gender === 'M' ? 'Male' : gender === 'O' ? 'Other' : gender === 'U' ? 'Unspecified' : gender}
                     </option>
                   ))}
                 </select>
@@ -7958,6 +8025,11 @@ function CRMMapTab() {
                   <div>{addressLabel}</div>
                   {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
                   <div>{row.skillsLabel}</div>
+                  {row.personId && (
+                    <div style={{marginTop: '8px'}}>
+                      <a href={`/crm/people/${row.personId}`}>View person</a>
+                    </div>
+                  )}
                 </Popup>
               </CircleMarker>
             )})}
@@ -7988,7 +8060,7 @@ function CRMMapTab() {
               <span>{row.email}</span>
               <span>{row.group}</span>
               <span>{row.ageGroup}</span>
-              <span>{row.gender || '—'}</span>
+              <span>{row.gender === 'F' ? 'Female' : row.gender === 'M' ? 'Male' : row.gender === 'O' ? 'Other' : row.gender === 'U' ? 'Unspecified' : row.gender || '—'}</span>
               <span>{row.timeAvailability}</span>
               <span>{row.effortHours ?? 0}</span>
               <span>{row.eventAttendCount ?? 0}</span>

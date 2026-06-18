@@ -1101,11 +1101,13 @@ def _load_profile(email: str) -> Optional[dict]:
     OPTIONAL MATCH (p)-[:HAS_TAG]->(tag:Tag)
     OPTIONAL MATCH (p)-[:CAN_CONTRIBUTE_WITH]->(sk:Skill)
     OPTIONAL MATCH (p)-[:INTERESTED_IN]->(ia:InvolvementArea)
+    OPTIONAL MATCH (p)-[:INTERESTED_IN]->(t:Topic)
     WITH p,
       collect(DISTINCT st.name) AS supporterTypes,
       collect(DISTINCT tag.name) AS tags,
       collect(DISTINCT sk.name) AS skills,
-      collect(DISTINCT ia.name) AS involvementAreas
+      collect(DISTINCT ia.name) AS involvementAreas,
+      collect(DISTINCT t.name) AS topicsOfInterest
     RETURN
       p.email AS email,
       p.firstName AS firstName,
@@ -1118,10 +1120,21 @@ def _load_profile(email: str) -> Optional[dict]:
       coalesce(p.agreesWithManifesto, false) AS agreesWithManifesto,
       coalesce(p.interestedInMembership, false) AS interestedInMembership,
       coalesce(p.facebookGroupMember, false) AS facebookGroupMember,
+      // New Georgian fields
+      p.profession AS profession,
+      p.socialMedia AS socialMedia,
+      p.wasPartyMember AS wasPartyMember,
+      p.partyDetails AS partyDetails,
+      p.howToHelp AS howToHelp,
+      p.additionalComments AS additionalComments,
+      p.personalId AS personalId,
+      p.whatsappChat AS whatsappChat,
+      p.dateOfBirth AS dateOfBirth,
       supporterTypes,
       tags,
       skills,
-      involvementAreas
+      involvementAreas,
+      topicsOfInterest
     """
     with _db_session(driver) as session:
         records = _execute_read(session, query, {"email": email})
@@ -1138,19 +1151,20 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
     if df.empty:
         return []
     df["age"] = pd.to_numeric(df.get("age"), errors="coerce")
-    col_email = _get_column(df, ["email", "primary_email", "e_mail", "e-mail", "email_address"])
+    # Georgian column name mappings
+    col_email = _get_column(df, ["email", "primary_email", "e_mail", "e-mail", "email_address", "ელ.ფოსტა"])
     col_email_secondary = _get_column(
         df, ["secondary_email", "alternate_email", "alt_email"]
     )
     if not col_email:
         return []
-    col_first = _get_column(df, ["first_name", "firstname", "first"])
-    col_last = _get_column(df, ["last_name", "lastname", "last"])
-    col_gender = _get_column(df, ["gender", "sex"])
+    col_first = _get_column(df, ["first_name", "firstname", "first", "სახელი"])
+    col_last = _get_column(df, ["last_name", "lastname", "last", "გვარი"])
+    col_gender = _get_column(df, ["gender", "sex", "სქესი"])
     col_age = _get_column(df, ["age"])
-    col_phone = _get_column(df, ["phone", "primary_phone", "mobile"])
+    col_phone = _get_column(df, ["phone", "primary_phone", "mobile", "ტელ"])
     col_phone_secondary = _get_column(df, ["secondary_phone", "alt_phone"])
-    col_address = _get_column(df, ["address", "fulladdress", "full_address"])
+    col_address = _get_column(df, ["address", "fulladdress", "full_address", "მისამართი"])
     col_lat = _get_column(df, ["lat", "latitude"])
     col_lon = _get_column(df, ["lon", "lng", "longitude"])
     col_type = _get_column(df, ["supporter_type", "type", "group"])
@@ -1181,8 +1195,24 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
             "time_avail",
             "availability",
             "time",
+            "რა დროს დაუთმობთ ჩვენს საქმიანობას ?",
         ],
     )
+    # New fields from Georgian supporter/member files
+    col_date_of_birth = _get_column(df, ["დაბ. თარიღი", "დაბ.თარიღი", "date_of_birth", "dob", "birth_date"])
+    col_profession = _get_column(df, ["პროფესია/სამუშაო ადგილი", "profession", "workplace", "occupation"])
+    col_social_media = _get_column(df, ["სოც ქსელები", "social_media", "social_networks", "facebook"])
+    col_was_party_member = _get_column(df, ["ყოფილხართ თუ არა რომელიმე პარტიის წევრი?", "was_party_member", "former_party_member"])
+    col_party_details = _get_column(df, ["გთხოვთ, მიუთითოთ კონკრეტულად", "party_details", "party_history"])
+    col_about = _get_column(df, ["მოგვიყევით თქვენს შესახებ და გვითხარით, რატომ გსურთ შემოგვიერთდეთ.", "about", "bio", "description"])
+    col_topics = _get_column(df, ["გთხოვთ, მონიშნოთ თქვენთვის საინტერესო თემები", "topics", "interests", "topics_of_interest"])
+    col_involvement = _get_column(df, ["რა მიმართულებით გირჩევნიათ ჩაერთოთ \"თავისუფლების მოედნის\"  საქმიანობაში?", "involvement_areas", "involvement", "participation"])
+    col_how_help = _get_column(df, ["როგორ დაეხმარებით \"თავისუფლების მოედანს\"?", "how_to_help", "help_type", "contribution"])
+    col_additional_comments = _get_column(df, ["სივრცე დამატებითი კომენტარისთვის", "additional_comments", "comments", "notes"])
+    col_agrees_manifesto = _get_column(df, ["გავეცანი თავისუფლების მოედნის მანიფესტს და სრულად ვიზიარებ მასში გაცხადებულ იდეებს.", "agrees_with_manifesto", "manifesto_agreed"])
+    col_wants_membership = _get_column(df, ["გსურთ თუ არა ჩვენი პარტიის წევრობა მომავალში?", "interested_in_membership", "wants_membership"])
+    col_personal_id = _get_column(df, ["პ/ნ", "personal_id", "id_number", "pn"])
+    col_whatsapp = _get_column(df, ["WhatsApp ჩატი", "whatsapp", "whatsapp_chat"])
 
     rows = []
     for _, row in df.iterrows():
@@ -1191,12 +1221,33 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
             email = _clean_text(row.get(col_email_secondary))
         if not email:
             continue
+        
+        # Handle age - either from direct age column or calculate from date_of_birth
         age_val = pd.to_numeric(row.get(col_age), errors="coerce") if col_age else None
-        age = (
-            int(age_val)
-            if age_val is not None and not pd.isna(age_val) and age_val > 0
-            else None
-        )
+        age = None
+        if age_val is not None and not pd.isna(age_val) and age_val > 0:
+            age = int(age_val)
+        elif col_date_of_birth:
+            dob_val = row.get(col_date_of_birth)
+            if dob_val and not pd.isna(dob_val):
+                try:
+                    dob_str = str(dob_val).strip()
+                    # Try different date formats
+                    dob = None
+                    for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y"]:
+                        try:
+                            dob = pd.to_datetime(dob_str, format=fmt)
+                            break
+                        except:
+                            continue
+                    if dob is None:
+                        dob = pd.to_datetime(dob_str, errors="coerce")
+                    if dob is not None and not pd.isna(dob):
+                        from datetime import datetime
+                        age = int((datetime.now() - dob).days / 365.25)
+                except:
+                    pass
+        
         lat_val = pd.to_numeric(row.get(col_lat), errors="coerce") if col_lat else None
         lon_val = pd.to_numeric(row.get(col_lon), errors="coerce") if col_lon else None
         lat = float(lat_val) if lat_val is not None and not pd.isna(lat_val) else None
@@ -1226,6 +1277,18 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
         )
         education = _clean_text(row.get(col_education)) if col_education else None
         skills = _split_list(row.get(col_skills)) if col_skills else []
+        
+        # Process Georgian boolean/text fields
+        def _parse_georgian_bool(val):
+            if pd.isna(val) or val is None:
+                return None
+            val_str = str(val).strip().lower()
+            return val_str in ["დიახ", "კი", "yes", "true", "1", "ha", "ჰაჰ", "ჰაუ", "y"]
+        
+        was_party_member = _parse_georgian_bool(row.get(col_was_party_member)) if col_was_party_member else None
+        agrees_manifesto = _parse_georgian_bool(row.get(col_agrees_manifesto)) if col_agrees_manifesto else None
+        wants_membership = _parse_georgian_bool(row.get(col_wants_membership)) if col_wants_membership else None
+        
         rows.append(
             {
                 "email": email,
@@ -1247,6 +1310,21 @@ def _build_import_rows(df: pd.DataFrame, default_type: str) -> List[dict]:
                 "skills": skills,
                 "supporterType": _normalize_supporter_type(supporter_type, default_type),
                 "timeAvailability": _clean_text(row.get(col_time)) if col_time else None,
+                # New Georgian fields
+                "profession": _clean_text(row.get(col_profession)) if col_profession else None,
+                "socialMedia": _clean_text(row.get(col_social_media)) if col_social_media else None,
+                "wasPartyMember": was_party_member,
+                "partyDetails": _clean_text(row.get(col_party_details)) if col_party_details else None,
+                "about": _clean_text(row.get(col_about)) if col_about else None,
+                "topicsOfInterest": _split_list(row.get(col_topics)) if col_topics else [],
+                "involvementAreas": _split_list(row.get(col_involvement)) if col_involvement else [],
+                "howToHelp": _clean_text(row.get(col_how_help)) if col_how_help else None,
+                "additionalComments": _clean_text(row.get(col_additional_comments)) if col_additional_comments else None,
+                "agreesWithManifesto": agrees_manifesto,
+                "interestedInMembership": wants_membership,
+                "personalId": _clean_text(row.get(col_personal_id)) if col_personal_id else None,
+                "whatsappChat": _clean_text(row.get(col_whatsapp)) if col_whatsapp else None,
+                "dateOfBirth": str(row.get(col_date_of_birth)) if col_date_of_birth and not pd.isna(row.get(col_date_of_birth)) else None,
             }
         )
     return rows

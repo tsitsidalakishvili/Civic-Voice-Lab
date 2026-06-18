@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:8010'
+const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
 function readRuntimeOverrides() {
