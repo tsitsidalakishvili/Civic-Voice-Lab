@@ -371,7 +371,7 @@ def _load_map_data_df() -> pd.DataFrame:
         OPTIONAL MATCH (p)-[:CLASSIFIED_AS]->(st:SupporterType)
         OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(a:Activity)
         OPTIONAL MATCH (p)-[r:REGISTERED_FOR]->(:Event)
-        OPTIONAL MATCH (p)-[:CAN_CONTRIBUTE_WITH]->(sk:Skill)
+        OPTIONAL MATCH (p)-[:WANTS_TO_HELP_WITH]->(wh:InvolvementArea)
         OPTIONAL MATCH (p)-[:HAS_EDUCATION]->(ed:EducationLevel)
         OPTIONAL MATCH (p)-[:INTERESTED_IN]->(ia:InvolvementArea)
         OPTIONAL MATCH (p)<-[:REFERRED_BY]-(refP:Person)
@@ -383,7 +383,7 @@ def _load_map_data_df() -> pd.DataFrame:
              count(DISTINCT a) AS activityCount,
              count(DISTINCT r) AS eventJoinCount,
              count(DISTINCT CASE WHEN r.status = 'Attended' THEN r ELSE NULL END) AS eventAttendRelCount,
-             collect(DISTINCT sk.name) AS skills,
+             collect(DISTINCT wh.name) AS skills,
              count(DISTINCT refP) AS referredCount,
              count(DISTINCT sr) AS recruitedCount
         RETURN
@@ -1785,7 +1785,7 @@ def crm_dashboard():
             WHEN toLower(address) CONTAINS 'აბანოთუბანი' OR toLower(address) CONTAINS 'abanotubani' THEN 'Tbilisi - Abanotubani'
             WHEN toLower(address) CONTAINS 'ვაზისუბანი' OR toLower(address) CONTAINS 'vazisubani' THEN 'Tbilisi - Vazisubani'
             WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi (Other)'
-            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            WHEN address = '' THEN 'Unknown'
             ELSE 'Other Regions'
           END AS region
         RETURN region AS region, count(*) AS count
@@ -1826,7 +1826,7 @@ def crm_dashboard():
             WHEN toLower(address) CONTAINS 'ქობულეთი' OR toLower(address) CONTAINS 'kobuleti' THEN 'Kobuleti'
             WHEN toLower(address) CONTAINS 'ფოთი' OR toLower(address) CONTAINS 'poti' THEN 'Poti'
             WHEN toLower(address) CONTAINS 'სოხუმი' OR toLower(address) CONTAINS 'sukhumi' THEN 'Sukhumi'
-            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            WHEN address = '' THEN 'Unknown'
             ELSE 'Other Regions'
           END AS regionGroup
         RETURN regionGroup AS group, count(*) AS count
@@ -1893,7 +1893,7 @@ def crm_dashboard():
             WHEN toLower(address) CONTAINS 'რუსთავი' OR toLower(address) CONTAINS 'rustavi' OR toLower(address) CONTAINS 'ქვემო ქართლი' THEN 'Kvemo Kartli (Rustavi)'
             WHEN toLower(address) CONTAINS 'ზუგდიდი' OR toLower(address) CONTAINS 'zugdidi' OR toLower(address) CONTAINS 'სამეგრელო' THEN 'Samegrelo (Zugdidi)'
             WHEN toLower(address) CONTAINS 'პანკისი' OR toLower(address) CONTAINS 'pankisi' OR toLower(address) CONTAINS 'ხევსურეთი' THEN 'Other Regions'
-            WHEN address = '' OR address IS NULL THEN 'Unknown'
+            WHEN address = '' THEN 'Unknown'
             ELSE 'Other Regions'
           END AS region
         RETURN region AS region, count(*) AS count
@@ -1971,12 +1971,12 @@ def crm_dashboard():
         """
     ).to_dict(orient="records")
 
-    # Regional Skills Distribution - Top skills by major cities
+    # Regional Skills Distribution - Top involvement areas by major cities
     regional_skills = _query_df(
         """
-        MATCH (p:Person)-[:LIVES_AT]->(a:Address)
-        MATCH (p)-[:HAS_SKILL]->(s:Skill)
-        WITH a, s,
+        MATCH (p:Person)-[:WANTS_TO_HELP_WITH]->(ia:InvolvementArea)
+        MATCH (p)-[:LIVES_AT]->(a:Address)
+        WITH a, ia,
           CASE 
             WHEN toLower(a.fullAddress) CONTAINS 'თბილისი' OR toLower(a.fullAddress) CONTAINS 'tbilisi' THEN 'Tbilisi'
             WHEN toLower(a.fullAddress) CONTAINS 'ბათუმი' OR toLower(a.fullAddress) CONTAINS 'batumi' THEN 'Batumi'
@@ -1988,7 +1988,7 @@ def crm_dashboard():
             ELSE 'Other'
           END AS region
         WHERE region <> 'Other'
-        RETURN region, s.name AS skill, count(p) AS count
+        RETURN region, ia.name AS skill, count(*) AS count
         ORDER BY region, count DESC
         """
     ).to_dict(orient="records")
@@ -2040,65 +2040,6 @@ def crm_map_data():
 # ---------------------------------------------------------------------------
 # End of CRM People Routes
 # ---------------------------------------------------------------------------
-            email=email
-        )
-        if not result.single():
-            raise HTTPException(status_code=404, detail="Person not found")
-        
-        # Update subscription tier
-        from datetime import datetime, timedelta
-        now = datetime.utcnow().isoformat()
-        expires = (datetime.utcnow() + timedelta(days=30*payload.duration_months)).isoformat()
-        
-        result = session.run(
-            """
-            MATCH (p:Person {email: $email})
-            SET p.subscriptionTier = $tier,
-                p.subscriptionSince = $since,
-                p.subscriptionExpires = $expires
-            RETURN p.subscriptionTier as tier, p.subscriptionSince as since
-            """,
-            email=email, tier=payload.tier, since=now, expires=expires
-        )
-        record = result.single()
-        
-        return {
-            "success": True,
-            "email": email,
-            "tier": record["tier"],
-            "since": record["since"],
-            "message": f"Successfully updated to {payload.tier} tier"
-        }
-
-
-@router.get("/subscription/{email}")
-def get_subscription_status(email: str):
-    """Get subscription status for a person."""
-    email = _clean_text(email)
-    driver = get_driver()
-    
-    with driver.session(database=DATABASE) as session:
-        result = session.run(
-            """
-            MATCH (p:Person {email: $email})
-            RETURN p.subscriptionTier as tier, 
-                   p.subscriptionSince as since,
-                   p.subscriptionExpires as expires
-            """,
-            email=email
-        )
-        record = result.single()
-        
-        if not record:
-            raise HTTPException(status_code=404, detail="Person not found")
-        
-        return {
-            "email": email,
-            "tier": record["tier"] or "free",
-            "since": record["since"],
-            "expires": record["expires"],
-            "is_plus": record["tier"] == "plus"
-        }
 
 
 @router.get("/distinct-values")

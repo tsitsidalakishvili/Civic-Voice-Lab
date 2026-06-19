@@ -1,0 +1,10 @@
+INFO:     127.0.0.1:62880 - "GET /crm/supporter-invites?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "GET /crm/people/summary?limit=2000&sort=effortScore HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49675 - "GET /crm/supporter-signups/pending?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52542 - "GET /crm/supporter-invites/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52363 - "GET /crm/people/summary?limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62880 - "GET /crm/supporter-signup-config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "GET /crm/supporter-invite-groups-config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53927 - "GET /crm/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49675 - "GET /crm/map HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52542 - "GET /crm/dashboard HTTP/1.1" 200 OK
