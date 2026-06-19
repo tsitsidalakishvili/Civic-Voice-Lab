@@ -4053,6 +4053,7 @@ function CRMDashboardTab() {
             <h3>Gender distribution</h3>
             {genderCounts.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
+                {/* DEBUG: {JSON.stringify(genderCounts)} */}
                 <Pie
                   data={{
                     labels: genderCounts.map(d => 
@@ -7788,6 +7789,26 @@ function CRMMapTab() {
     })
   }, [normalizedData, filters])
 
+  // Group markers by coordinates for clustering
+  const clusteredMarkers = useMemo(() => {
+    const groups = {}
+    filtered.forEach((row) => {
+      const key = `${row.lat},${row.lon}`
+      if (!groups[key]) {
+        groups[key] = {
+          lat: row.lat,
+          lon: row.lon,
+          people: [],
+          count: 0,
+          color: row.color,
+        }
+      }
+      groups[key].people.push(row)
+      groups[key].count += 1
+    })
+    return Object.values(groups)
+  }, [filtered])
+
   const center = useMemo(() => {
     if (!filtered.length) return [0, 0]
     const lat = filtered.reduce((sum, row) => sum + Number(row.lat || 0), 0) / filtered.length
@@ -8010,35 +8031,59 @@ function CRMMapTab() {
         ) : (
           <MapContainer center={center} zoom={11} className="map-canvas">
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {filtered.map((row) => {
-              const color = Array.isArray(row.color)
-                ? `rgba(${row.color[0]}, ${row.color[1]}, ${row.color[2]}, ${row.color[3] / 255})`
+            {clusteredMarkers.map((cluster) => {
+              const color = Array.isArray(cluster.color)
+                ? `rgba(${cluster.color[0]}, ${cluster.color[1]}, ${cluster.color[2]}, ${cluster.color[3] / 255})`
                 : '#1d4ed8'
-              const addressLabel =
-                row.addressLabel && row.addressLabel !== 'Unspecified'
-                  ? row.addressLabel
-                  : 'Address not available'
               const coordsLabel =
-                Number.isFinite(row.lat) && Number.isFinite(row.lon)
-                  ? `${row.lat.toFixed(4)}, ${row.lon.toFixed(4)}`
+                Number.isFinite(cluster.lat) && Number.isFinite(cluster.lon)
+                  ? `${cluster.lat.toFixed(4)}, ${cluster.lon.toFixed(4)}`
                   : null
+              const firstPerson = cluster.people[0]
+              const addressLabel = firstPerson?.addressLabel || 'Unknown'
+              const isMultiple = cluster.count > 1
+              
               return (
               <CircleMarker
-                key={row.email}
-                center={[row.lat, row.lon]}
-                pathOptions={{ color }}
-                radius={Math.max(4, Number(row.pointSize || 6) / 2)}
+                key={`${cluster.lat},${cluster.lon}`}
+                center={[cluster.lat, cluster.lon]}
+                pathOptions={{ color, fillOpacity: isMultiple ? 0.8 : 0.6 }}
+                radius={Math.max(6, Math.min(20, 4 + cluster.count * 2))}
               >
                 <Popup>
-                  <strong>{row.fullName}</strong>
-                  <div>{row.email}</div>
-                  <div>{addressLabel}</div>
-                  {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
-                  <div>{row.skillsLabel}</div>
-                  {row.personId && (
-                    <div style={{marginTop: '8px'}}>
-                      <a href={`/crm/people/${row.personId}`}>View person</a>
-                    </div>
+                  {isMultiple ? (
+                    <>
+                      <div style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px'}}>
+                        📍 {cluster.count} people at this location
+                      </div>
+                      <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                        {cluster.people.map((p, idx) => (
+                          <div key={p.email} style={{padding: '4px 0', borderBottom: '1px solid #eee'}}>
+                            <strong>{idx + 1}. {p.fullName}</strong>
+                            <div style={{fontSize: '12px', color: '#666'}}>
+                              {p.email}
+                              {p.group && <span> • {p.group}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{marginTop: '8px', fontSize: '12px', color: '#888'}}>
+                        {addressLabel}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <strong>{firstPerson?.fullName}</strong>
+                      <div>{firstPerson?.email}</div>
+                      <div>{firstPerson?.addressLabel}</div>
+                      {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
+                      <div>{firstPerson?.skillsLabel}</div>
+                      {firstPerson?.personId && (
+                        <div style={{marginTop: '8px'}}>
+                          <a href={`/crm/people/${firstPerson.personId}`}>View person</a>
+                        </div>
+                      )}
+                    </>
                   )}
                 </Popup>
               </CircleMarker>
