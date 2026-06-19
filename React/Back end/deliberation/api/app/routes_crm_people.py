@@ -2037,6 +2037,70 @@ def crm_map_data():
     return df.to_dict(orient="records")
 
 
+# ---------------------------------------------------------------------------
+# End of CRM People Routes
+# ---------------------------------------------------------------------------
+            email=email
+        )
+        if not result.single():
+            raise HTTPException(status_code=404, detail="Person not found")
+        
+        # Update subscription tier
+        from datetime import datetime, timedelta
+        now = datetime.utcnow().isoformat()
+        expires = (datetime.utcnow() + timedelta(days=30*payload.duration_months)).isoformat()
+        
+        result = session.run(
+            """
+            MATCH (p:Person {email: $email})
+            SET p.subscriptionTier = $tier,
+                p.subscriptionSince = $since,
+                p.subscriptionExpires = $expires
+            RETURN p.subscriptionTier as tier, p.subscriptionSince as since
+            """,
+            email=email, tier=payload.tier, since=now, expires=expires
+        )
+        record = result.single()
+        
+        return {
+            "success": True,
+            "email": email,
+            "tier": record["tier"],
+            "since": record["since"],
+            "message": f"Successfully updated to {payload.tier} tier"
+        }
+
+
+@router.get("/subscription/{email}")
+def get_subscription_status(email: str):
+    """Get subscription status for a person."""
+    email = _clean_text(email)
+    driver = get_driver()
+    
+    with driver.session(database=DATABASE) as session:
+        result = session.run(
+            """
+            MATCH (p:Person {email: $email})
+            RETURN p.subscriptionTier as tier, 
+                   p.subscriptionSince as since,
+                   p.subscriptionExpires as expires
+            """,
+            email=email
+        )
+        record = result.single()
+        
+        if not record:
+            raise HTTPException(status_code=404, detail="Person not found")
+        
+        return {
+            "email": email,
+            "tier": record["tier"] or "free",
+            "since": record["since"],
+            "expires": record["expires"],
+            "is_plus": record["tier"] == "plus"
+        }
+
+
 @router.get("/distinct-values")
 def get_distinct_values(label: str, prop: str = "name"):
     allowed = {"Tag", "Skill", "EducationLevel", "InvolvementArea", "SupporterType"}
