@@ -787,19 +787,52 @@ async def upload_supporters_csv(
     notes: str = Form(default=""),
 ):
     if not file.filename:
-        raise HTTPException(status_code=400, detail="CSV file name is required.")
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV uploads are supported.")
+        raise HTTPException(status_code=400, detail="File name is required.")
 
     content = await file.read()
-    try:
-        df = pd.read_csv(io.BytesIO(content))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {exc}")
+    filename_lower = file.filename.lower()
 
-    safe_type = _normalize_supporter_type(default_type, "Supporter")
-    rows = _build_import_rows(df, safe_type)
-    skipped = max(0, len(df) - len(rows))
+    # Handle Excel files (.xlsx) with multiple sheets
+    if filename_lower.endswith(".xlsx"):
+        try:
+            # Read both sheets: sheet 0 = supporters, sheet 1 = members
+            xls = pd.ExcelFile(io.BytesIO(content))
+            all_rows = []
+            total_rows = 0
+
+            # Sheet 0: Supporters
+            if len(xls.sheet_names) >= 1:
+                df_supporters = pd.read_excel(io.BytesIO(content), sheet_name=0)
+                rows_supporters = _build_import_rows(df_supporters, "Supporter")
+                all_rows.extend(rows_supporters)
+                total_rows += len(df_supporters)
+
+            # Sheet 1: Members (with WhatsApp)
+            if len(xls.sheet_names) >= 2:
+                df_members = pd.read_excel(io.BytesIO(content), sheet_name=1)
+                rows_members = _build_import_rows(df_members, "Member")
+                all_rows.extend(rows_members)
+                total_rows += len(df_members)
+
+            rows = all_rows
+            skipped = max(0, total_rows - len(rows))
+
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not parse Excel file: {exc}")
+
+    # Handle CSV files (single sheet)
+    elif filename_lower.endswith(".csv"):
+        try:
+            df = pd.read_csv(io.BytesIO(content))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not parse CSV: {exc}")
+
+        safe_type = _normalize_supporter_type(default_type, "Supporter")
+        rows = _build_import_rows(df, safe_type)
+        skipped = max(0, len(df) - len(rows))
+
+    else:
+        raise HTTPException(status_code=400, detail="Only CSV (.csv) or Excel (.xlsx) uploads are supported.")
 
     if not rows:
         raise HTTPException(
@@ -830,6 +863,19 @@ async def upload_supporters_csv(
                 p.referralCount        = coalesce(row.referralCount, p.referralCount),
                 p.tasksCompleted       = coalesce(row.tasksCompleted, p.tasksCompleted),
                 p.timeAvailability     = coalesce(row.timeAvailability, p.timeAvailability),
+                // New Georgian fields
+                p.profession = coalesce(row.profession, p.profession),
+                p.socialMedia = coalesce(row.socialMedia, p.socialMedia),
+                p.wasPartyMember = coalesce(row.wasPartyMember, p.wasPartyMember),
+                p.partyDetails = coalesce(row.partyDetails, p.partyDetails),
+                p.about = coalesce(row.about, p.about),
+                p.howToHelp = coalesce(row.howToHelp, p.howToHelp),
+                p.additionalComments = coalesce(row.additionalComments, p.additionalComments),
+                p.agreesWithManifesto = coalesce(row.agreesWithManifesto, p.agreesWithManifesto),
+                p.interestedInMembership = coalesce(row.interestedInMembership, p.interestedInMembership),
+                p.personalId = coalesce(row.personalId, p.personalId),
+                p.whatsappChat = coalesce(row.whatsappChat, p.whatsappChat),
+                p.dateOfBirth = coalesce(row.dateOfBirth, p.dateOfBirth),
                 p.importId     = $importId,
                 p.importedAt   = datetime(),
                 p.importOwner  = $owner,
@@ -842,6 +888,14 @@ async def upload_supporters_csv(
             FOREACH (skill IN coalesce(row.skills, []) |
                 MERGE (sk:Skill {name: skill})
                 MERGE (p)-[:CAN_CONTRIBUTE_WITH]->(sk)
+            )
+            FOREACH (topic IN coalesce(row.topicsOfInterest, []) |
+                MERGE (t:Topic {name: topic})
+                MERGE (p)-[:INTERESTED_IN]->(t)
+            )
+            FOREACH (area IN coalesce(row.involvementAreas, []) |
+                MERGE (ia:InvolvementArea {name: area})
+                MERGE (p)-[:WANTS_TO_HELP_WITH]->(ia)
             )
             MERGE (st:SupporterType {name: coalesce(row.supporterType, 'Supporter')})
             MERGE (p)-[:CLASSIFIED_AS]->(st)
@@ -857,11 +911,18 @@ async def upload_supporters_csv(
             {"rows": rows, "importId": import_id, "owner": owner.strip()[:160], "notes": notes.strip()[:1000]},
         )
 
+    # Determine supporter type for response message
+    file_ext = file.filename.lower().split('.')[-1] if '.' in file.filename else ''
+    if file_ext == 'xlsx':
+        type_desc = "supporters and members"
+    else:
+        type_desc = safe_type.lower() + "s"
+
     return SupportersCsvImportOut(
         importId=import_id,
         fileName=file.filename,
         rowCount=len(rows),
         skipped=skipped,
-        defaultType=safe_type,
-        message=f"Imported {len(rows)} supporters into Neo4j as Person nodes.{f' {skipped} rows skipped (no email).' if skipped else ''}",
+        defaultType="Mixed" if file_ext == 'xlsx' else safe_type,
+        message=f"Imported {len(rows)} {type_desc} into Neo4j as Person nodes.{f' {skipped} rows skipped (no email).' if skipped else ''}",
     )
