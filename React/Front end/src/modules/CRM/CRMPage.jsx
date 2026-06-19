@@ -3927,6 +3927,7 @@ function CRMDashboardTab() {
   const timeAvailabilityGrouped = dashboard?.charts?.timeAvailabilityGrouped || []
   const regionGrouped = dashboard?.charts?.regionGrouped || []
   const combinedExpertise = dashboard?.charts?.combinedExpertise || []
+  const regionalSkills = dashboard?.charts?.regionalSkills || []
 
   const chartPalette = [
     '#2563eb',
@@ -4156,6 +4157,58 @@ function CRMDashboardTab() {
                 <Pie
                   data={radialData(dashboard.charts.manifesto, 'agrees', 'count')}
                   options={dashboardPieOptions}
+                />
+              </div>
+            ) : (
+              <p className="muted">No data.</p>
+            )}
+          </div>
+          <div className="module-card dashboard-chart">
+            <h3>Regional Skills Distribution</h3>
+            {regionalSkills.length > 0 ? (
+              <div className="chart-frame chart-frame--tall">
+                <Bar
+                  data={{
+                    labels: [...new Set(regionalSkills.map(d => d.region))],
+                    datasets: [
+                      {
+                        label: 'Top Skills by Region',
+                        data: Object.entries(
+                          regionalSkills.reduce((acc, item) => {
+                            acc[item.region] = (acc[item.region] || 0) + item.count;
+                            return acc;
+                          }, {})
+                        ).map(([_, count]) => count),
+                        backgroundColor: '#3182ce',
+                      }
+                    ]
+                  }}
+                  options={{
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                      legend: { display: false },
+                      tooltip: {
+                        callbacks: {
+                          afterLabel: (context) => {
+                            const region = context.label;
+                            const skills = regionalSkills
+                              .filter(d => d.region === region)
+                              .sort((a, b) => b.count - a.count)
+                              .slice(0, 3)
+                              .map(d => `${d.skill}: ${d.count}`)
+                              .join(', ');
+                            return `Top skills: ${skills}`;
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      x: { beginAtZero: true, ticks: { stepSize: 1 } },
+                      y: { ticks: { font: { size: 11 } } }
+                    }
+                  }}
                 />
               </div>
             ) : (

@@ -1971,6 +1971,28 @@ def crm_dashboard():
         """
     ).to_dict(orient="records")
 
+    # Regional Skills Distribution - Top skills by major cities
+    regional_skills = _query_df(
+        """
+        MATCH (p:Person)-[:LIVES_AT]->(a:Address)
+        MATCH (p)-[:HAS_SKILL]->(s:Skill)
+        WITH a, s,
+          CASE 
+            WHEN toLower(a.fullAddress) CONTAINS 'თბილისი' OR toLower(a.fullAddress) CONTAINS 'tbilisi' THEN 'Tbilisi'
+            WHEN toLower(a.fullAddress) CONTAINS 'ბათუმი' OR toLower(a.fullAddress) CONTAINS 'batumi' THEN 'Batumi'
+            WHEN toLower(a.fullAddress) CONTAINS 'ქუთაისი' OR toLower(a.fullAddress) CONTAINS 'kutaisi' THEN 'Kutaisi'
+            WHEN toLower(a.fullAddress) CONTAINS 'რუსთავი' OR toLower(a.fullAddress) CONTAINS 'rustavi' THEN 'Rustavi'
+            WHEN toLower(a.fullAddress) CONTAINS 'გორი' OR toLower(a.fullAddress) CONTAINS 'gori' THEN 'Gori'
+            WHEN toLower(a.fullAddress) CONTAINS 'ზუგდიდი' OR toLower(a.fullAddress) CONTAINS 'zugdidi' THEN 'Zugdidi'
+            WHEN toLower(a.fullAddress) CONTAINS 'თელავი' OR toLower(a.fullAddress) CONTAINS 'telavi' THEN 'Telavi'
+            ELSE 'Other'
+          END AS region
+        WHERE region <> 'Other'
+        RETURN region, s.name AS skill, count(p) AS count
+        ORDER BY region, count DESC
+        """
+    ).to_dict(orient="records")
+
     return {
         "metrics": {
             "total_people": total_people,
@@ -1997,6 +2019,7 @@ def crm_dashboard():
             "timeAvailabilityGrouped": time_availability_grouped,
             "involvement": involve_df.to_dict(orient="records") if not involve_df.empty else [],
             "skills": skills_df.to_dict(orient="records") if not skills_df.empty else [],
+            "regionalSkills": regional_skills,
             "combinedExpertise": combined_expertise,
             "taskFeed": task_feed,
         },
