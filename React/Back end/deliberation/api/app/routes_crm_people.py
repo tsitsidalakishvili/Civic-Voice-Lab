@@ -353,11 +353,34 @@ def _build_supporter_invite_url(invite_code: str, supporter_type: str = "Support
 
 
 def _build_supporter_invite_email_message(recipient_name: str, invite_url: str, supporter_type: str = "Supporter"):
-    return invite_url
+    name = recipient_name or "friend"
+    type_label = _normalize_supporter_type(supporter_type, "Supporter").lower()
+    return f"""
+Hello, {name}!
+
+Here is your Freedom Square {type_label} signup form.
+Please click the link below and complete the form:
+
+{invite_url}
+
+Best regards,
+The Freedom Square Team
+""".strip()
 
 
 def _build_supporter_reminder_email_message(recipient_name: str, invite_url: str):
-    return invite_url
+    name = recipient_name or "friend"
+    return f"""
+Hello, {name}!
+
+This is a reminder that you were invited to join the Freedom Square supporter group.
+Please click the link below to complete your registration:
+
+{invite_url}
+
+Best regards,
+The Freedom Square Team
+""".strip()
 
 
 def _send_supporter_invite_email(recipient_email: str, recipient_name: str, invite_code: str, supporter_type: str):
