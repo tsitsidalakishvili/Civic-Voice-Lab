@@ -3109,6 +3109,7 @@ button.module-flow__step:hover {
   color: var(--text);
   align-items: center;
   flex-wrap: wrap;
+  margin-right: 90px;
 }
 
 .legend-dot {

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import sys
 import time
 from pathlib import Path
@@ -118,7 +119,8 @@ def load_people(skip_geocoded: bool = False) -> list[dict]:
                  coalesce(p.lat, addr.lat, addr.latitude) AS lat,
                  coalesce(p.lon, addr.lon, addr.longitude) AS lon
             WHERE $skip_geocoded = false OR p.geocodedAt IS NULL
-            RETURN p.email AS email,
+            RETURN coalesce(p.personId, elementId(p)) AS personId,
+                   p.email AS email,
                    p.firstName AS firstName,
                    p.lastName AS lastName,
                    address AS address,
@@ -132,12 +134,13 @@ def load_people(skip_geocoded: bool = False) -> list[dict]:
     return rows
 
 
-def update_person(email: str, lat: float, lon: float, neighbourhood: Optional[str]) -> None:
+def update_person(person_id: str, lat: float, lon: float, neighbourhood: Optional[str]) -> None:
     driver = get_driver()
     with driver.session() as session:
         session.run(
             """
-            MATCH (p:Person {email: $email})
+            MATCH (p:Person)
+            WHERE coalesce(p.personId, elementId(p)) = $personId
             OPTIONAL MATCH (p)-[:LIVES_AT]->(addr:Address)
             SET p.lat = $lat,
                 p.lon = $lon,
@@ -153,12 +156,26 @@ def update_person(email: str, lat: float, lon: float, neighbourhood: Optional[st
                     addr.longitude = $lon
             )
             """,
-            {"email": email, "lat": lat, "lon": lon, "neighbourhood": neighbourhood},
+            {"personId": person_id, "lat": lat, "lon": lon, "neighbourhood": neighbourhood},
         )
 
 
 def _rows_are_equal(a: float, b: float, tol: float = 1e-6) -> bool:
     return abs(a - b) < tol
+
+
+def _jitter_coord(email: str, base_lat: float, base_lon: float, spread: float = 0.008) -> tuple[float, float]:
+    """Return a deterministic offset around the base coordinate for this email.
+
+    Spread is in decimal degrees; 0.008 degrees is roughly 0.9 km around Tbilisi.
+    """
+    h = hashlib.sha256(email.lower().encode()).digest()
+    # Convert first 8 bytes to a signed float in [-1, 1]
+    int_val = int.from_bytes(h[:8], "big", signed=True)
+    norm_lat = int_val / (2**63 - 1)
+    int_val = int.from_bytes(h[8:16], "big", signed=True)
+    norm_lon = int_val / (2**63 - 1)
+    return (base_lat + norm_lat * spread, base_lon + norm_lon * spread)
 
 
 def main() -> None:
@@ -200,6 +217,7 @@ def main() -> None:
         writer.writeheader()
 
         for i, row in enumerate(rows, start=1):
+            person_id = _clean_text(row.get("personId"))
             email = _clean_text(row.get("email"))
             address = _clean_text(row.get("address"))
             name = f"{row.get('firstName') or ''} {row.get('lastName') or ''}".strip()
@@ -207,9 +225,11 @@ def main() -> None:
             old_lon = row.get("lon")
             old_neighbourhood = row.get("neighbourhood")
 
-            if not email:
-                print(f"[{i}/{len(rows)}] skipped: no email for {name or 'unknown'}")
+            if not person_id:
+                print(f"[{i}/{len(rows)}] skipped: no personId for {name or 'unknown'}")
                 continue
+
+            key_for_jitter = email or person_id
 
             # Empty / nan addresses are intentionally placed at Tbilisi center.
             if _looks_like_nan(address):
@@ -219,19 +239,33 @@ def main() -> None:
                 result = geocode_with_nominatim(address)
                 status = "ok"
             if result is None:
-                failed += 1
-                status = "failed"
-                new_lat = old_lat
-                new_lon = old_lon
-                new_neighbourhood = old_neighbourhood
-                display_name = ""
+                # If the address was not found and the record is currently at the
+                # generic Tbilisi center, spread it slightly so the map does not
+                # stack hundreds of people on one dot. Keep non-Tbilisi coordinates.
+                if _rows_are_equal(old_lat or 0, TBILISI_CENTER["lat"]) and _rows_are_equal(
+                    old_lon or 0, TBILISI_CENTER["lon"]
+                ):
+                    new_lat, new_lon = _jitter_coord(key_for_jitter, TBILISI_CENTER["lat"], TBILISI_CENTER["lon"])
+                    new_neighbourhood = None
+                    display_name = "jittered Tbilisi center"
+                    status = "jittered"
+                    if not args.dry_run:
+                        update_person(person_id, new_lat, new_lon, new_neighbourhood)
+                    updated += 1
+                else:
+                    failed += 1
+                    status = "failed"
+                    new_lat = old_lat
+                    new_lon = old_lon
+                    new_neighbourhood = old_neighbourhood
+                    display_name = ""
             else:
                 new_lat = result["lat"]
                 new_lon = result["lon"]
                 new_neighbourhood = result["neighbourhood"]
                 display_name = result.get("display_name", "")
                 if not args.dry_run:
-                    update_person(email, new_lat, new_lon, new_neighbourhood)
+                    update_person(person_id, new_lat, new_lon, new_neighbourhood)
                 updated += 1
                 if _rows_are_equal(old_lat or 0, new_lat) and _rows_are_equal(old_lon or 0, new_lon):
                     unchanged += 1
@@ -239,7 +273,7 @@ def main() -> None:
 
             writer.writerow(
                 {
-                    "email": email,
+                    "email": email or person_id,
                     "name": name,
                     "address": address,
                     "old_lat": old_lat,
@@ -252,7 +286,7 @@ def main() -> None:
                 }
             )
 
-            print(f"[{i}/{len(rows)}] {status}: {email} -> {new_lat}, {new_lon}")
+            print(f"[{i}/{len(rows)}] {status}: {email or person_id} -> {new_lat}, {new_lon}")
             if i < len(rows) and not _looks_like_nan(address):
                 time.sleep(SLEEP_SECONDS)
 
