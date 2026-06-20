@@ -7986,11 +7986,22 @@ function CRMMapTab() {
     return Object.values(groups)
   }, [filtered])
 
+  const GEORGIA_CENTER = [42.0, 43.5]
+  const GEORGIA_BOUNDS = [
+    [39.0, 39.0],
+    [44.5, 48.0],
+  ]
+
   const center = useMemo(() => {
-    if (!filtered.length) return [0, 0]
+    if (!filtered.length) return GEORGIA_CENTER
     const lat = filtered.reduce((sum, row) => sum + Number(row.lat || 0), 0) / filtered.length
     const lon = filtered.reduce((sum, row) => sum + Number(row.lon || 0), 0) / filtered.length
-    return [lat, lon]
+    // Keep the computed center within Georgia-ish bounds so a single city cluster
+    // doesn't drag the initial view far away from the country.
+    if (lat >= 39 && lat <= 44.5 && lon >= 39 && lon <= 48) {
+      return [lat, lon]
+    }
+    return GEORGIA_CENTER
   }, [filtered])
 
   const handleResetFilters = () => {
@@ -8173,7 +8184,7 @@ function CRMMapTab() {
         ) : filtered.length === 0 ? (
           <p className="muted">No map points for the selected filters.</p>
         ) : (
-          <MapContainer center={center} zoom={11} className="map-canvas">
+          <MapContainer center={center} zoom={7} maxBounds={GEORGIA_BOUNDS} className="map-canvas">
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             {clusteredMarkers.map((cluster) => {
               const color = Array.isArray(cluster.color)
@@ -8192,8 +8203,8 @@ function CRMMapTab() {
               <CircleMarker
                 key={`${cluster.lat},${cluster.lon}`}
                 center={[cluster.lat, cluster.lon]}
-                pathOptions={{ color, fillOpacity: isMultiple ? 0.8 : 0.6 }}
-                radius={Math.max(6, Math.min(20, 4 + cluster.count * 2))}
+                pathOptions={{ color, fillOpacity: 0.9, opacity: 1, weight: 1 }}
+                radius={Math.min(6, 4 + cluster.count * 0.5)}
               >
                 <Popup>
                   {isMultiple ? (
