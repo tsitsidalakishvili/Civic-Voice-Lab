@@ -247,8 +247,13 @@ export function PublicSupporterSignup({
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!form.email.trim()) {
-      setStatus('გთხოვთ, შეავსოთ სავალდებულო ველი: ელ. ფოსტა')
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.birthDate || !form.email.trim() || !form.phone.trim() || !form.address.trim() || !form.profession.trim() || !form.socialMedia.trim() || !form.formerPartyMember || !form.timeAvailability || form.interests.length === 0 || !form.whatsappGroup || !form.interestedInMembership) {
+      setStatus('გთხოვთ, შეავსოთ ყველა სავალდებულო ველი')
+      setStatusTone('error')
+      return
+    }
+    if (!form.agreesWithManifesto) {
+      setStatus('გთხოვთ, დაეთანხმოთ მანიფესტს')
       setStatusTone('error')
       return
     }
@@ -364,29 +369,33 @@ export function PublicSupporterSignup({
                 >
                   <div className="form-grid">
             <FormSection title="პერსონალური ინფორმაცია">
-              <Field id="supporter-first-name" label="სახელი">
+              <Field id="supporter-first-name" label="სახელი *" required>
                 <TextInput
                   value={form.firstName}
                   onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  required
                 />
               </Field>
-              <Field id="supporter-last-name" label="გვარი">
+              <Field id="supporter-last-name" label="გვარი *" required>
                 <TextInput
                   value={form.lastName}
                   onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  required
                 />
               </Field>
-              <Field id="supporter-birth-date" label="დაბადების თარიღი">
+              <Field id="supporter-birth-date" label="დაბადების თარიღი *" required>
                 <TextInput
                   type="date"
                   value={form.birthDate}
                   onChange={(event) => setForm((prev) => ({ ...prev, birthDate: event.target.value }))}
+                  required
                 />
               </Field>
-              <Field id="supporter-phone" label="ტელეფონის ნომერი">
+              <Field id="supporter-phone" label="ტელეფონის ნომერი *" required>
                 <TextInput
                   value={form.phone}
                   onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  required
                 />
               </Field>
               <Field id="supporter-email" label="ელ. ფოსტა *" required>
@@ -397,28 +406,31 @@ export function PublicSupporterSignup({
                   required
                 />
               </Field>
-              <Field id="supporter-address" label="საცხოვრებელი ადგილი (ქალაქი, ქუჩის ნომერი)">
+              <Field id="supporter-address" label="საცხოვრებელი ადგილი (ქალაქი, ქუჩის ნომერი) *" required>
                 <TextInput
                   value={form.address}
                   onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+                  required
                 />
               </Field>
-              <Field id="supporter-profession" label="პროფესია / საქმიანობის სფერო">
+              <Field id="supporter-profession" label="პროფესია / საქმიანობის სფერო *" required>
                 <TextInput
                   value={form.profession}
                   onChange={(event) => setForm((prev) => ({ ...prev, profession: event.target.value }))}
+                  required
                 />
               </Field>
-              <Field id="supporter-social-media" label="სოციალური ქსელები (Facebook / Instagram)">
+              <Field id="supporter-social-media" label="სოციალური ქსელები (Facebook / Instagram) *" required>
                 <TextInput
                   value={form.socialMedia}
                   onChange={(event) => setForm((prev) => ({ ...prev, socialMedia: event.target.value }))}
+                  required
                 />
               </Field>
             </FormSection>
 
             <FormSection title="გაგვეცანით">
-              <Field id="supporter-former-party-member" label="ყოფილხართ თუ არა რომელიმე პოლიტიკური პარტიის წევრი?">
+              <Field id="supporter-former-party-member" label="ყოფილხართ თუ არა რომელიმე პოლიტიკური პარტიის წევრი? *" required>
                 <Select
                   value={form.formerPartyMember}
                   onChange={(value) => setForm((prev) => ({ ...prev, formerPartyMember: value || '' }))}
@@ -426,25 +438,28 @@ export function PublicSupporterSignup({
                     { value: 'დიახ', label: 'დიახ' },
                     { value: 'არა', label: 'არა' },
                   ]}
+                  required
                 />
               </Field>
-              <Field id="supporter-time-availability" label="რა დროს დაუთმობთ ჩვენს საქმიანობას ?">
+              <Field id="supporter-time-availability" label="რა დროს დაუთმობთ ჩვენს საქმიანობას ? *" required>
                 <Select
                   value={form.timeAvailability}
                   onChange={(value) => setForm((prev) => ({ ...prev, timeAvailability: value || '' }))}
                   data={availabilityOptions}
+                  required
                 />
               </Field>
-              <Field id="supporter-interests" label="გთხოვთ, მონიშნოთ თქვენთვის საინტერესო თემები და მიმართულებები:">
+              <Field id="supporter-interests" label="გთხოვთ, მონიშნოთ თქვენთვის საინტერესო თემები და მიმართულებები: *" required>
                 <MultiSelect
                   value={form.interests}
                   onChange={(value) => setForm((prev) => ({ ...prev, interests: value }))}
                   data={interestOptions}
                   placeholder="აირჩიეთ თემები"
                   searchable
+                  required
                 />
               </Field>
-              <Field id="supporter-whatsapp-group" label="დაგამატოთ თუ არა WhatsApp მხარდამჭერთა ჯგუფში?">
+              <Field id="supporter-whatsapp-group" label="დაგამატოთ თუ არა WhatsApp მხარდამჭერთა ჯგუფში? *" required>
                 <Select
                   value={form.whatsappGroup}
                   onChange={(value) => setForm((prev) => ({ ...prev, whatsappGroup: value || '' }))}
@@ -452,9 +467,10 @@ export function PublicSupporterSignup({
                     { value: 'დიახ', label: 'დიახ' },
                     { value: 'არა', label: 'არა' },
                   ]}
+                  required
                 />
               </Field>
-              <Field id="supporter-membership-interest" label="გსურთ თუ არა ჩვენი პარტიის წევრობა?">
+              <Field id="supporter-membership-interest" label="გსურთ თუ არა ჩვენი პარტიის წევრობა? *" required>
                 <Select
                   value={form.interestedInMembership}
                   onChange={(value) => setForm((prev) => ({ ...prev, interestedInMembership: value || '' }))}
@@ -462,6 +478,7 @@ export function PublicSupporterSignup({
                     { value: 'დიახ', label: 'დიახ' },
                     { value: 'არა', label: 'არა' },
                   ]}
+                  required
                 />
               </Field>
               <Field id="supporter-additional-comments" label="სივრცე დამატებითი კომენტარისთვის">
@@ -470,7 +487,7 @@ export function PublicSupporterSignup({
                   onChange={(event) => setForm((prev) => ({ ...prev, additionalComments: event.target.value }))}
                 />
               </Field>
-              <Field id="supporter-manifesto" label="გავეცანი &quot;თავისუფლების მოედნის&quot; მანიფესტს და სრულად ვიზიარებ მასში გაცხადებულ იდეებს.">
+              <Field id="supporter-manifesto" label="გავეცანი &quot;თავისუფლების მოედნის&quot; მანიფესტს და სრულად ვიზიარებ მასში გაცხადებულ იდეებს. *" required>
                 <Checkbox
                   checked={form.agreesWithManifesto}
                   onChange={(event) => {
@@ -481,6 +498,7 @@ export function PublicSupporterSignup({
                     }))
                   }}
                   label="ვეთანხმები მანიფესტს"
+                  required
                 />
               </Field>
             </FormSection>

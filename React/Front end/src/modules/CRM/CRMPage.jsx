@@ -7870,13 +7870,10 @@ function CRMMapTab() {
     ageGroups: [],
     timeAvailability: [],
     skills: [],
-    minEffort: 0,
-    minEvents: 0,
-    minReferrals: 0,
     addressQuery: '',
-    motivationQuery: '',
   }
   const [filters, setFilters] = useState(defaultFilters)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const normalizeCoord = (value) => {
     const num = Number(value)
     return Number.isFinite(num) ? num : null
@@ -7958,30 +7955,11 @@ function CRMMapTab() {
         !(row.skills || []).some((skill) => filters.skills.includes(skill))
       )
         return false
-      if (filters.minEffort > 0 && Number(row.effortHours || 0) < filters.minEffort)
-        return false
-      if (
-        filters.minEvents > 0 &&
-        Number(row.eventAttendCount || 0) < filters.minEvents
-      )
-        return false
-      if (
-        filters.minReferrals > 0 &&
-        Number(row.referralCount || 0) < filters.minReferrals
-      )
-        return false
       if (
         filters.addressQuery &&
         !String(row.addressLabel || '')
           .toLowerCase()
           .includes(filters.addressQuery.toLowerCase())
-      )
-        return false
-      if (
-        filters.motivationQuery &&
-        !String(row.about || '')
-          .toLowerCase()
-          .includes(filters.motivationQuery.toLowerCase())
       )
         return false
       return true
@@ -8020,193 +7998,10 @@ function CRMMapTab() {
   }
 
   return (
-    <div className="module-layout">
-      <aside className="module-sidebar">
-        {error ? <div className="module-alert">{error}</div> : null}
-        <div className="sidebar-card sidebar-card--accent">
-          <div className="card-header">
-            <div>
-              <h3>Map filters</h3>
-              <p className="muted">Filter supporters and members shown on the map.</p>
-            </div>
-          </div>
-          <div className="stack">
-            <div className="filter-section">
-              <div className="filter-section__title">Audience</div>
-              <div className="filter-group">
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={filters.showSupporters}
-                    onChange={(event) =>
-                      setFilters((prev) => ({ ...prev, showSupporters: event.target.checked }))
-                    }
-                  />
-                  Supporters
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={filters.showMembers}
-                    onChange={(event) =>
-                      setFilters((prev) => ({ ...prev, showMembers: event.target.checked }))
-                    }
-                  />
-                  Members
-                </label>
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={handleResetFilters}
-                >
-                  Reset filters
-                </button>
-              </div>
-            </div>
-
-            <details className="filter-section" open>
-              <summary>Demographics</summary>
-              <div className="filter-group">
-                <label className="label">Gender</label>
-                <select
-                  className="select select--compact"
-                  multiple
-                  value={filters.genders}
-                  onChange={(event) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      genders: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                    }))
-                  }
-                >
-                  {genderOptions.map((gender) => (
-                    <option key={gender} value={gender}>
-                      {gender === 'F' ? 'Female' : gender === 'M' ? 'Male' : gender === 'O' ? 'Other' : gender === 'U' ? 'Unspecified' : gender}
-                    </option>
-                  ))}
-                </select>
-                <label className="label">Age group</label>
-                <select
-                  className="select select--compact"
-                  multiple
-                  value={filters.ageGroups}
-                  onChange={(event) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      ageGroups: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                    }))
-                  }
-                >
-                  {ageOptions.map((age) => (
-                    <option key={age} value={age}>
-                      {age}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </details>
-
-            <details className="filter-section">
-              <summary>Availability & skills</summary>
-              <div className="filter-group">
-                <label className="label">Time availability</label>
-                <select
-                  className="select select--compact"
-                  multiple
-                  value={filters.timeAvailability}
-                  onChange={(event) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      timeAvailability: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                    }))
-                  }
-                >
-                  {timeOptions.map((time) => (
-                    <option key={time} value={time}>
-                      {time}
-                    </option>
-                  ))}
-                </select>
-                <label className="label">Skills</label>
-                <select
-                  className="select select--compact"
-                  multiple
-                  value={filters.skills}
-                  onChange={(event) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      skills: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                    }))
-                  }
-                >
-                  {skillOptions.map((skill) => (
-                    <option key={skill} value={skill}>
-                      {skill}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </details>
-
-            <details className="filter-section">
-              <summary>Engagement</summary>
-              <div className="filter-group">
-                <input
-                  className="input input--compact"
-                  type="number"
-                  placeholder="Min effort"
-                  value={filters.minEffort}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, minEffort: Number(event.target.value) }))
-                  }
-                />
-                <input
-                  className="input input--compact"
-                  type="number"
-                  placeholder="Min events"
-                  value={filters.minEvents}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, minEvents: Number(event.target.value) }))
-                  }
-                />
-                <input
-                  className="input input--compact"
-                  type="number"
-                  placeholder="Min referrals"
-                  value={filters.minReferrals}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, minReferrals: Number(event.target.value) }))
-                  }
-                />
-              </div>
-            </details>
-
-            <details className="filter-section">
-              <summary>Text filters</summary>
-              <div className="filter-group">
-                <input
-                  className="input input--compact"
-                  placeholder="Address contains"
-                  value={filters.addressQuery}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, addressQuery: event.target.value }))
-                  }
-                />
-                <input
-                  className="input input--compact"
-                  placeholder="Motivation contains"
-                  value={filters.motivationQuery}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, motivationQuery: event.target.value }))
-                  }
-                />
-              </div>
-            </details>
-          </div>
-        </div>
-      </aside>
-      <div className="module-main">
-        <div className="module-card module-card__wide panel panel--highlight">
+    <div className="stack">
+    <div className="module-layout module-layout--map">
+      <div className="module-main module-main--map">
+        <div className="module-card module-card__wide panel panel--highlight map-card" style={{gridColumn: '1 / -1'}}>
         <div className="card-header">
           <div>
             <h3>Map view</h3>
@@ -8222,6 +8017,156 @@ function CRMMapTab() {
               Member
             </span>
           </div>
+        </div>
+        <div className="map-filters">
+          <button
+            className="map-filters__toggle"
+            type="button"
+            onClick={() => setFiltersOpen((prev) => !prev)}
+            aria-expanded={filtersOpen}
+          >
+            {filtersOpen ? 'Close' : 'Filters'}
+          </button>
+          {filtersOpen && (
+            <div className="map-filters__panel">
+              <div className="map-filters__header">
+                <h4>Map filters</h4>
+                <p className="muted">Filter supporters and members shown on the map.</p>
+              </div>
+              <div className="map-filters__body">
+                <div className="filter-section">
+                  <div className="filter-section__title">Audience</div>
+                  <div className="filter-group">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={filters.showSupporters}
+                        onChange={(event) =>
+                          setFilters((prev) => ({ ...prev, showSupporters: event.target.checked }))
+                        }
+                      />
+                      Supporters
+                    </label>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={filters.showMembers}
+                        onChange={(event) =>
+                          setFilters((prev) => ({ ...prev, showMembers: event.target.checked }))
+                        }
+                      />
+                      Members
+                    </label>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleResetFilters}
+                    >
+                      Reset filters
+                    </button>
+                  </div>
+                </div>
+
+                <details className="filter-section" open>
+                  <summary>Demographics</summary>
+                  <div className="filter-group">
+                    <label className="label">Gender</label>
+                    <select
+                      className="select select--compact"
+                      multiple
+                      value={filters.genders}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          genders: Array.from(event.target.selectedOptions, (opt) => opt.value),
+                        }))
+                      }
+                    >
+                      {genderOptions.map((gender) => (
+                        <option key={gender} value={gender}>
+                          {gender === 'F' ? 'Female' : gender === 'M' ? 'Male' : gender === 'O' ? 'Other' : gender === 'U' ? 'Unspecified' : gender}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="label">Age group</label>
+                    <select
+                      className="select select--compact"
+                      multiple
+                      value={filters.ageGroups}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          ageGroups: Array.from(event.target.selectedOptions, (opt) => opt.value),
+                        }))
+                      }
+                    >
+                      {ageOptions.map((age) => (
+                        <option key={age} value={age}>
+                          {age}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </details>
+
+                <details className="filter-section">
+                  <summary>Availability & skills</summary>
+                  <div className="filter-group">
+                    <label className="label">Time availability</label>
+                    <select
+                      className="select select--compact"
+                      multiple
+                      value={filters.timeAvailability}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          timeAvailability: Array.from(event.target.selectedOptions, (opt) => opt.value),
+                        }))
+                      }
+                    >
+                      {timeOptions.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="label">Skills</label>
+                    <select
+                      className="select select--compact"
+                      multiple
+                      value={filters.skills}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          skills: Array.from(event.target.selectedOptions, (opt) => opt.value),
+                        }))
+                      }
+                    >
+                      {skillOptions.map((skill) => (
+                        <option key={skill} value={skill}>
+                          {skill}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </details>
+
+                <details className="filter-section">
+                  <summary>Text filters</summary>
+                  <div className="filter-group">
+                    <input
+                      className="input input--compact"
+                      placeholder="Address contains"
+                      value={filters.addressQuery}
+                      onChange={(event) =>
+                        setFilters((prev) => ({ ...prev, addressQuery: event.target.value }))
+                      }
+                    />
+                  </div>
+                </details>
+              </div>
+            </div>
+          )}
         </div>
         {loading ? (
           <p className="muted">Loading map...</p>
@@ -8290,39 +8235,38 @@ function CRMMapTab() {
           </MapContainer>
         )}
         </div>
-        <div className="module-card module-card__wide panel">
-        <div className="card-header">
-          <div>
-            <h3>Filtered people</h3>
-            <p className="muted">Results update as filters change.</p>
-          </div>
-        </div>
-        <div className="table table--scroll">
-          <div className="table-row table-row--map table-head">
-            <span>Name</span>
-            <span>Email</span>
-            <span>Group</span>
-            <span>Age</span>
-            <span>Gender</span>
-            <span>Time</span>
-            <span>Effort</span>
-            <span>Events</span>
-          </div>
-          {filtered.map((row) => (
-            <div className="table-row table-row--map" key={row.email}>
-              <span>{row.fullName}</span>
-              <span>{row.email}</span>
-              <span>{row.group}</span>
-              <span>{row.ageGroup}</span>
-              <span>{row.gender === 'F' ? 'Female' : row.gender === 'M' ? 'Male' : row.gender === 'O' ? 'Other' : row.gender === 'U' ? 'Unspecified' : row.gender || '—'}</span>
-              <span>{row.timeAvailability}</span>
-              <span>{row.effortHours ?? 0}</span>
-              <span>{row.eventAttendCount ?? 0}</span>
-            </div>
-          ))}
-        </div>
+      </div>
+    </div>
+    <div className="module-card module-card__wide panel crm-map-layout__people-table">
+      <div className="card-header">
+        <div>
+          <h3>Filtered people</h3>
+          <p className="muted">Results update as filters change.</p>
         </div>
       </div>
+      <div className="table table--scroll">
+        <div className="table-row table-row--map table-head">
+          <span>Name</span>
+          <span>Email</span>
+          <span>Group</span>
+          <span>Age</span>
+          <span>Gender</span>
+          <span>Time</span>
+          <span>Events</span>
+        </div>
+        {filtered.map((row) => (
+          <div className="table-row table-row--map" key={row.email}>
+            <span>{row.fullName}</span>
+            <span>{row.email}</span>
+            <span>{row.group}</span>
+            <span>{row.age ?? '—'}</span>
+            <span>{row.gender === 'F' ? 'Female' : row.gender === 'M' ? 'Male' : row.gender === 'O' ? 'Other' : row.gender === 'U' ? 'Unspecified' : row.gender || '—'}</span>
+            <span>{row.timeAvailability}</span>
+            <span>{row.eventAttendCount ?? 0}</span>
+          </div>
+        ))}
+      </div>
+    </div>
     </div>
   )
 }

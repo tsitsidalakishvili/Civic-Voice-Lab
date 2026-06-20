@@ -85,29 +85,6 @@ def render_map_page():
                     "Skills", skill_options, default=[], key="map_skills"
                 )
 
-            with st.expander("Engagement", expanded=False):
-                min_effort = st.number_input(
-                    "Minimum Effort Hours",
-                    min_value=0.0,
-                    value=0.0,
-                    step=1.0,
-                    key="map_min_effort",
-                )
-                min_events = st.number_input(
-                    "Minimum Events Attended",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    key="map_min_events",
-                )
-                min_referrals = st.number_input(
-                    "Minimum Referrals",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    key="map_min_referrals",
-                )
-
             with st.expander("Text search", expanded=False):
                 address_query = st.text_input(
                     "Address / Location Contains", value="", key="map_address_query"
@@ -130,9 +107,6 @@ def render_map_page():
                 "map_age_groups": [],
                 "map_time": [],
                 "map_skills": [],
-                "map_min_effort": 0.0,
-                "map_min_events": 0,
-                "map_min_referrals": 0,
                 "map_address_query": "",
                 "map_motivation_query": "",
             }
@@ -165,12 +139,6 @@ def render_map_page():
         df_filtered = df_filtered[
             df_filtered["about"].str.contains(motivation_query, case=False, na=False)
         ]
-    if min_effort > 0:
-        df_filtered = df_filtered[df_filtered["effortHours"] >= min_effort]
-    if min_events > 0:
-        df_filtered = df_filtered[df_filtered["eventAttendCount"] >= min_events]
-    if min_referrals > 0:
-        df_filtered = df_filtered[df_filtered["referralCount"] >= min_referrals]
 
     with map_col:
         if df_filtered.empty:
@@ -219,34 +187,6 @@ def render_map_page():
         st.pydeck_chart(deck, use_container_width=True)
 
         st.markdown("---")
-        st.markdown("### Filtered People (Table View)")
-        table_df = df_filtered[
-            [
-                "fullName",
-                "email",
-                "group",
-                "timeAvailability",
-                "ageGroup",
-                "gender",
-                "addressLabel",
-                "involvementLabel",
-                "skillsLabel",
-                "ratingStars",
-                "about",
-            ]
-        ].rename(
-            columns={
-                "fullName": "Name",
-                "email": "Email",
-                "group": "Group",
-                "timeAvailability": "Time Availability",
-                "ageGroup": "Age Group",
-                "gender": "Gender",
-                "addressLabel": "Address",
-                "involvementLabel": "Involvement",
-                "skillsLabel": "How They Can Help",
-                "ratingStars": "Rating",
-                "about": "Motivation",
-            }
-        )
-        st.dataframe(table_df, use_container_width=True)
+        with st.expander("Filtered people"):
+            table_df = df_filtered[["fullName"]].rename(columns={"fullName": "Name"})
+            st.dataframe(table_df, use_container_width=True)

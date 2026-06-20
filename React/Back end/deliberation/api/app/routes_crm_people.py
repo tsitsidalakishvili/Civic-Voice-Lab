@@ -169,6 +169,7 @@ class MapPersonOut(BaseModel):
     lat: float
     lon: float
     time_availability: str = Field(alias="timeAvailability")
+    age: Optional[int] = None
     age_group: str = Field(alias="ageGroup")
     gender: str = "Unspecified"
     skills: List[str] = []
@@ -270,19 +271,19 @@ class SupporterInviteReminderCreate(BaseModel):
 
 
 class SupporterSignupCreate(BaseModel):
-    first_name: Optional[str] = Field(alias="firstName", default="")
-    last_name: Optional[str] = Field(alias="lastName", default="")
-    birth_date: Optional[str] = Field(alias="birthDate", default="")
+    first_name: str = Field(alias="firstName", min_length=1)
+    last_name: str = Field(alias="lastName", min_length=1)
+    birth_date: str = Field(alias="birthDate", min_length=1)
     email: str
-    phone: Optional[str] = ""
-    address: Optional[str] = ""
-    profession: Optional[str] = ""
-    social_media: Optional[str] = Field(alias="socialMedia", default="")
-    former_party_member: Optional[str] = Field(alias="formerPartyMember", default="")
-    time_availability: Optional[str] = Field(alias="timeAvailability", default="")
-    interests: List[str] = Field(default_factory=list)
-    whatsapp_group: Optional[str] = Field(alias="whatsappGroup", default="")
-    interested_in_membership: Optional[str] = Field(alias="interestedInMembership", default="")
+    phone: str = Field(min_length=1)
+    address: str = Field(min_length=1)
+    profession: str = Field(min_length=1)
+    social_media: str = Field(alias="socialMedia", min_length=1)
+    former_party_member: str = Field(alias="formerPartyMember", min_length=1)
+    time_availability: str = Field(alias="timeAvailability", min_length=1)
+    interests: List[str] = Field(default_factory=list, min_length=1)
+    whatsapp_group: str = Field(alias="whatsappGroup", min_length=1)
+    interested_in_membership: str = Field(alias="interestedInMembership", min_length=1)
     additional_comments: Optional[str] = Field(alias="additionalComments", default="")
     agrees_with_manifesto: bool = Field(alias="agreesWithManifesto", default=False)
     invite_code: Optional[str] = Field(alias="inviteCode", default="")
@@ -310,6 +311,10 @@ def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
     last_name = _clean_text(payload.last_name)
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
+    if not first_name:
+        raise HTTPException(status_code=400, detail="First name is required")
+    if not last_name:
+        raise HTTPException(status_code=400, detail="Last name is required")
 
     return {
         "email": email,
@@ -2240,7 +2245,15 @@ def crm_map_data():
     # Filter to only include records with valid coordinates
     df = df[df["lat"].notna() & df["lon"].notna()]
     df = df.where(pd.notnull(df), None)
-    return df.to_dict(orient="records")
+    records = df.to_dict(orient="records")
+    for record in records:
+        if "age" in record:
+            value = record["age"]
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                record["age"] = None
+            else:
+                record["age"] = int(value)
+    return records
 
 
 # ---------------------------------------------------------------------------

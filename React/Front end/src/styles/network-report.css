@@ -1,5 +1,5 @@
 .network-report {
-  width: min(100%, 1760px);
+  width: min(100%, 1920px);
   margin: 0 auto;
 }
 
@@ -29,7 +29,7 @@
 }
 
 .module--crm-radical {
-  width: min(100%, 1840px);
+  width: min(100%, 1920px);
   margin-inline: auto;
 }
 
@@ -50,13 +50,28 @@
   min-height: 620px;
 }
 
-@media (min-width: 1440px) {
+@media (min-width: 1024px) {
   .app-shell {
-    padding-inline: 20px;
+    max-width: none;
+    padding-inline: 8px;
+  }
+
+  .app-shell__layout {
+    gap: 8px;
   }
 
   .module--crm-radical {
-    padding: 22px;
+    padding: 14px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .app-shell {
+    padding-inline: 10px;
+  }
+
+  .module--crm-radical {
+    padding: 16px;
   }
 }
 
