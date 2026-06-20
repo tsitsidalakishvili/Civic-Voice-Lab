@@ -79,14 +79,19 @@ def _parse_int(value, default):
 
 
 def _feedback_email_configured():
+    feedback_from = str(os.getenv("FEEDBACK_EMAIL_FROM") or "").strip()
     feedback_to = str(os.getenv("FEEDBACK_EMAIL_TO") or "").strip()
     smtp_host = str(os.getenv("SMTP_HOST") or "").strip()
-    return bool(feedback_to and smtp_host)
+    smtp_user = str(os.getenv("SMTP_USER") or "").strip()
+    return bool(smtp_host and (feedback_from or smtp_user or feedback_to))
 
 
-def _send_feedback_email(name: str, email: str, message: str, page: str):
+def _send_smtp_email(to_email: str, subject: str, message: str, reply_to: Optional[str] = None):
     if not _feedback_email_configured():
         return False, "not_configured", None
+    target_email = _clean_text(to_email)
+    if not target_email:
+        return False, "missing_recipient", None
     feedback_from = str(os.getenv("FEEDBACK_EMAIL_FROM") or "").strip()
     feedback_to = str(os.getenv("FEEDBACK_EMAIL_TO") or "").strip()
     smtp_host = str(os.getenv("SMTP_HOST") or "").strip()
@@ -99,25 +104,15 @@ def _send_feedback_email(name: str, email: str, message: str, page: str):
         "yes",
         "on",
     }
-    from_email = feedback_from or feedback_to
+    from_email = feedback_from or smtp_user or feedback_to
 
     msg = EmailMessage()
-    msg["Subject"] = f"Feedback ({page or 'app'})"
+    msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = feedback_to
-    if email:
-        msg["Reply-To"] = email
-    msg.set_content(
-        "\n".join(
-            [
-                f"Name: {name or 'Anonymous'}",
-                f"Email: {email or 'Not provided'}",
-                f"Page: {page or 'Unknown'}",
-                "",
-                message,
-            ]
-        )
-    )
+    msg["To"] = target_email
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    msg.set_content(message)
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
@@ -131,6 +126,24 @@ def _send_feedback_email(name: str, email: str, message: str, page: str):
         return True, "sent", None
     except Exception as exc:
         return False, "failed", str(exc)
+
+
+def _send_feedback_email(name: str, email: str, message: str, page: str):
+    feedback_to = str(os.getenv("FEEDBACK_EMAIL_TO") or "").strip()
+    return _send_smtp_email(
+        feedback_to,
+        f"Feedback ({page or 'app'})",
+        "\n".join(
+            [
+                f"Name: {name or 'Anonymous'}",
+                f"Email: {email or 'Not provided'}",
+                f"Page: {page or 'Unknown'}",
+                "",
+                message,
+            ]
+        ),
+        email or None,
+    )
 
 
 def _create_feedback_entry(
@@ -330,14 +343,16 @@ def admin_status():
     fallback = str(os.getenv("DELIBERATION_API_FALLBACK_URL") or "").strip()
     if fallback and fallback not in api_urls:
         api_urls.append(fallback)
+    feedback_from = str(os.getenv("FEEDBACK_EMAIL_FROM") or "").strip()
     feedback_to = str(os.getenv("FEEDBACK_EMAIL_TO") or "").strip()
     smtp_host = str(os.getenv("SMTP_HOST") or "").strip()
+    smtp_user = str(os.getenv("SMTP_USER") or "").strip()
     return {
         "neo4j_status": neo4j_status,
         "deliberation_status": deliberation_status,
         "api_urls": [u for u in api_urls if u],
-        "feedback_configured": bool(feedback_to and smtp_host),
-        "feedback_from": str(os.getenv("FEEDBACK_EMAIL_FROM") or "").strip() or None,
+        "feedback_configured": bool(smtp_host and (feedback_from or smtp_user or feedback_to)),
+        "feedback_from": feedback_from or smtp_user or None,
         "feedback_to": feedback_to or None,
         "whatsapp_configured": bool(str(os.getenv("WHATSAPP_GROUP_WEBHOOK_URL") or "").strip()),
         "slack_configured": bool(str(os.getenv("SLACK_WEBHOOK_URL") or "").strip()),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getJson,
   requestForm,
@@ -26,6 +26,7 @@ import {
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import '../../styles/network-report.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
@@ -721,11 +722,15 @@ export function CRMPage({
           },
         })
       }
+      const targetEmail =
+        selectedChannel === 'email' && selectedAudience !== 'individual'
+          ? getInviteAudienceGroupEmail(selectedAudience, supporterInviteGroupsConfig)
+          : recipientEmail
       const payload = await requestJson('/crm/supporter-invites', {
         method: 'POST',
         payload: {
           recipientName,
-          recipientEmail,
+          recipientEmail: targetEmail,
           recipientPhone,
           channel: selectedChannel,
           inviteAudience: selectedAudience,
@@ -739,15 +744,25 @@ export function CRMPage({
       const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType)
       setLatestSupporterInviteLink(link)
       setLatestSupporterInviteType(inviteType)
-      await handleShareSupporterInviteByChannel({
-        channel: selectedChannel,
-        inviteAudience: selectedAudience,
-        inviteLink: link,
-        inviteType,
-        recipientName: payload?.recipientName || recipientName,
-        recipientEmail: payload?.recipientEmail || recipientEmail,
-        recipientPhone: payload?.recipientPhone || recipientPhone,
-      })
+      if (selectedChannel === 'email') {
+        if (payload?.emailSent) {
+          setSupporterInviteStatus(`✅ Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
+        } else {
+          setSupporterInviteStatus(
+            `⚠️ Invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
+          )
+        }
+      } else {
+        await handleShareSupporterInviteByChannel({
+          channel: selectedChannel,
+          inviteAudience: selectedAudience,
+          inviteLink: link,
+          inviteType,
+          recipientName: payload?.recipientName || recipientName,
+          recipientEmail: payload?.recipientEmail || recipientEmail,
+          recipientPhone: payload?.recipientPhone || recipientPhone,
+        })
+      }
       setSupporterInviteForm((prev) => ({
         ...prev,
         recipientName: '',
@@ -809,20 +824,28 @@ export function CRMPage({
     setSupporterInviteStatus('')
     setSupporterReminderSendingCode(invite.inviteCode)
     try {
-      await requestJson(`/crm/supporter-invites/${encodeURIComponent(invite.inviteCode)}/remind`, {
+      const response = await requestJson(`/crm/supporter-invites/${encodeURIComponent(invite.inviteCode)}/remind`, {
         method: 'POST',
         payload: {
           channel: invite.channel || 'manual',
           note: 'Manual reminder sent from People directory.',
         },
       })
+      
+      let statusMessage = ''
+      if (response.emailSent) {
+        statusMessage = `✅ Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
+      } else {
+        statusMessage = `⚠️ Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
+      }
+      
       const reminderText = buildSupporterReminderMessage(invite)
       if (navigator?.clipboard) {
         await navigator.clipboard.writeText(reminderText)
-        setSupporterInviteStatus('Reminder logged and message copied.')
-      } else {
-        setSupporterInviteStatus('Reminder logged.')
+        statusMessage += ' Message copied to clipboard.'
       }
+      
+      setSupporterInviteStatus(statusMessage)
       loadSupporterInvites()
     } catch (err) {
       setSupporterInviteError(err.message || 'Unable to send reminder.')
@@ -853,6 +876,33 @@ export function CRMPage({
       loadSupporterInvites()
     } catch (err) {
       setSupporterInviteError(err.message || 'Unable to approve supporter/member.')
+    } finally {
+      setSupporterApprovalProcessingEmail('')
+    }
+  }
+
+  const handleDeclinePendingSupporterSignup = async (person) => {
+    const email = person?.email || ''
+    const signupId = person?.signupId || ''
+    if (!email && !signupId) return
+    setSupporterInviteError('')
+    setSupporterInviteStatus('')
+    const declineKey = signupId || email
+    setSupporterApprovalProcessingEmail(declineKey)
+    try {
+      if (signupId) {
+        await requestJson(`/crm/supporter-signups/by-id/${encodeURIComponent(signupId)}/decline`, {
+          method: 'POST',
+        })
+      } else {
+        await requestJson(`/crm/supporter-signups/${encodeURIComponent(email)}/decline`, {
+          method: 'POST',
+        })
+      }
+      setSupporterInviteStatus(`Declined ${email || signupId}.`)
+      loadSupporterInvites()
+    } catch (err) {
+      setSupporterInviteError(err.message || 'Unable to decline supporter/member.')
     } finally {
       setSupporterApprovalProcessingEmail('')
     }
@@ -2203,10 +2253,6 @@ export function CRMPage({
               </div>
               <div className="pill">Distribution</div>
             </div>
-            {supporterInviteError ? <div className="module-alert">{supporterInviteError}</div> : null}
-            {supporterInviteStatus ? (
-              <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
-            ) : null}
             <div className="module-card intake-tile intake-order-links">
               <div className="intake-invite-combined">
                 <div className="intake-invite-combined__pane">
@@ -2297,7 +2343,7 @@ export function CRMPage({
                       )}
                     </datalist>
                     <p className="muted">
-                      Outlook opens with this group email in To: field for{' '}
+                      Backend Gmail sends to this group email for{' '}
                       {getInviteAudienceLabel(supporterInviteForm.inviteAudience)}.
                     </p>
                   </div>
@@ -2407,6 +2453,10 @@ export function CRMPage({
               <div className="card-header">
                 <h4 className="intake-section-title">Invite pipeline</h4>
               </div>
+              {supporterInviteError ? <div className="module-alert">{supporterInviteError}</div> : null}
+              {supporterInviteStatus ? (
+                <div className="module-alert module-alert--success">{supporterInviteStatus}</div>
+              ) : null}
               <div className="form-grid" style={{ marginTop: 0 }}>
                 <div className="filter-row">
                   <button
@@ -2463,27 +2513,51 @@ export function CRMPage({
                     <span>{row.reminderCount ?? 0}</span>
                     <span className="filter-row">
                       {row.status === 'pending' ? (
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() =>
-                            handleApprovePendingSupporterSignup(
-                              row.pendingPerson || {
-                                email: row.email,
-                              },
-                            )
-                          }
-                          disabled={
-                            (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
-                            supporterApprovalProcessingEmail ===
-                              (row.pendingPerson?.signupId || row.email)
-                          }
-                        >
-                          {supporterApprovalProcessingEmail ===
-                          (row.pendingPerson?.signupId || row.email)
-                            ? 'Approving...'
-                            : 'Approve'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="button-secondary button-secondary--small"
+                            type="button"
+                            onClick={() =>
+                              handleApprovePendingSupporterSignup(
+                                row.pendingPerson || {
+                                  email: row.email,
+                                },
+                              )
+                            }
+                            disabled={
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
+                              supporterApprovalProcessingEmail ===
+                                (row.pendingPerson?.signupId || row.email)
+                            }
+                          >
+                            {supporterApprovalProcessingEmail ===
+                            (row.pendingPerson?.signupId || row.email)
+                              ? 'Approving...'
+                              : 'Approve'}
+                          </button>
+                          <button
+                            className="button-secondary button-secondary--small"
+                            type="button"
+                            onClick={() =>
+                              handleDeclinePendingSupporterSignup(
+                                row.pendingPerson || {
+                                  email: row.email,
+                                },
+                              )
+                            }
+                            disabled={
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
+                              supporterApprovalProcessingEmail ===
+                                (row.pendingPerson?.signupId || row.email)
+                            }
+                            style={{ backgroundColor: '#dc3545', borderColor: '#dc3545', color: 'white' }}
+                          >
+                            {supporterApprovalProcessingEmail ===
+                            (row.pendingPerson?.signupId || row.email)
+                              ? 'Declining...'
+                              : 'Decline'}
+                          </button>
+                        </div>
                       ) : null}
                       {row.invite && row.status === 'sent' ? (
                         <button
@@ -4221,8 +4295,80 @@ function CRMDashboardTab() {
 }
 
 function CRMOverviewTab() {
+  const reportRef = useRef(null)
+  const reportTimestamp = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'full',
+        timeStyle: 'short',
+      }).format(new Date()),
+    [],
+  )
+
+  const handlePrintReport = () => {
+    window.print()
+  }
+
+  const handleDownloadReportJpg = async () => {
+    const element = reportRef.current
+    if (!element) return
+    const width = Math.ceil(element.scrollWidth)
+    const height = Math.ceil(element.scrollHeight)
+    const clone = element.cloneNode(true)
+    clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+    const serialized = new XMLSerializer().serializeToString(clone)
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        <foreignObject width="100%" height="100%">${serialized}</foreignObject>
+      </svg>
+    `
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+    const imageUrl = URL.createObjectURL(blob)
+    const image = new Image()
+    image.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const context = canvas.getContext('2d')
+      context.fillStyle = '#f8fafc'
+      context.fillRect(0, 0, width, height)
+      context.drawImage(image, 0, 0)
+      URL.revokeObjectURL(imageUrl)
+      try {
+        const link = document.createElement('a')
+        link.download = `network-report-${new Date().toISOString().slice(0, 10)}.jpg`
+        link.href = canvas.toDataURL('image/jpeg', 0.92)
+        link.click()
+      } catch (error) {
+        handlePrintReport()
+      }
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
+      handlePrintReport()
+    }
+    image.src = imageUrl
+  }
+
   return (
-    <div className="stack">
+    <div className="stack network-report" ref={reportRef}>
+      <div className="module-card module-card__wide network-report__header">
+        <div>
+          <div className="pill">Today&apos;s Report</div>
+          <h3>Network</h3>
+        </div>
+        <div>
+          <div className="network-report__actions">
+            <button className="button-secondary button-secondary--small" type="button" onClick={handlePrintReport}>
+              Print / save PDF
+            </button>
+            <button className="button-secondary button-secondary--small" type="button" onClick={handleDownloadReportJpg}>
+              Download JPG snapshot
+            </button>
+          </div>
+          <p className="muted network-report__timestamp">Snapshot generated {reportTimestamp}</p>
+        </div>
+      </div>
       <CRMMapTab />
       <CRMDashboardTab />
     </div>

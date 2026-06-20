@@ -1,0 +1,80 @@
+.network-report {
+  width: min(100%, 1760px);
+  margin: 0 auto;
+}
+
+.network-report__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.network-report__header h3 {
+  margin: 8px 0 6px;
+  font-size: clamp(24px, 3vw, 38px);
+}
+
+.network-report__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.network-report__timestamp {
+  margin: 8px 0 0;
+  text-align: right;
+}
+
+.module--crm-radical {
+  width: min(100%, 1840px);
+  margin-inline: auto;
+}
+
+.module--crm-radical .dashboard-grid {
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 20px;
+}
+
+.module--crm-radical .chart-frame {
+  min-height: 320px;
+}
+
+.module--crm-radical .chart-frame--tall {
+  min-height: 380px;
+}
+
+.module--crm-radical .leaflet-container {
+  min-height: 620px;
+}
+
+@media (min-width: 1440px) {
+  .app-shell {
+    padding-inline: 20px;
+  }
+
+  .module--crm-radical {
+    padding: 22px;
+  }
+}
+
+@media print {
+  .app-shell__topbar,
+  .app-shell__navbar,
+  .subtabs,
+  .network-report__actions {
+    display: none !important;
+  }
+
+  .app-shell,
+  .module--crm-radical,
+  .network-report {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+}

@@ -4,6 +4,7 @@ geocoding triggers, segments, distinct-values, and furry-friend registry.
 """
 import io
 import json
+import os
 from typing import List, Optional
 from uuid import uuid4
 
@@ -36,6 +37,7 @@ from .routes_crm_helpers import (
     SegmentFilter,
     segment_filter_from_stored_value,
 )
+from .routes_crm_support import _send_smtp_email
 
 router = APIRouter()
 
@@ -268,19 +270,19 @@ class SupporterInviteReminderCreate(BaseModel):
 
 
 class SupporterSignupCreate(BaseModel):
-    first_name: str = Field(alias="firstName", min_length=1)
-    last_name: str = Field(alias="lastName", min_length=1)
+    first_name: Optional[str] = Field(alias="firstName", default="")
+    last_name: Optional[str] = Field(alias="lastName", default="")
     birth_date: Optional[str] = Field(alias="birthDate", default="")
     email: str
-    phone: str = Field(min_length=1)
-    address: str = Field(min_length=1)
-    profession: str = Field(min_length=1)
-    social_media: str = Field(alias="socialMedia", min_length=1)
-    former_party_member: str = Field(alias="formerPartyMember", min_length=1)
-    time_availability: str = Field(alias="timeAvailability", min_length=1)
+    phone: Optional[str] = ""
+    address: Optional[str] = ""
+    profession: Optional[str] = ""
+    social_media: Optional[str] = Field(alias="socialMedia", default="")
+    former_party_member: Optional[str] = Field(alias="formerPartyMember", default="")
+    time_availability: Optional[str] = Field(alias="timeAvailability", default="")
     interests: List[str] = Field(default_factory=list)
-    whatsapp_group: str = Field(alias="whatsappGroup", min_length=1)
-    interested_in_membership: str = Field(alias="interestedInMembership", min_length=1)
+    whatsapp_group: Optional[str] = Field(alias="whatsappGroup", default="")
+    interested_in_membership: Optional[str] = Field(alias="interestedInMembership", default="")
     additional_comments: Optional[str] = Field(alias="additionalComments", default="")
     agrees_with_manifesto: bool = Field(alias="agreesWithManifesto", default=False)
     invite_code: Optional[str] = Field(alias="inviteCode", default="")
@@ -308,10 +310,6 @@ def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
     last_name = _clean_text(payload.last_name)
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
-    if not first_name:
-        raise HTTPException(status_code=400, detail="First name is required")
-    if not last_name:
-        raise HTTPException(status_code=400, detail="Last name is required")
 
     return {
         "email": email,
@@ -331,6 +329,54 @@ def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
         "agreesWithManifesto": bool(payload.agrees_with_manifesto),
         "inviteCode": _clean_text(payload.invite_code),
     }
+
+def _supporter_signup_base_url():
+    configured = str(os.getenv("SUPPORTER_SIGNUP_BASE_URL") or "").strip()
+    if configured:
+        return configured
+    frontend_url = str(os.getenv("FRONTEND_PUBLIC_URL") or "").strip().rstrip("/")
+    if frontend_url:
+        return f"{frontend_url}/supporter-signup"
+    return "http://localhost:5174/supporter-signup"
+
+
+def _build_supporter_invite_url(invite_code: str, supporter_type: str = "Supporter"):
+    from urllib.parse import urlencode
+
+    base_url = _supporter_signup_base_url()
+    params = {
+        "invite_code": invite_code,
+        "supporter_type": _normalize_supporter_type(supporter_type, "Supporter").lower(),
+    }
+    separator = "&" if "?" in base_url else "?"
+    return f"{base_url}{separator}{urlencode(params)}"
+
+
+def _build_supporter_invite_email_message(recipient_name: str, invite_url: str, supporter_type: str = "Supporter"):
+    return invite_url
+
+
+def _build_supporter_reminder_email_message(recipient_name: str, invite_url: str):
+    return invite_url
+
+
+def _send_supporter_invite_email(recipient_email: str, recipient_name: str, invite_code: str, supporter_type: str):
+    invite_url = _build_supporter_invite_url(invite_code, supporter_type)
+    return _send_smtp_email(
+        recipient_email,
+        f"Freedom Square {_normalize_supporter_type(supporter_type, 'Supporter')} signup form",
+        _build_supporter_invite_email_message(recipient_name, invite_url, supporter_type),
+    )
+
+
+def _send_supporter_reminder_email(recipient_email: str, recipient_name: str, invite_code: str, supporter_type: str):
+    invite_url = _build_supporter_invite_url(invite_code, supporter_type)
+    return _send_smtp_email(
+        recipient_email,
+        "Reminder: Freedom Square signup form",
+        _build_supporter_reminder_email_message(recipient_name, invite_url),
+    )
+
 
 def _load_map_data_df() -> pd.DataFrame:
     df = _query_df(
@@ -568,6 +614,21 @@ def create_supporter_invite(payload: SupporterInviteCreate):
     invite_id = str(uuid4())
     invite_code = uuid4().hex[:12]
     supporter_type = _normalize_supporter_type(payload.supporter_type, "Supporter")
+    recipient_name = _clean_text(payload.recipient_name)
+    recipient_email = _clean_text(payload.recipient_email)
+    recipient_phone = _clean_text(payload.recipient_phone)
+    channel = _clean_text(payload.channel) or "manual"
+    invite_audience = _clean_text(payload.invite_audience) or "individual"
+    invite_email_sent = False
+    invite_email_status = "not_attempted"
+    invite_email_error = ""
+    if channel.lower() == "email":
+        invite_email_sent, invite_email_status, invite_email_error = _send_supporter_invite_email(
+            recipient_email,
+            recipient_name,
+            invite_code,
+            supporter_type,
+        )
     driver = get_driver()
     with _db_session(driver) as session:
         records = _execute_write(
@@ -584,6 +645,8 @@ def create_supporter_invite(payload: SupporterInviteCreate):
               supporterType: $supporterType,
               notes: $notes,
               status: 'sent',
+              inviteEmailStatus: $inviteEmailStatus,
+              inviteEmailError: $inviteEmailError,
               reminderCount: 0,
               createdAt: datetime()
             })
@@ -597,24 +660,33 @@ def create_supporter_invite(payload: SupporterInviteCreate):
               coalesce(inv.inviteAudience, 'individual') AS inviteAudience,
               inv.supporterType AS supporterType,
               inv.status AS status,
+              inv.inviteEmailStatus AS inviteEmailStatus,
+              inv.inviteEmailError AS inviteEmailError,
               coalesce(inv.reminderCount, 0) AS reminderCount,
               toString(inv.createdAt) AS createdAt
             """,
             {
                 "inviteId": invite_id,
                 "inviteCode": invite_code,
-                "recipientName": _clean_text(payload.recipient_name),
-                "recipientEmail": _clean_text(payload.recipient_email),
-                "recipientPhone": _clean_text(payload.recipient_phone),
-                "channel": _clean_text(payload.channel) or "manual",
-                "inviteAudience": _clean_text(payload.invite_audience) or "individual",
+                "recipientName": recipient_name,
+                "recipientEmail": recipient_email,
+                "recipientPhone": recipient_phone,
+                "channel": channel,
+                "inviteAudience": invite_audience,
                 "supporterType": supporter_type,
                 "notes": _clean_text(payload.notes),
+                "inviteEmailStatus": invite_email_status,
+                "inviteEmailError": invite_email_error or "",
             },
         )
     if not records:
         raise HTTPException(status_code=500, detail="Unable to create invite")
-    return records[0].data()
+    result = records[0].data()
+    result["emailSent"] = invite_email_sent
+    result["emailStatus"] = invite_email_status
+    if invite_email_error:
+        result["emailError"] = invite_email_error
+    return result
 
 
 @router.post("/supporter-invites/{invite_code}/remind")
@@ -622,7 +694,34 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
     code = _clean_text(invite_code)
     if not code:
         raise HTTPException(status_code=400, detail="Invite code is required")
+    
     driver = get_driver()
+    with _db_session(driver) as session:
+        invite_records = _execute_read(
+            session,
+            """
+            MATCH (inv:SupporterInvite {inviteCode: $inviteCode})
+            RETURN 
+              inv.recipientEmail AS recipientEmail,
+              inv.recipientName AS recipientName,
+              inv.inviteCode AS inviteCode,
+              coalesce(inv.supporterType, 'Supporter') AS supporterType,
+              coalesce(inv.reminderCount, 0) AS currentReminderCount
+            """,
+            {"inviteCode": code},
+        )
+    
+    if not invite_records:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    
+    invite_data = invite_records[0].data()
+    recipient_email = invite_data.get("recipientEmail")
+    recipient_name = invite_data.get("recipientName") or "მეგობარო"
+    supporter_type = invite_data.get("supporterType") or "Supporter"
+    email_sent, email_status, email_error = _send_supporter_reminder_email(
+        recipient_email, recipient_name, code, supporter_type
+    )
+    
     with _db_session(driver) as session:
         records = _execute_write(
             session,
@@ -632,23 +731,38 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
                 inv.lastReminderAt = datetime(),
                 inv.lastReminderChannel = $channel,
                 inv.lastReminderNote = $note,
+                inv.lastReminderEmailStatus = $emailStatus,
+                inv.lastReminderEmailError = $emailError,
                 inv.updatedAt = datetime()
             RETURN
               inv.inviteId AS inviteId,
               inv.inviteCode AS inviteCode,
               coalesce(inv.status, 'sent') AS status,
               coalesce(inv.reminderCount, 0) AS reminderCount,
-              toString(inv.lastReminderAt) AS lastReminderAt
+              toString(inv.lastReminderAt) AS lastReminderAt,
+              inv.lastReminderEmailStatus AS emailStatus,
+              inv.lastReminderEmailError AS emailError
             """,
             {
                 "inviteCode": code,
                 "channel": _clean_text(payload.channel) or "manual",
                 "note": _clean_text(payload.note),
+                "emailStatus": email_status,
+                "emailError": email_error or "",
             },
         )
+    
     if not records:
         raise HTTPException(status_code=404, detail="Invite not found")
-    return records[0].data()
+    
+    result = records[0].data()
+    
+    result["emailSent"] = email_sent
+    result["emailStatus"] = email_status
+    if email_error:
+        result["emailError"] = email_error
+    
+    return result
 
 
 @router.post("/supporter-signup")
@@ -958,6 +1072,109 @@ def approve_pending_supporter_signup_by_id(signup_id: str):
     if not rows:
         raise HTTPException(status_code=404, detail="Pending supporter/member not found")
     return rows[0].data()
+
+
+@router.post("/supporter-signups/{email}/decline")
+def decline_pending_supporter_signup(email: str):
+    target_email = _clean_text(email)
+    if not target_email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    driver = get_driver()
+    with _db_session(driver) as session:
+        rows = _execute_read(
+            session,
+            """
+            MATCH (signup:SupporterSignupSubmission {email: $email})
+            WHERE coalesce(signup.status, 'pending') = 'pending'
+            RETURN
+              signup.email AS email,
+              coalesce(signup.firstName, '') AS firstName,
+              coalesce(signup.lastName, '') AS lastName,
+              coalesce(signup.phone, '') AS phone,
+              coalesce(signup.birthDate, '') AS birthDate,
+              coalesce(signup.address, '') AS address,
+              coalesce(signup.profession, '') AS profession,
+              coalesce(signup.socialMedia, '') AS socialMedia,
+              coalesce(signup.formerPartyMember, '') AS formerPartyMember,
+              coalesce(signup.timeAvailability, '') AS timeAvailability,
+              coalesce(signup.interests, []) AS interests,
+              coalesce(signup.whatsappGroup, '') AS whatsappGroup,
+              coalesce(signup.interestedInMembership, '') AS interestedInMembership,
+              coalesce(signup.additionalComments, '') AS additionalComments,
+              coalesce(signup.agreesWithManifesto, false) AS agreesWithManifesto,
+              coalesce(signup.inviteCode, '') AS inviteCode,
+              toString(signup.createdAt) AS createdAt
+            """,
+            {"email": target_email},
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Pending supporter/member not found")
+        
+        # Update signup status to declined
+        _execute_write(
+            session,
+            """
+            MATCH (signup:SupporterSignupSubmission {email: $email})
+            WHERE coalesce(signup.status, 'pending') = 'pending'
+            SET signup.status = 'declined',
+                signup.declinedAt = datetime(),
+                signup.updatedAt = datetime()
+            """,
+            {"email": target_email},
+        )
+    return {"email": target_email, "status": "declined"}
+
+
+@router.post("/supporter-signups/by-id/{signup_id}/decline")
+def decline_pending_supporter_signup_by_id(signup_id: str):
+    target_signup_id = _clean_text(signup_id)
+    if not target_signup_id:
+        raise HTTPException(status_code=400, detail="Signup id is required")
+    driver = get_driver()
+    with _db_session(driver) as session:
+        rows = _execute_read(
+            session,
+            """
+            MATCH (signup:SupporterSignupSubmission {signupId: $signupId})
+            WHERE coalesce(signup.status, 'pending') = 'pending'
+            RETURN
+              signup.signupId AS signupId,
+              signup.email AS email,
+              coalesce(signup.firstName, '') AS firstName,
+              coalesce(signup.lastName, '') AS lastName,
+              coalesce(signup.phone, '') AS phone,
+              coalesce(signup.birthDate, '') AS birthDate,
+              coalesce(signup.address, '') AS address,
+              coalesce(signup.profession, '') AS profession,
+              coalesce(signup.socialMedia, '') AS socialMedia,
+              coalesce(signup.formerPartyMember, '') AS formerPartyMember,
+              coalesce(signup.timeAvailability, '') AS timeAvailability,
+              coalesce(signup.interests, []) AS interests,
+              coalesce(signup.whatsappGroup, '') AS whatsappGroup,
+              coalesce(signup.interestedInMembership, '') AS interestedInMembership,
+              coalesce(signup.additionalComments, '') AS additionalComments,
+              coalesce(signup.agreesWithManifesto, false) AS agreesWithManifesto,
+              coalesce(signup.inviteCode, '') AS inviteCode,
+              toString(signup.createdAt) AS createdAt
+            """,
+            {"signupId": target_signup_id},
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Pending supporter/member not found")
+        
+        # Update signup status to declined
+        _execute_write(
+            session,
+            """
+            MATCH (signup:SupporterSignupSubmission {signupId: $signupId})
+            WHERE coalesce(signup.status, 'pending') = 'pending'
+            SET signup.status = 'declined',
+                signup.declinedAt = datetime(),
+                signup.updatedAt = datetime()
+            """,
+            {"signupId": target_signup_id},
+        )
+    return {"signupId": target_signup_id, "status": "declined"}
 
 
 @router.get("/supporter-signup-config")
