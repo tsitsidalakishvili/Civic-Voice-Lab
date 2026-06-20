@@ -8185,6 +8185,7 @@ function CRMMapTab() {
                   : null
               const firstPerson = cluster.people[0]
               const addressLabel = firstPerson?.addressLabel || 'Unknown'
+              const neighbourhood = firstPerson?.neighbourhood
               const isMultiple = cluster.count > 1
               
               return (
@@ -8213,6 +8214,7 @@ function CRMMapTab() {
                       </div>
                       <div style={{marginTop: '8px', fontSize: '12px', color: '#888'}}>
                         {addressLabel}
+                        {neighbourhood ? <div>District: {neighbourhood}</div> : null}
                       </div>
                     </>
                   ) : (
@@ -8220,6 +8222,7 @@ function CRMMapTab() {
                       <strong>{firstPerson?.fullName}</strong>
                       <div>{firstPerson?.email}</div>
                       <div>{firstPerson?.addressLabel}</div>
+                      {neighbourhood ? <div className="muted">District: {neighbourhood}</div> : null}
                       {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
                       <div>{firstPerson?.skillsLabel}</div>
                       {firstPerson?.personId && (

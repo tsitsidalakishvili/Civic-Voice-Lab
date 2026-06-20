@@ -177,6 +177,7 @@ class MapPersonOut(BaseModel):
     involvement_label: str = Field(alias="involvementLabel")
     involvement_title: str = Field(alias="involvementTitle")
     address_label: str = Field(alias="addressLabel")
+    neighbourhood: Optional[str] = None
     rating: Optional[str] = None
     rating_stars: Optional[str] = Field(alias="ratingStars", default=None)
     effort_hours: float = Field(alias="effortHours")
@@ -440,6 +441,7 @@ def _load_map_data_df() -> pd.DataFrame:
           lat,
           lon,
           address AS address,
+          p.neighbourhood AS neighbourhood,
           p.email AS email,
           p.firstName AS firstName,
           p.lastName AS lastName,
@@ -496,6 +498,7 @@ def _load_map_data_df() -> pd.DataFrame:
     df["timeAvailability"] = df["timeAvailability"].fillna("Unspecified")
     df["about"] = df["about"].fillna("")
     df["address"] = df["address"].fillna("")
+    df["neighbourhood"] = df["neighbourhood"].fillna("")
 
     def _format_address_label(row):
         address_value = str(row.get("address") or "").strip()
