@@ -269,31 +269,20 @@ class SupporterInviteReminderCreate(BaseModel):
 
 class SupporterSignupCreate(BaseModel):
     first_name: str = Field(alias="firstName", min_length=1)
-    last_name: Optional[str] = Field(alias="lastName", default="")
+    last_name: str = Field(alias="lastName", min_length=1)
+    birth_date: Optional[str] = Field(alias="birthDate", default="")
     email: str
-    phone: Optional[str] = ""
-    supporter_type: Optional[str] = Field(alias="supporterType", default="Supporter")
-    gender: Optional[str] = None
-    age: Optional[int] = None
-    address: Optional[str] = ""
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    effort_hours: Optional[float] = Field(alias="effortHours", default=None)
-    events_attended_count: Optional[int] = Field(alias="eventsAttendedCount", default=None)
-    referral_count: Optional[int] = Field(alias="referralCount", default=None)
-    tasks_completed: Optional[int] = Field(alias="tasksCompleted", default=None)
-    about: Optional[str] = ""
-    agrees_with_manifesto: Optional[bool] = Field(alias="agreesWithManifesto", default=False)
-    time_availability: Optional[str] = Field(alias="timeAvailability", default="Unspecified")
-    education_levels: List[str] = Field(alias="educationLevels", default_factory=list)
-    skills: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
-    involvement_areas: List[str] = Field(alias="involvementAreas", default_factory=list)
-    facebook_group_member: Optional[bool] = Field(alias="facebookGroupMember", default=False)
-    interested_in_membership: Optional[bool] = Field(
-        alias="interestedInMembership", default=False
-    )
+    phone: str = Field(min_length=1)
+    address: str = Field(min_length=1)
+    profession: str = Field(min_length=1)
+    social_media: str = Field(alias="socialMedia", min_length=1)
+    former_party_member: str = Field(alias="formerPartyMember", min_length=1)
+    time_availability: str = Field(alias="timeAvailability", min_length=1)
     interests: List[str] = Field(default_factory=list)
+    whatsapp_group: str = Field(alias="whatsappGroup", min_length=1)
+    interested_in_membership: str = Field(alias="interestedInMembership", min_length=1)
+    additional_comments: Optional[str] = Field(alias="additionalComments", default="")
+    agrees_with_manifesto: bool = Field(alias="agreesWithManifesto", default=False)
     invite_code: Optional[str] = Field(alias="inviteCode", default="")
 
 
@@ -316,44 +305,30 @@ class SupporterInviteGroupsConfigUpdate(BaseModel):
 def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
     email = _clean_text(payload.email)
     first_name = _clean_text(payload.first_name)
+    last_name = _clean_text(payload.last_name)
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     if not first_name:
         raise HTTPException(status_code=400, detail="First name is required")
+    if not last_name:
+        raise HTTPException(status_code=400, detail="Last name is required")
 
     return {
         "email": email,
         "firstName": first_name,
-        "lastName": _clean_text(payload.last_name),
+        "lastName": last_name,
+        "birthDate": _clean_text(payload.birth_date),
         "phone": _clean_text(payload.phone),
-        "supporterType": _normalize_supporter_type(payload.supporter_type, "Supporter"),
-        "gender": _clean_text(payload.gender),
-        "age": payload.age,
         "address": _clean_text(payload.address),
-        "lat": payload.lat,
-        "lon": payload.lon,
-        "effortHours": payload.effort_hours,
-        "eventsAttendedCount": payload.events_attended_count,
-        "referralCount": payload.referral_count,
-        "tasksCompleted": payload.tasks_completed,
-        "about": _clean_text(payload.about),
-        "agreesWithManifesto": bool(payload.agrees_with_manifesto),
-        "timeAvailability": _clean_text(payload.time_availability) or "Unspecified",
-        "educationLevels": [
-            _clean_text(item)
-            for item in (payload.education_levels or [])
-            if _clean_text(item)
-        ],
-        "skills": [_clean_text(item) for item in (payload.skills or []) if _clean_text(item)],
-        "tags": [_clean_text(item) for item in (payload.tags or []) if _clean_text(item)],
-        "involvementAreas": [
-            _clean_text(item)
-            for item in (payload.involvement_areas or [])
-            if _clean_text(item)
-        ],
-        "facebookGroupMember": bool(payload.facebook_group_member),
-        "interestedInMembership": bool(payload.interested_in_membership),
+        "profession": _clean_text(payload.profession),
+        "socialMedia": _clean_text(payload.social_media),
+        "formerPartyMember": _clean_text(payload.former_party_member),
+        "timeAvailability": _clean_text(payload.time_availability),
         "interests": [_clean_text(item) for item in (payload.interests or []) if _clean_text(item)],
+        "whatsappGroup": _clean_text(payload.whatsapp_group),
+        "interestedInMembership": _clean_text(payload.interested_in_membership),
+        "additionalComments": _clean_text(payload.additional_comments),
+        "agreesWithManifesto": bool(payload.agrees_with_manifesto),
         "inviteCode": _clean_text(payload.invite_code),
     }
 
@@ -688,27 +663,18 @@ def supporter_signup(payload: SupporterSignupCreate):
             ON CREATE SET signup.signupId = randomUUID(), signup.createdAt = datetime()
             SET signup.firstName = $firstName,
                 signup.lastName = $lastName,
+                signup.birthDate = $birthDate,
                 signup.phone = $phone,
-                signup.supporterType = $supporterType,
-                signup.gender = $gender,
-                signup.age = $age,
                 signup.address = $address,
-                signup.lat = $lat,
-                signup.lon = $lon,
-                signup.effortHours = $effortHours,
-                signup.eventsAttendedCount = $eventsAttendedCount,
-                signup.referralCount = $referralCount,
-                signup.tasksCompleted = $tasksCompleted,
-                signup.about = $about,
-                signup.agreesWithManifesto = $agreesWithManifesto,
+                signup.profession = $profession,
+                signup.socialMedia = $socialMedia,
+                signup.formerPartyMember = $formerPartyMember,
                 signup.timeAvailability = $timeAvailability,
-                signup.interestedInMembership = $interestedInMembership,
-                signup.facebookGroupMember = $facebookGroupMember,
                 signup.interests = $interests,
-                signup.educationLevels = $educationLevels,
-                signup.skills = $skills,
-                signup.tags = $tags,
-                signup.involvementAreas = $involvementAreas,
+                signup.whatsappGroup = $whatsappGroup,
+                signup.interestedInMembership = $interestedInMembership,
+                signup.additionalComments = $additionalComments,
+                signup.agreesWithManifesto = $agreesWithManifesto,
                 signup.inviteCode = $inviteCode,
                 signup.signupSource = 'public_signup',
                 signup.submittedAt = datetime(),

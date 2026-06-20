@@ -32,27 +32,39 @@ const toYouTubeEmbedUrl = (rawUrl) => {
 }
 
 const INTEREST_VALUES = [
-  'Urbanism & city development',
-  'Mobility & transport',
-  'Housing & neighborhoods',
-  'Environment & climate',
-  'Education',
-  'Healthcare',
-  'Local economy & jobs',
-  'Digital governance',
-  'Culture & youth',
+  'განათლება',
+  'გარემოს დაცვა & ცხოველთა უფლებები',
+  'დემოკრატიზაცია',
+  'ემიგრაცია & დიასპორა',
+  'კულტურა',
+  'რეგიონული განვითარება & თვითმმართველობის საკითხები',
+  'სოციალური პოლიტიკა',
+  'საგარეო პოლიტიკა',
+  'სტრატეგიული კომუნიკაცია, მედია და ანალიტიკა',
+  'თავდაცვა და ეროვნული უსაფრთხოება',
+  'საპროტესტო აქციებში მონაწილეობა',
+  'საინფორმაციო და საგანმანათლებლო შეხვედრებში მონაწილეობა',
+  'მხარდამჭერების მობილიზაცია',
+  'ონლაინ კამპანიაში მონაწილეობა & ინფორმაციის გავრცელება',
+  'თარგმნა',
 ]
 
 const INTEREST_KEYWORDS = {
-  'Urbanism & city development': ['city', 'urban', 'development', 'public space', 'planning'],
-  'Mobility & transport': ['transport', 'mobility', 'traffic', 'bus', 'metro', 'road'],
-  'Housing & neighborhoods': ['housing', 'home', 'neighborhood', 'rent', 'zoning'],
-  'Environment & climate': ['environment', 'climate', 'green', 'waste', 'air', 'water'],
-  Education: ['education', 'school', 'student', 'teacher'],
-  Healthcare: ['health', 'healthcare', 'hospital', 'clinic'],
-  'Local economy & jobs': ['economy', 'jobs', 'employment', 'business', 'market'],
-  'Digital governance': ['digital', 'technology', 'online', 'service', 'data'],
-  'Culture & youth': ['culture', 'youth', 'arts', 'sports', 'community'],
+  'განათლება': ['განათლება', 'სკოლა', 'სტუდენტ', 'მასწავლებელი'],
+  'გარემოს დაცვა & ცხოველთა უფლებები': ['გარემო', 'გარემოს დაცვა', 'ცხოველები', 'ეკოლოგია'],
+  'დემოკრატიზაცია': ['დემოკრატია', 'დემოკრატიზაცია', 'არჩევნები'],
+  'ემიგრაცია & დიასპორა': ['ემიგრაცია', 'დიასპორა', 'ემიგრანტები'],
+  'კულტურა': ['კულტურა', 'ხელოვნება', 'კულტურული'],
+  'რეგიონული განვითარება & თვითმმართველობის საკითხები': ['რეგიონი', 'თვითმმართველობა', 'რეგიონული'],
+  'სოციალური პოლიტიკა': ['სოციალური', 'პოლიტიკა', 'სოციალური პოლიტიკა'],
+  'საგარეო პოლიტიკა': ['საგარეო', 'პოლიტიკა', 'საგარეო პოლიტიკა'],
+  'სტრატეგიული კომუნიკაცია, მედია და ანალიტიკა': ['კომუნიკაცია', 'მედია', 'ანალიტიკა'],
+  'თავდაცვა და ეროვნული უსაფრთხოება': ['თავდაცვა', 'უსაფრთხოება', 'ეროვნული'],
+  'საპროტესტო აქციებში მონაწილეობა': ['პროტესტი', 'აქცია', 'საპროტესტო'],
+  'საინფორმაციო და საგანმანათლებლო შეხვედრებში მონაწილეობა': ['ინფორმაცია', 'განათლება', 'შეხვედრა'],
+  'მხარდამჭერების მობილიზაცია': ['მობილიზაცია', 'მხარდამჭერები', 'მობილიზება'],
+  'ონლაინ კამპანიაში მონაწილეობა & ინფორმაციის გავრცელება': ['ონლაინ', 'კამპანია', 'ინფორმაცია'],
+  'თარგმნა': ['თარგმანი', 'თარგმნა', 'თარჯიმანი'],
 }
 
 const DEFAULT_SUGGESTED_CONVERSATIONS = [
@@ -95,23 +107,19 @@ export function PublicSupporterSignup({
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
+    birthDate: '',
     email: '',
     phone: '',
-    supporterType: getInitialSupporterType(),
-    gender: '',
-    age: '',
-    timeAvailability: 'Unspecified',
     address: '',
-    lat: '',
-    lon: '',
-    educationLevels: [],
-    skills: [],
-    involvementAreas: [],
-    about: '',
-    agreesWithManifesto: false,
-    facebookGroupMember: false,
-    interestedInMembership: false,
+    profession: '',
+    socialMedia: '',
+    formerPartyMember: '',
+    timeAvailability: '',
     interests: [],
+    whatsappGroup: '',
+    interestedInMembership: '',
+    additionalComments: '',
+    agreesWithManifesto: false,
   })
   const [status, setStatus] = useState('')
   const [statusTone, setStatusTone] = useState('info')
@@ -160,11 +168,10 @@ export function PublicSupporterSignup({
   )
   const availabilityOptions = useMemo(
     () => [
-      { value: 'Unspecified', label: translate('supporter.signup.availability.unspecified') },
-      { value: 'Weekends', label: translate('supporter.signup.availability.weekends') },
-      { value: 'Evenings', label: translate('supporter.signup.availability.evenings') },
-      { value: 'Full-time', label: translate('supporter.signup.availability.fullTime') },
-      { value: 'Ad-hoc', label: translate('supporter.signup.availability.adHoc') },
+      { value: 'კვირის ნებისმიერ დღეს სამუშაო საათებში', label: 'კვირის ნებისმიერ დღეს სამუშაო საათებში' },
+      { value: 'კვირის ნებისმიერ დღეს მხოლოდ არასამუშაო საათებში', label: 'კვირის ნებისმიერ დღეს მხოლოდ არასამუშაო საათებში' },
+      { value: 'შაბათ-კვირას', label: 'შაბათ-კვირას' },
+      { value: 'Other', label: 'Other' },
     ],
     [translate],
   )
@@ -172,9 +179,9 @@ export function PublicSupporterSignup({
     () =>
       INTEREST_VALUES.map((value) => ({
         value,
-        label: translate(`supporter.signup.interests.option.${value}`),
+        label: value,
       })),
-    [translate],
+    [],
   )
   const fallbackSuggestedConversations = useMemo(
     () =>
@@ -240,8 +247,13 @@ export function PublicSupporterSignup({
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!form.firstName.trim() || !form.email.trim()) {
-      setStatus(translate('supporter.signup.validation.requiredNameEmail'))
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+      setStatus('გთხოვთ, შეავსოთ სავალდებულო ველები: სახელი, გვარი და ელ. ფოსტა')
+      setStatusTone('error')
+      return
+    }
+    if (!form.agreesWithManifesto) {
+      setStatus('გთხოვთ, დაეთანხმოთ მანიფესტს')
       setStatusTone('error')
       return
     }
@@ -254,27 +266,23 @@ export function PublicSupporterSignup({
         payload: {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
+          birthDate: form.birthDate,
           email: form.email.trim(),
           phone: form.phone.trim(),
-          supporterType: form.supporterType,
-          gender: form.gender || null,
-          age: form.age ? Number(form.age) : null,
-          timeAvailability: form.timeAvailability,
           address: form.address.trim(),
-          lat: form.lat ? Number(form.lat) : null,
-          lon: form.lon ? Number(form.lon) : null,
-          educationLevels: form.educationLevels,
-          skills: form.skills,
-          involvementAreas: form.involvementAreas,
-          about: form.about.trim(),
-          agreesWithManifesto: !!form.agreesWithManifesto,
-          facebookGroupMember: !!form.facebookGroupMember,
-          interestedInMembership: !!form.interestedInMembership,
+          profession: form.profession.trim(),
+          socialMedia: form.socialMedia.trim(),
+          formerPartyMember: form.formerPartyMember,
+          timeAvailability: form.timeAvailability,
           interests: form.interests,
+          whatsappGroup: form.whatsappGroup,
+          interestedInMembership: form.interestedInMembership,
+          additionalComments: form.additionalComments.trim(),
+          agreesWithManifesto: !!form.agreesWithManifesto,
           inviteCode: inviteCode || '',
         },
       })
-      setStatus(translate('supporter.signup.status.submitted'))
+      setStatus('თქვენი განაცხადი წარმატებით გაიგზავნა! მადლობა დაინტერესებისთვის.')
       setStatusTone('success')
       setRecommendationsLoading(true)
       try {
@@ -290,23 +298,22 @@ export function PublicSupporterSignup({
         ...prev,
         firstName: '',
         lastName: '',
+        birthDate: '',
         email: '',
         phone: '',
-        age: '',
         address: '',
-        lat: '',
-        lon: '',
-        educationLevels: [],
-        skills: [],
-        involvementAreas: [],
-        about: '',
-        agreesWithManifesto: false,
-        facebookGroupMember: false,
-        interestedInMembership: false,
+        profession: '',
+        socialMedia: '',
+        formerPartyMember: '',
+        timeAvailability: '',
         interests: [],
+        whatsappGroup: '',
+        interestedInMembership: '',
+        additionalComments: '',
+        agreesWithManifesto: false,
       }))
     } catch (err) {
-      setStatus(err.message || translate('supporter.signup.status.submitError'))
+      setStatus(err.message || 'შეცდომა განაცხადის გაგზავნისას. გთხოვთ, სცადოთ თავიდან.')
       setStatusTone('error')
     } finally {
       setSubmitting(false)
@@ -361,163 +368,140 @@ export function PublicSupporterSignup({
                   description={translate('supporter.signup.form.description')}
                 >
                   <div className="form-grid">
-            <Field id="supporter-first-name" label={translate('supporter.signup.firstName')} required>
-              <TextInput
-                value={form.firstName}
-                onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                required
-              />
-            </Field>
-            <Field id="supporter-last-name" label={translate('supporter.signup.lastName')}>
-              <TextInput
-                value={form.lastName}
-                onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-email" label={translate('supporter.signup.email')} required>
-              <TextInput
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-                required
-              />
-            </Field>
-            <Field id="supporter-phone" label={translate('supporter.signup.phone')}>
-              <TextInput
-                value={form.phone}
-                onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-type" label={translate('supporter.signup.registrationType')}>
-              <Select
-                value={form.supporterType}
-                onChange={(value) => setForm((prev) => ({ ...prev, supporterType: value || 'Supporter' }))}
-                data={supporterTypeOptions}
-              />
-            </Field>
-            <Field id="supporter-gender" label={translate('supporter.signup.gender')}>
-              <Select
-                value={form.gender}
-                onChange={(value) => setForm((prev) => ({ ...prev, gender: value || '' }))}
-                data={genderOptions}
-              />
-            </Field>
-            <Field id="supporter-age" label={translate('supporter.signup.age')}>
-              <TextInput
-                type="number"
-                min="0"
-                value={form.age}
-                onChange={(event) => setForm((prev) => ({ ...prev, age: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-time" label={translate('supporter.signup.timeAvailability')}>
-              <Select
-                value={form.timeAvailability}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, timeAvailability: value || 'Unspecified' }))
-                }
-                data={availabilityOptions}
-              />
-            </Field>
-            <Field id="supporter-address" label={translate('supporter.signup.address')}>
-              <TextInput
-                value={form.address}
-                onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-lat" label={translate('supporter.signup.latitude')}>
-              <TextInput
-                value={form.lat}
-                onChange={(event) => setForm((prev) => ({ ...prev, lat: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-lon" label={translate('supporter.signup.longitude')}>
-              <TextInput
-                value={form.lon}
-                onChange={(event) => setForm((prev) => ({ ...prev, lon: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-education-levels" label={translate('supporter.signup.educationLevels')}>
-              <MultiSelect
-                value={form.educationLevels}
-                onChange={(value) => setForm((prev) => ({ ...prev, educationLevels: value }))}
-                data={educationOptions}
-                searchable
-                placeholder={translate('supporter.signup.educationPlaceholder')}
-              />
-            </Field>
-            <Field id="supporter-skills" label={translate('supporter.signup.skills')}>
-              <MultiSelect
-                value={form.skills}
-                onChange={(value) => setForm((prev) => ({ ...prev, skills: value }))}
-                data={skillOptions}
-                searchable
-                placeholder={translate('supporter.signup.skillsPlaceholder')}
-              />
-            </Field>
-            <Field id="supporter-involvement" label={translate('supporter.signup.involvementAreas')}>
-              <MultiSelect
-                value={form.involvementAreas}
-                onChange={(value) => setForm((prev) => ({ ...prev, involvementAreas: value }))}
-                data={involvementAreaOptions}
-                searchable
-                placeholder={translate('supporter.signup.involvementPlaceholder')}
-              />
-            </Field>
-            <Field id="supporter-about" label={translate('supporter.signup.about')}>
-              <TextInput
-                value={form.about}
-                onChange={(event) => setForm((prev) => ({ ...prev, about: event.target.value }))}
-              />
-            </Field>
-            <Field id="supporter-interests" label={translate('supporter.signup.interests')}>
-              <MultiSelect
-                value={form.interests}
-                onChange={(value) => setForm((prev) => ({ ...prev, interests: value }))}
-                data={interestOptions}
-                placeholder={translate('supporter.signup.interestsPlaceholder')}
-                searchable
-              />
-            </Field>
-            <Field id="supporter-membership" label={translate('supporter.signup.membershipInterest')}>
-              <Checkbox
-                checked={form.interestedInMembership}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  setForm((prev) => ({
-                    ...prev,
-                    interestedInMembership: checked,
-                  }))
-                }}
-                label={translate('supporter.signup.membershipInterest.checkbox')}
-              />
-            </Field>
-            <Field id="supporter-manifesto" label={translate('supporter.signup.manifesto')}>
-              <Checkbox
-                checked={form.agreesWithManifesto}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  setForm((prev) => ({
-                    ...prev,
-                    agreesWithManifesto: checked,
-                  }))
-                }}
-                label={translate('supporter.signup.manifesto.checkbox')}
-              />
-            </Field>
-            <Field id="supporter-fb-group" label={translate('supporter.signup.community')}>
-              <Checkbox
-                checked={form.facebookGroupMember}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  setForm((prev) => ({
-                    ...prev,
-                    facebookGroupMember: checked,
-                  }))
-                }}
-                label={translate('supporter.signup.community.checkbox')}
-              />
-            </Field>
+            <FormSection title="პერსონალური ინფორმაცია">
+              <Field id="supporter-first-name" label="სახელი *" required>
+                <TextInput
+                  value={form.firstName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-last-name" label="გვარი *" required>
+                <TextInput
+                  value={form.lastName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-birth-date" label="დაბადების თარიღი *" required>
+                <TextInput
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(event) => setForm((prev) => ({ ...prev, birthDate: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-phone" label="ტელეფონის ნომერი *" required>
+                <TextInput
+                  value={form.phone}
+                  onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-email" label="ელ. ფოსტა *" required>
+                <TextInput
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-address" label="საცხოვრებელი ადგილი (ქალაქი, ქუჩის ნომერი) *" required>
+                <TextInput
+                  value={form.address}
+                  onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-profession" label="პროფესია / საქმიანობის სფერო *" required>
+                <TextInput
+                  value={form.profession}
+                  onChange={(event) => setForm((prev) => ({ ...prev, profession: event.target.value }))}
+                  required
+                />
+              </Field>
+              <Field id="supporter-social-media" label="სოციალური ქსელები (Facebook / Instagram) *" required>
+                <TextInput
+                  value={form.socialMedia}
+                  onChange={(event) => setForm((prev) => ({ ...prev, socialMedia: event.target.value }))}
+                  required
+                />
+              </Field>
+            </FormSection>
+
+            <FormSection title="გაგვეცანით">
+              <Field id="supporter-former-party-member" label="ყოფილხართ თუ არა რომელიმე პოლიტიკური პარტიის წევრი? *" required>
+                <Select
+                  value={form.formerPartyMember}
+                  onChange={(value) => setForm((prev) => ({ ...prev, formerPartyMember: value || '' }))}
+                  data={[
+                    { value: 'დიახ', label: 'დიახ' },
+                    { value: 'არა', label: 'არა' },
+                  ]}
+                  required
+                />
+              </Field>
+              <Field id="supporter-time-availability" label="რა დროს დაუთმობთ ჩვენს საქმიანობას ? *" required>
+                <Select
+                  value={form.timeAvailability}
+                  onChange={(value) => setForm((prev) => ({ ...prev, timeAvailability: value || '' }))}
+                  data={availabilityOptions}
+                  required
+                />
+              </Field>
+              <Field id="supporter-interests" label="გთხოვთ, მონიშნოთ თქვენთვის საინტერესო თემები და მიმართულებები: *" required>
+                <MultiSelect
+                  value={form.interests}
+                  onChange={(value) => setForm((prev) => ({ ...prev, interests: value }))}
+                  data={interestOptions}
+                  placeholder="აირჩიეთ თემები"
+                  searchable
+                  required
+                />
+              </Field>
+              <Field id="supporter-whatsapp-group" label="დაგამატოთ თუ არა WhatsApp მხარდამჭერთა ჯგუფში? *" required>
+                <Select
+                  value={form.whatsappGroup}
+                  onChange={(value) => setForm((prev) => ({ ...prev, whatsappGroup: value || '' }))}
+                  data={[
+                    { value: 'დიახ', label: 'დიახ' },
+                    { value: 'არა', label: 'არა' },
+                  ]}
+                  required
+                />
+              </Field>
+              <Field id="supporter-membership-interest" label="გსურთ თუ არა ჩვენი პარტიის წევრობა? *" required>
+                <Select
+                  value={form.interestedInMembership}
+                  onChange={(value) => setForm((prev) => ({ ...prev, interestedInMembership: value || '' }))}
+                  data={[
+                    { value: 'დიახ', label: 'დიახ' },
+                    { value: 'არა', label: 'არა' },
+                  ]}
+                  required
+                />
+              </Field>
+              <Field id="supporter-additional-comments" label="სივრცე დამატებითი კომენტარისთვის">
+                <TextInput
+                  value={form.additionalComments}
+                  onChange={(event) => setForm((prev) => ({ ...prev, additionalComments: event.target.value }))}
+                />
+              </Field>
+              <Field id="supporter-manifesto" label="გავეცანი &quot;თავისუფლების მოედნის&quot; მანიფესტს და სრულად ვიზიარებ მასში გაცხადებულ იდეებს. *" required>
+                <Checkbox
+                  checked={form.agreesWithManifesto}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked
+                    setForm((prev) => ({
+                      ...prev,
+                      agreesWithManifesto: checked,
+                    }))
+                  }}
+                  label="ვეთანხმები მანიფესტს"
+                  required
+                />
+              </Field>
+            </FormSection>
                   </div>
                 </FormSection>
                 <div className="form-actions">
