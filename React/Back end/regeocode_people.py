@@ -30,6 +30,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from deliberation.api.app.core.env import load_backend_env
 from deliberation.api.app.db import get_driver
+from deliberation.api.app.routes_crm_helpers import _derive_neighbourhood_from_address
 
 load_backend_env(ROOT_DIR)
 
@@ -52,16 +53,12 @@ def _clean_text(value) -> Optional[str]:
 
 
 def _extract_neighbourhood(result: dict) -> Optional[str]:
-    """Try to pull a district / neighbourhood out of the Nominatim display_name."""
-    display = result.get("display_name", "")
-    if not display:
-        return None
-    parts = [part.strip() for part in display.split(",")]
-    if len(parts) >= 3:
-        # Typical OSM display_name: "10, აკაკი წერეთლის გამზირი, დიდუბის რაიონი, დიდუბე, თბილისი, ..."
-        # Try the part just before the city name.
-        return parts[-3]
-    return None
+    address = result.get("address") or {}
+    for key in ("neighbourhood", "suburb", "quarter", "city_district", "municipality", "city", "town", "village"):
+        value = _clean_text(address.get(key))
+        if value:
+            return value
+    return _derive_neighbourhood_from_address(result.get("display_name"))
 
 
 def _looks_like_nan(address: str) -> bool:
@@ -79,7 +76,7 @@ def geocode_with_nominatim(address: str) -> Optional[dict]:
     try:
         resp = requests.get(
             NOMINATIM_SEARCH_URL,
-            params={"q": address, "format": "json", "limit": 1},
+            params={"q": address, "format": "json", "limit": 1, "addressdetails": 1},
             headers={"User-Agent": USER_AGENT},
             timeout=10,
         )
@@ -246,7 +243,7 @@ def main() -> None:
                     old_lon or 0, TBILISI_CENTER["lon"]
                 ):
                     new_lat, new_lon = _jitter_coord(key_for_jitter, TBILISI_CENTER["lat"], TBILISI_CENTER["lon"])
-                    new_neighbourhood = None
+                    new_neighbourhood = _derive_neighbourhood_from_address(address)
                     display_name = "jittered Tbilisi center"
                     status = "jittered"
                     if not args.dry_run:

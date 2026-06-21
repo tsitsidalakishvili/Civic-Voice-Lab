@@ -23,13 +23,8 @@ import {
   RadialLinearScale,
   Tooltip,
 } from 'chart.js'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 import '../../styles/network-report.css'
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
-import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import CRMNeighborhoodMap from './components/map/CRMNeighborhoodMap'
 
 ChartJS.register(
   ArcElement,
@@ -40,13 +35,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 )
-
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-})
 
 const csvEscape = (value) => {
   if (value === null || value === undefined) return ''
@@ -100,7 +88,7 @@ const renderTemplate = (template, context) => {
 
 /** Human-readable lines for saved segment filterSpec (matches CRM segment form). */
 const formatSegmentFilterSummary = (spec) => {
-  if (!spec || typeof spec !== 'object') return '—'
+  if (!spec || typeof spec !== 'object') return 'â€”'
   const s = spec
   const lines = []
   if (s.group && s.group !== 'All') lines.push(`Group: ${s.group}`)
@@ -746,10 +734,10 @@ export function CRMPage({
       setLatestSupporterInviteType(inviteType)
       if (selectedChannel === 'email') {
         if (payload?.emailSent) {
-          setSupporterInviteStatus(`✅ Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
+          setSupporterInviteStatus(`âœ… Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
         } else {
           setSupporterInviteStatus(
-            `⚠️ Invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
+            `âš ï¸ Invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
           )
         }
       } else {
@@ -834,9 +822,9 @@ export function CRMPage({
       
       let statusMessage = ''
       if (response.emailSent) {
-        statusMessage = `✅ Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
+        statusMessage = `âœ… Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
       } else {
-        statusMessage = `⚠️ Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
+        statusMessage = `âš ï¸ Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
       }
       
       const reminderText = buildSupporterReminderMessage(invite)
@@ -1496,10 +1484,10 @@ export function CRMPage({
     const noteBlock = notes ? `\n\nNote: ${notes}` : ''
     const audience = String(inviteAudience || 'individual').toLowerCase()
     if (audience === 'segment') {
-      return `Hi, here is the Freedom Square event registration link — ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+      return `Hi, here is the Freedom Square event registration link â€” ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
     }
     if (audience !== 'individual') {
-      return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} — ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+      return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} â€” ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
     }
     const name = recipientName || 'there'
     return `Hi ${name}, you're invited to register for ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
@@ -1570,7 +1558,7 @@ export function CRMPage({
             )
           } catch {
             setOutreachDistributionStatus(
-              `Draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment — copy from CRM if needed).`,
+              `Draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment â€” copy from CRM if needed).`,
             )
           }
         } else {
@@ -1604,7 +1592,7 @@ export function CRMPage({
       openExternalShareLink(
         `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
       )
-      setOutreachDistributionStatus('Registration link shared — email draft opened.')
+      setOutreachDistributionStatus('Registration link shared â€” email draft opened.')
       return true
     }
     if (normalizedChannel === 'whatsapp') {
@@ -1824,23 +1812,23 @@ export function CRMPage({
   const crmPulseStats = useMemo(() => {
     const rate = Number(supporterInviteStats?.conversionRate ?? 0)
     const conversionDisplay =
-      supporterInviteStats == null ? '—' : `${Number.isFinite(rate) ? rate.toFixed(1) : '0.0'}%`
+      supporterInviteStats == null ? 'â€”' : `${Number.isFinite(rate) ? rate.toFixed(1) : '0.0'}%`
     return [
       {
         label: 'Total people',
-        value: summary?.total_people ?? people.length ?? '—',
+        value: summary?.total_people ?? people.length ?? 'â€”',
         icon: <IconUsers size={18} />,
         badge: 'Active',
       },
       {
         label: 'Supporters',
-        value: summary?.supporters ?? '—',
+        value: summary?.supporters ?? 'â€”',
         icon: <IconUsers size={18} />,
         note: 'Community reach',
       },
       {
         label: 'Members',
-        value: summary?.members ?? '—',
+        value: summary?.members ?? 'â€”',
         icon: <IconUsers size={18} />,
         note: 'Core base',
       },
@@ -1904,7 +1892,7 @@ export function CRMPage({
         source: 'invite',
         recipient:
           invite?.recipientName || pendingPerson?.firstName || pendingPerson?.email || 'Recipient',
-        email: invite?.recipientEmail || pendingPerson?.email || invite?.convertedEmail || '—',
+        email: invite?.recipientEmail || pendingPerson?.email || invite?.convertedEmail || 'â€”',
         audience: getInviteAudienceLabel(invite?.inviteAudience || 'individual'),
         channel: invite?.channel || 'manual',
         supporterType: invite?.supporterType || pendingPerson?.supporterType || 'Supporter',
@@ -1916,8 +1904,8 @@ export function CRMPage({
               ? 'Pending approval'
               : 'Sent',
         reminderCount: invite?.reminderCount ?? 0,
-        createdAt: invite?.createdAt || pendingPerson?.createdAt || '—',
-        convertedAt: invite?.convertedAt || '—',
+        createdAt: invite?.createdAt || pendingPerson?.createdAt || 'â€”',
+        convertedAt: invite?.convertedAt || 'â€”',
         sortAt: Math.max(toMillis(invite?.createdAt), toMillis(pendingPerson?.createdAt)),
         invite,
         pendingPerson,
@@ -1932,15 +1920,15 @@ export function CRMPage({
         key: `pending-${person?.signupId || person?.email}`,
         source: 'pending',
         recipient: `${person?.firstName || ''} ${person?.lastName || ''}`.trim() || person?.email || 'Pending form',
-        email: person?.email || '—',
+        email: person?.email || 'â€”',
         audience: 'Single recipient',
-        channel: '—',
+        channel: 'â€”',
         supporterType: person?.supporterType || 'Supporter',
         status: 'pending',
         statusLabel: 'Pending approval',
         reminderCount: 0,
-        createdAt: person?.createdAt || '—',
-        convertedAt: '—',
+        createdAt: person?.createdAt || 'â€”',
+        convertedAt: 'â€”',
         sortAt: toMillis(person?.createdAt),
         invite: null,
         pendingPerson: person,
@@ -1991,7 +1979,7 @@ export function CRMPage({
       {!hideTabs && showTabs ? (
         <div className="subtabs">
           {[
-            { id: 'overview', label: 'Overview' },
+            { id: 'overview', label: 'Map & Coverage' },
             { id: 'intake', label: 'New supporters/members' },
             { id: 'people', label: 'People directory' },
             { id: 'outreach', label: 'Outreach & events' },
@@ -2038,7 +2026,7 @@ export function CRMPage({
                   <option value="Member">Members</option>
                 </select>
                 <button className="button" type="submit">
-                  {peopleLoading ? 'Loading…' : 'Search'}
+                  {peopleLoading ? 'Loadingâ€¦' : 'Search'}
                 </button>
               </form>
             </div>
@@ -2050,7 +2038,7 @@ export function CRMPage({
               </div>
               <div className="metric-row">
                 <span>Total people</span>
-                <strong>{summary?.total_people ?? '—'}</strong>
+                <strong>{summary?.total_people ?? 'â€”'}</strong>
               </div>
             </div>
               </aside>
@@ -2089,10 +2077,10 @@ export function CRMPage({
                       <span>{person.fullName || person.email}</span>
                       <span>{person.email}</span>
                       <span>{person.group}</span>
-                      <span>{person.effortScore ?? '—'}</span>
-                      <span>{person.eventAttendCount ?? '—'}</span>
-                      <span>{person.referralCount ?? '—'}</span>
-                      <span>{person.ratingStars || '—'}</span>
+                      <span>{person.effortScore ?? 'â€”'}</span>
+                      <span>{person.eventAttendCount ?? 'â€”'}</span>
+                      <span>{person.referralCount ?? 'â€”'}</span>
+                      <span>{person.ratingStars || 'â€”'}</span>
                     </button>
                   ))}
                 </div>
@@ -2224,7 +2212,7 @@ export function CRMPage({
                       onClick={handleProfileSave}
                       disabled={profileSaving}
                     >
-                      {profileSaving ? 'Saving…' : 'Save profile'}
+                      {profileSaving ? 'Savingâ€¦' : 'Save profile'}
                     </button>
                   </div>
                 </div>
@@ -2233,9 +2221,6 @@ export function CRMPage({
 
             </div>
           </div>
-        </div>
-        <div className="section-block">
-          <CRMVolunteersTab />
         </div>
       </div>
       )}
@@ -2247,7 +2232,7 @@ export function CRMPage({
               <div>
                 <h3>Distribution: new supporters &amp; members</h3>
                 <p className="muted">
-                  Same invite flow as Outreach events and Survey &amp; Consensus — share signup links by
+                  Same invite flow as Outreach events and Survey &amp; Consensus â€” share signup links by
                   email, WhatsApp, or Slack; track reminders and conversion below.
                 </p>
               </div>
@@ -2436,7 +2421,7 @@ export function CRMPage({
                     form="crm-supporter-invite-form"
                     disabled={supporterInviteLoading}
                   >
-                    {supporterInviteLoading ? 'Creating…' : 'Send invite link'}
+                    {supporterInviteLoading ? 'Creatingâ€¦' : 'Send invite link'}
                   </button>
                   <a
                     className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
@@ -2466,7 +2451,7 @@ export function CRMPage({
                     disabled={supporterInviteLoading}
                   >
                     {supporterInviteLoading
-                      ? 'Refreshing…'
+                      ? 'Refreshingâ€¦'
                       : `Refresh (${invitePipelinePendingCount})`}
                   </button>
                 </div>
@@ -2503,13 +2488,13 @@ export function CRMPage({
                 ) : null}
                 {invitePipelineRows.map((row) => (
                   <div className="table-row" key={row.key}>
-                    <span>{row.recipient || '—'}</span>
-                    <span>{row.email || '—'}</span>
-                    <span>{row.audience || '—'}</span>
-                    <span>{row.channel || '—'}</span>
+                    <span>{row.recipient || 'â€”'}</span>
+                    <span>{row.email || 'â€”'}</span>
+                    <span>{row.audience || 'â€”'}</span>
+                    <span>{row.channel || 'â€”'}</span>
                     <span>{row.supporterType || 'Supporter'}</span>
                     <span>{row.statusLabel}</span>
-                    <span>{row.createdAt || '—'}</span>
+                    <span>{row.createdAt || 'â€”'}</span>
                     <span>{row.reminderCount ?? 0}</span>
                     <span className="filter-row">
                       {row.status === 'pending' ? (
@@ -2525,7 +2510,7 @@ export function CRMPage({
                               )
                             }
                             disabled={
-                              (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === 'â€”')) ||
                               supporterApprovalProcessingEmail ===
                                 (row.pendingPerson?.signupId || row.email)
                             }
@@ -2546,7 +2531,7 @@ export function CRMPage({
                               )
                             }
                             disabled={
-                              (!row.pendingPerson?.signupId && (!row.email || row.email === '—')) ||
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === 'â€”')) ||
                               supporterApprovalProcessingEmail ===
                                 (row.pendingPerson?.signupId || row.email)
                             }
@@ -2594,7 +2579,7 @@ export function CRMPage({
                     onClick={loadSupporterInvites}
                     disabled={supporterInviteLoading}
                   >
-                    {supporterInviteLoading ? 'Refreshing…' : 'Refresh conversion'}
+                    {supporterInviteLoading ? 'Refreshingâ€¦' : 'Refresh conversion'}
                   </button>
                   <div className="pill">Live</div>
                 </div>
@@ -2665,7 +2650,7 @@ export function CRMPage({
                       onClick={handleSaveSupporterSignupVideo}
                       disabled={supporterSignupVideoSaving}
                     >
-                      {supporterSignupVideoSaving ? 'Saving…' : 'Save videos'}
+                      {supporterSignupVideoSaving ? 'Savingâ€¦' : 'Save videos'}
                     </button>
                   </div>
                   {supporterSignupVideoEmbedUrl ? (
@@ -2735,7 +2720,7 @@ export function CRMPage({
                   onChange={(event) => setTaskLimit(event.target.value)}
                 />
                 <button className="button" type="button" onClick={loadTasks}>
-                  {tasksLoading ? 'Loading…' : 'Refresh'}
+                  {tasksLoading ? 'Loadingâ€¦' : 'Refresh'}
                 </button>
               </div>
             </div>
@@ -2859,7 +2844,7 @@ export function CRMPage({
                   <div className="table-row table-row--tasks" key={task.taskId}>
                     <span>{task.title}</span>
                     <span>{task.status}</span>
-                    <span>{task.dueDate || '—'}</span>
+                    <span>{task.dueDate || 'â€”'}</span>
                     <span>{task.email}</span>
                     <div className="table-actions">
                       <button
@@ -2934,20 +2919,20 @@ export function CRMPage({
                     <div className="stack" style={{ marginTop: 0, gap: 12 }}>
                       <div className="module-footer outreach-detail-footer">
                         <span>
-                          <strong>Name:</strong> {selectedSegment.name || '—'}
+                          <strong>Name:</strong> {selectedSegment.name || 'â€”'}
                         </span>
                         <span>
-                          <strong>Description:</strong> {selectedSegment.description || '—'}
+                          <strong>Description:</strong> {selectedSegment.description || 'â€”'}
                         </span>
                         <span>
                           <strong>Size:</strong>{' '}
-                          {segmentCountLoading ? '…' : segmentMemberCount != null ? segmentMemberCount : '—'}
+                          {segmentCountLoading ? 'â€¦' : segmentMemberCount != null ? segmentMemberCount : 'â€”'}
                         </span>
                         <span>
-                          <strong>Updated:</strong> {selectedSegment.updatedAt || '—'}
+                          <strong>Updated:</strong> {selectedSegment.updatedAt || 'â€”'}
                         </span>
                         <span>
-                          <strong>ID:</strong> {selectedSegment.segmentId || '—'}
+                          <strong>ID:</strong> {selectedSegment.segmentId || 'â€”'}
                         </span>
                       </div>
                       <div>
@@ -2996,7 +2981,7 @@ export function CRMPage({
                     disabled={!segmentSelectedId || outreachAttachLoading}
                     onClick={handleAttachSegmentAudienceToEvent}
                   >
-                    {outreachAttachLoading ? 'Registering…' : 'Register segment audience for this event'}
+                    {outreachAttachLoading ? 'Registeringâ€¦' : 'Register segment audience for this event'}
                   </button>
                 </>
               )}
@@ -3156,13 +3141,13 @@ export function CRMPage({
                   {outreachSelectedEvent ? (
                     <div className="module-footer outreach-detail-footer">
                       <span>
-                        <strong>Name:</strong> {outreachSelectedEvent.name || '—'}
+                        <strong>Name:</strong> {outreachSelectedEvent.name || 'â€”'}
                       </span>
                       <span>
-                        <strong>Start:</strong> {outreachSelectedEvent.startDate || '—'}
+                        <strong>Start:</strong> {outreachSelectedEvent.startDate || 'â€”'}
                       </span>
                       <span>
-                        <strong>End:</strong> {outreachSelectedEvent.endDate || '—'}
+                        <strong>End:</strong> {outreachSelectedEvent.endDate || 'â€”'}
                       </span>
                       <span>
                         <strong>Status:</strong> {outreachSelectedEvent.status || 'Planned'}
@@ -3171,7 +3156,7 @@ export function CRMPage({
                         <strong>Registrations:</strong> {outreachSelectedEvent.registrations ?? 0}
                       </span>
                       <span>
-                        <strong>Location:</strong> {outreachSelectedEvent.location || '—'}
+                        <strong>Location:</strong> {outreachSelectedEvent.location || 'â€”'}
                       </span>
                     </div>
                   ) : (
@@ -3888,7 +3873,7 @@ function CRMDataEntryTab() {
             Facebook group member
           </label>
           <button className="button" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Save person'}
+            {saving ? 'Savingâ€¦' : 'Save person'}
           </button>
         </form>
       </div>
@@ -4018,12 +4003,12 @@ function CRMDashboardTab() {
 
   // Georgian to English translations for Involvement Areas
   const involvementAreaTranslations = {
-    'ექსპერტული მხარდაჭერა თქვენს სფეროში': 'Expert Support',
-    'საინფორმაციო და საგანმანათლებლო შეხვედრებში მონაწილეობა': 'Educational Events',
-    'ონლაინ კამპანიაში მონაწილეობა/ ინფორმაციის გავრცელებაში დახმარება': 'Online Campaign',
-    'ევენტების ორგანიზება': 'Event Organization',
-    'ადგილზე მხარდაჭერა მიტინგებსა და სხვა ღონისძიებებზე': 'On-site Support',
-    'სხვა': 'Other',
+    'áƒ”áƒ¥áƒ¡áƒžáƒ”áƒ áƒ¢áƒ£áƒšáƒ˜ áƒ›áƒ®áƒáƒ áƒ“áƒáƒ­áƒ”áƒ áƒ áƒ—áƒ¥áƒ•áƒ”áƒœáƒ¡ áƒ¡áƒ¤áƒ”áƒ áƒáƒ¨áƒ˜': 'Expert Support',
+    'áƒ¡áƒáƒ˜áƒœáƒ¤áƒáƒ áƒ›áƒáƒªáƒ˜áƒ áƒ“áƒ áƒ¡áƒáƒ’áƒáƒœáƒ›áƒáƒœáƒáƒ—áƒšáƒ”áƒ‘áƒšáƒ áƒ¨áƒ”áƒ®áƒ•áƒ”áƒ“áƒ áƒ”áƒ‘áƒ¨áƒ˜ áƒ›áƒáƒœáƒáƒ¬áƒ˜áƒšáƒ”áƒáƒ‘áƒ': 'Educational Events',
+    'áƒáƒœáƒšáƒáƒ˜áƒœ áƒ™áƒáƒ›áƒžáƒáƒœáƒ˜áƒáƒ¨áƒ˜ áƒ›áƒáƒœáƒáƒ¬áƒ˜áƒšáƒ”áƒáƒ‘áƒ/ áƒ˜áƒœáƒ¤áƒáƒ áƒ›áƒáƒªáƒ˜áƒ˜áƒ¡ áƒ’áƒáƒ•áƒ áƒªáƒ”áƒšáƒ”áƒ‘áƒáƒ¨áƒ˜ áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ': 'Online Campaign',
+    'áƒ”áƒ•áƒ”áƒœáƒ¢áƒ”áƒ‘áƒ˜áƒ¡ áƒáƒ áƒ’áƒáƒœáƒ˜áƒ–áƒ”áƒ‘áƒ': 'Event Organization',
+    'áƒáƒ“áƒ’áƒ˜áƒšáƒ–áƒ” áƒ›áƒ®áƒáƒ áƒ“áƒáƒ­áƒ”áƒ áƒ áƒ›áƒ˜áƒ¢áƒ˜áƒœáƒ’áƒ”áƒ‘áƒ¡áƒ áƒ“áƒ áƒ¡áƒ®áƒ•áƒ áƒ¦áƒáƒœáƒ˜áƒ¡áƒ«áƒ˜áƒ”áƒ‘áƒ”áƒ‘áƒ–áƒ”': 'On-site Support',
+    'áƒ¡áƒ®áƒ•áƒ': 'Other',
   }
 
   // Translate involvement areas for display
@@ -4476,7 +4461,7 @@ function CRMVolunteersTab() {
         <div className="module-card">
         <h3>Volunteer metrics</h3>
         {loading ? (
-          <p className="muted">Loading volunteers…</p>
+          <p className="muted">Loading volunteersâ€¦</p>
         ) : (
           <>
             <div className="metric-row">
@@ -4515,7 +4500,7 @@ function CRMVolunteersTab() {
               <div className="table-row" key={row.email}>
                 <span>{row.fullName || row.email}</span>
                 <span>{row.email}</span>
-                <span>{row.ratingStars || row.rating || '—'}</span>
+                <span>{row.ratingStars || row.rating || 'â€”'}</span>
                 <span>{row.effortScore ?? row.effortHours ?? 0}</span>
               </div>
             ))}
@@ -5373,7 +5358,7 @@ function CRMCampaignsTab() {
       )
     }
     if (campaignOwnerFilter !== 'All') {
-      rows = rows.filter((row) => (row.owner || '—') === campaignOwnerFilter)
+      rows = rows.filter((row) => (row.owner || 'â€”') === campaignOwnerFilter)
     }
     if (searchTerm) {
       rows = rows.filter((row) =>
@@ -5883,7 +5868,7 @@ function CRMCampaignsTab() {
           </div>
           {selectedCampaignId ? <div className="pill">Selected</div> : null}
         </div>
-        {loading ? <p className="muted">Loading…</p> : null}
+        {loading ? <p className="muted">Loadingâ€¦</p> : null}
         <div className="campaigns-list-toolbar">
           <div className="filter-row">
             <input
@@ -5920,7 +5905,7 @@ function CRMCampaignsTab() {
               onChange={(event) => setCampaignSort(event.target.value)}
             >
               <option value="recent">Most recent</option>
-              <option value="name">Name A–Z</option>
+              <option value="name">Name Aâ€“Z</option>
               <option value="status">Status</option>
               <option value="funding">Funding progress</option>
             </select>
@@ -5956,8 +5941,8 @@ function CRMCampaignsTab() {
             </div>
           )}
           {filteredCampaigns.map((campaign) => {
-            const startDate = campaign.startDate || '—'
-            const endDate = campaign.endDate || '—'
+            const startDate = campaign.startDate || 'â€”'
+            const endDate = campaign.endDate || 'â€”'
             const isSelected = selectedCampaignId === campaign.campaignId
             return (
               <button
@@ -5971,12 +5956,12 @@ function CRMCampaignsTab() {
                 aria-pressed={isSelected}
               >
                 <span data-label="Name">{campaign.name}</span>
-                <span data-label="Topic">{campaign.topic || '—'}</span>
+                <span data-label="Topic">{campaign.topic || 'â€”'}</span>
                 <span data-label="Status">{campaign.status || 'Planned'}</span>
                 <span data-label="Dates">
-                  {startDate} → {endDate}
+                  {startDate} â†’ {endDate}
                 </span>
-                <span data-label="Owner">{campaign.owner || '—'}</span>
+                <span data-label="Owner">{campaign.owner || 'â€”'}</span>
                 <span data-label="Goal">{campaign.goal ?? 0}</span>
                 <span data-label="Funding">
                   {Number(campaign.fundsRaisedAmount ?? 0).toLocaleString()} /{' '}
@@ -6013,7 +5998,7 @@ function CRMCampaignsTab() {
                   <strong>
                     {selectedCampaign.responsibleOwner ||
                       selectedCampaign.owner ||
-                      '—'}
+                      'â€”'}
                   </strong>
                 </div>
                 <div className="metric-row">
@@ -6025,11 +6010,11 @@ function CRMCampaignsTab() {
                   <strong>
                     {selectedCampaign.startDate ||
                       selectedCampaign.executionStartDate ||
-                      '—'}{' '}
-                    →{' '}
+                      'â€”'}{' '}
+                    â†’{' '}
                     {selectedCampaign.endDate ||
                       selectedCampaign.expectedCompletionDate ||
-                      '—'}
+                      'â€”'}
                   </strong>
                 </div>
                 <div className="metric-row">
@@ -6426,7 +6411,7 @@ function CRMCampaignsTab() {
                         {contrib.isAnonymous
                           ? 'Anonymous'
                           : contrib.contributorName || 'Supporter'}{' '}
-                        — {contrib.amount} {contrib.currency}{' '}
+                        â€” {contrib.amount} {contrib.currency}{' '}
                         {contrib.paymentStatus ? `(${contrib.paymentStatus})` : ''}
                       </li>
                     ))}
@@ -6541,7 +6526,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {milestones.slice(0, 5).map((milestone) => (
                         <li key={milestone.milestoneId}>
-                          {milestone.title} — {milestone.status}
+                          {milestone.title} â€” {milestone.status}
                         </li>
                       ))}
                     </ul>
@@ -6662,7 +6647,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {expenses.slice(0, 5).map((expense) => (
                         <li key={expense.expenseId}>
-                          {expense.category} — {expense.amount} {expense.currency}{' '}
+                          {expense.category} â€” {expense.amount} {expense.currency}{' '}
                           {expense.approvalStatus
                             ? `(${expense.approvalStatus})`
                             : ''}
@@ -6778,7 +6763,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {proofArtifacts.slice(0, 5).map((artifact) => (
                         <li key={artifact.proofId}>
-                          {artifact.artifactType} — {artifact.caption || artifact.url}
+                          {artifact.artifactType} â€” {artifact.caption || artifact.url}
                         </li>
                       ))}
                     </ul>
@@ -6848,7 +6833,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {partners.slice(0, 5).map((partner) => (
                         <li key={partner.partnerId}>
-                          {partner.name} — {partner.role || 'Partner'}
+                          {partner.name} â€” {partner.role || 'Partner'}
                         </li>
                       ))}
                     </ul>
@@ -6930,7 +6915,7 @@ function CRMCampaignsTab() {
                     {campaignUpdates.slice(0, 5).map((update) => (
                       <li key={update.updateId}>
                         {update.message}
-                        {update.createdBy ? ` — ${update.createdBy}` : ''}
+                        {update.createdBy ? ` â€” ${update.createdBy}` : ''}
                       </li>
                     ))}
                   </ul>
@@ -7047,7 +7032,7 @@ function CRMCampaignsTab() {
                   <ul className="compact-list">
                     {campaignTasks.slice(0, 5).map((task) => (
                       <li key={task.taskId}>
-                        {task.title} — {task.status}
+                        {task.title} â€” {task.status}
                       </li>
                     ))}
                   </ul>
@@ -7148,7 +7133,7 @@ function CRMCampaignsTab() {
                   <ul className="compact-list">
                     {campaignVolunteers.slice(0, 5).map((volunteer) => (
                       <li key={volunteer.volunteerId}>
-                        {volunteer.name} — {volunteer.role || 'Volunteer'}
+                        {volunteer.name} â€” {volunteer.role || 'Volunteer'}
                       </li>
                     ))}
                   </ul>
@@ -7260,15 +7245,15 @@ function CRMCampaignsTab() {
             <div className="stack">
               <div className="metric-row">
                 <span>Total votes</span>
-                <strong>{report?.metrics?.total_votes ?? '—'}</strong>
+                <strong>{report?.metrics?.total_votes ?? 'â€”'}</strong>
               </div>
               <div className="metric-row">
                 <span>Participants</span>
-                <strong>{report?.metrics?.total_participants ?? '—'}</strong>
+                <strong>{report?.metrics?.total_participants ?? 'â€”'}</strong>
               </div>
               <div className="metric-row">
                 <span>Clusters</span>
-                <strong>{report?.clusters?.length ?? '—'}</strong>
+                <strong>{report?.clusters?.length ?? 'â€”'}</strong>
               </div>
             </div>
           ) : null}
@@ -7760,7 +7745,7 @@ function CRMEventsTab() {
             onClick={handleShareLink}
             disabled={sendingLink || groups.length === 0}
           >
-            {sendingLink ? 'Sending…' : 'Send link'}
+            {sendingLink ? 'Sendingâ€¦' : 'Send link'}
           </button>
           <div className="card-divider">
             <h4>Slack</h4>
@@ -7773,7 +7758,7 @@ function CRMEventsTab() {
             onClick={handleSlackShare}
             disabled={sendingSlack}
           >
-            {sendingSlack ? 'Sending…' : 'Send to default Slack'}
+            {sendingSlack ? 'Sendingâ€¦' : 'Send to default Slack'}
           </button>
         </div>
       </div>
@@ -7799,7 +7784,7 @@ function CRMEventsTab() {
               <span>{`${row.firstName || ''} ${row.lastName || ''}`.trim()}</span>
               <span>{row.email}</span>
               <span>{row.registrationStatus}</span>
-              <span>{row.updatedAt || '—'}</span>
+              <span>{row.updatedAt || 'â€”'}</span>
             </div>
           ))}
         </div>
@@ -7860,427 +7845,6 @@ function CRMEventsTab() {
 }
 
 function CRMMapTab() {
-  const [mapData, setMapData] = useState([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const defaultFilters = {
-    showSupporters: true,
-    showMembers: true,
-    genders: [],
-    ageGroups: [],
-    timeAvailability: [],
-    skills: [],
-    addressQuery: '',
-  }
-  const [filters, setFilters] = useState(defaultFilters)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const normalizeCoord = (value) => {
-    const num = Number(value)
-    return Number.isFinite(num) ? num : null
-  }
-  const hasValidCoords = (lat, lon) => {
-    if (lat === null || lon === null) return false
-    if (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001) return false
-    return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
-  }
-  const normalizedData = useMemo(() => {
-    return mapData
-      .map((row) => {
-        const lat = normalizeCoord(row.lat)
-        const lon = normalizeCoord(row.lon)
-        return { ...row, lat, lon }
-      })
-      .filter((row) => hasValidCoords(row.lat, row.lon))
-  }, [mapData])
-
-  useEffect(() => {
-    setLoading(true)
-    getJson('/crm/map')
-      .then((payload) => {
-        setMapData(Array.isArray(payload) ? payload : [])
-      })
-      .catch((err) => setError(err.message || 'Unable to load map data.'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  const genderOptions = useMemo(() => {
-    const set = new Set()
-    normalizedData.forEach((row) => {
-      if (row.gender) set.add(row.gender)
-    })
-    return Array.from(set)
-  }, [normalizedData])
-
-  const ageOptions = useMemo(() => {
-    const set = new Set()
-    normalizedData.forEach((row) => {
-      if (row.ageGroup) set.add(row.ageGroup)
-    })
-    return Array.from(set)
-  }, [normalizedData])
-
-  const timeOptions = useMemo(() => {
-    const set = new Set()
-    normalizedData.forEach((row) => {
-      if (row.timeAvailability && row.timeAvailability !== 'Unspecified') {
-        set.add(row.timeAvailability)
-      }
-    })
-    return Array.from(set)
-  }, [normalizedData])
-
-  const skillOptions = useMemo(() => {
-    const set = new Set()
-    normalizedData.forEach((row) => {
-      ;(row.skills || []).forEach((skill) => {
-        if (skill) set.add(skill)
-      })
-    })
-    return Array.from(set)
-  }, [normalizedData])
-
-  const filtered = useMemo(() => {
-    return normalizedData.filter((row) => {
-      if (!filters.showSupporters && row.group === 'Supporter') return false
-      if (!filters.showMembers && row.group === 'Member') return false
-      if (filters.genders.length && !filters.genders.includes(row.gender)) return false
-      if (filters.ageGroups.length && !filters.ageGroups.includes(row.ageGroup)) return false
-      if (
-        filters.timeAvailability.length &&
-        !filters.timeAvailability.includes(row.timeAvailability)
-      )
-        return false
-      if (
-        filters.skills.length &&
-        !(row.skills || []).some((skill) => filters.skills.includes(skill))
-      )
-        return false
-      if (
-        filters.addressQuery &&
-        !String(row.addressLabel || '')
-          .toLowerCase()
-          .includes(filters.addressQuery.toLowerCase())
-      )
-        return false
-      return true
-    })
-  }, [normalizedData, filters])
-
-  // Group markers by coordinates for clustering
-  const clusteredMarkers = useMemo(() => {
-    const groups = {}
-    filtered.forEach((row) => {
-      const key = `${row.lat},${row.lon}`
-      if (!groups[key]) {
-        groups[key] = {
-          lat: row.lat,
-          lon: row.lon,
-          people: [],
-          count: 0,
-          color: row.color,
-        }
-      }
-      groups[key].people.push(row)
-      groups[key].count += 1
-    })
-    return Object.values(groups)
-  }, [filtered])
-
-  const GEORGIA_CENTER = [42.0, 43.5]
-  const GEORGIA_BOUNDS = [
-    [39.0, 39.0],
-    [44.5, 48.0],
-  ]
-
-  const center = useMemo(() => {
-    if (!filtered.length) return GEORGIA_CENTER
-    const lat = filtered.reduce((sum, row) => sum + Number(row.lat || 0), 0) / filtered.length
-    const lon = filtered.reduce((sum, row) => sum + Number(row.lon || 0), 0) / filtered.length
-    // Keep the computed center within Georgia-ish bounds so a single city cluster
-    // doesn't drag the initial view far away from the country.
-    if (lat >= 39 && lat <= 44.5 && lon >= 39 && lon <= 48) {
-      return [lat, lon]
-    }
-    return GEORGIA_CENTER
-  }, [filtered])
-
-  const handleResetFilters = () => {
-    setFilters(defaultFilters)
-  }
-
-  return (
-    <div className="stack">
-    <div className="module-layout module-layout--map">
-      <div className="module-main module-main--map">
-        <div className="module-card module-card__wide panel panel--highlight map-card" style={{gridColumn: '1 / -1'}}>
-        <div className="card-header">
-          <div>
-            <h3>Map view</h3>
-            <p className="muted">{filtered.length} people shown.</p>
-          </div>
-          <div className="map-legend">
-            <span>
-              <span className="legend-dot legend-dot--supporter" />
-              Supporter
-            </span>
-            <span>
-              <span className="legend-dot legend-dot--member" />
-              Member
-            </span>
-          </div>
-        </div>
-        <div className="map-filters">
-          <button
-            className="map-filters__toggle"
-            type="button"
-            onClick={() => setFiltersOpen((prev) => !prev)}
-            aria-expanded={filtersOpen}
-          >
-            {filtersOpen ? 'Close' : 'Filters'}
-          </button>
-          {filtersOpen && (
-            <div className="map-filters__panel">
-              <div className="map-filters__header">
-                <h4>Map filters</h4>
-                <p className="muted">Filter supporters and members shown on the map.</p>
-              </div>
-              <div className="map-filters__body">
-                <div className="filter-section">
-                  <div className="filter-section__title">Audience</div>
-                  <div className="filter-group">
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={filters.showSupporters}
-                        onChange={(event) =>
-                          setFilters((prev) => ({ ...prev, showSupporters: event.target.checked }))
-                        }
-                      />
-                      Supporters
-                    </label>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={filters.showMembers}
-                        onChange={(event) =>
-                          setFilters((prev) => ({ ...prev, showMembers: event.target.checked }))
-                        }
-                      />
-                      Members
-                    </label>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={handleResetFilters}
-                    >
-                      Reset filters
-                    </button>
-                  </div>
-                </div>
-
-                <details className="filter-section" open>
-                  <summary>Demographics</summary>
-                  <div className="filter-group">
-                    <label className="label">Gender</label>
-                    <select
-                      className="select select--compact"
-                      multiple
-                      value={filters.genders}
-                      onChange={(event) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          genders: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                        }))
-                      }
-                    >
-                      {genderOptions.map((gender) => (
-                        <option key={gender} value={gender}>
-                          {gender === 'F' ? 'Female' : gender === 'M' ? 'Male' : gender === 'O' ? 'Other' : gender === 'U' ? 'Unspecified' : gender}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="label">Age group</label>
-                    <select
-                      className="select select--compact"
-                      multiple
-                      value={filters.ageGroups}
-                      onChange={(event) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          ageGroups: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                        }))
-                      }
-                    >
-                      {ageOptions.map((age) => (
-                        <option key={age} value={age}>
-                          {age}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </details>
-
-                <details className="filter-section">
-                  <summary>Availability & skills</summary>
-                  <div className="filter-group">
-                    <label className="label">Time availability</label>
-                    <select
-                      className="select select--compact"
-                      multiple
-                      value={filters.timeAvailability}
-                      onChange={(event) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          timeAvailability: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                        }))
-                      }
-                    >
-                      {timeOptions.map((time) => (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="label">Skills</label>
-                    <select
-                      className="select select--compact"
-                      multiple
-                      value={filters.skills}
-                      onChange={(event) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          skills: Array.from(event.target.selectedOptions, (opt) => opt.value),
-                        }))
-                      }
-                    >
-                      {skillOptions.map((skill) => (
-                        <option key={skill} value={skill}>
-                          {skill}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </details>
-
-                <details className="filter-section">
-                  <summary>Text filters</summary>
-                  <div className="filter-group">
-                    <input
-                      className="input input--compact"
-                      placeholder="Address contains"
-                      value={filters.addressQuery}
-                      onChange={(event) =>
-                        setFilters((prev) => ({ ...prev, addressQuery: event.target.value }))
-                      }
-                    />
-                  </div>
-                </details>
-              </div>
-            </div>
-          )}
-        </div>
-        {loading ? (
-          <p className="muted">Loading map...</p>
-        ) : filtered.length === 0 ? (
-          <p className="muted">No map points for the selected filters.</p>
-        ) : (
-          <MapContainer center={center} zoom={7} maxBounds={GEORGIA_BOUNDS} className="map-canvas">
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {clusteredMarkers.map((cluster) => {
-              const color = Array.isArray(cluster.color)
-                ? `rgba(${cluster.color[0]}, ${cluster.color[1]}, ${cluster.color[2]}, ${cluster.color[3] / 255})`
-                : '#1d4ed8'
-              const coordsLabel =
-                Number.isFinite(cluster.lat) && Number.isFinite(cluster.lon)
-                  ? `${cluster.lat.toFixed(4)}, ${cluster.lon.toFixed(4)}`
-                  : null
-              const firstPerson = cluster.people[0]
-              const addressLabel = firstPerson?.addressLabel || 'Unknown'
-              const neighbourhood = firstPerson?.neighbourhood
-              const isMultiple = cluster.count > 1
-              
-              return (
-              <CircleMarker
-                key={`${cluster.lat},${cluster.lon}`}
-                center={[cluster.lat, cluster.lon]}
-                pathOptions={{ color, fillOpacity: 0.9, opacity: 1, weight: 1 }}
-                radius={Math.min(6, 4 + cluster.count * 0.5)}
-              >
-                <Popup>
-                  {isMultiple ? (
-                    <>
-                      <div style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px'}}>
-                        📍 {cluster.count} people at this location
-                      </div>
-                      <div style={{maxHeight: '200px', overflowY: 'auto'}}>
-                        {cluster.people.map((p, idx) => (
-                          <div key={p.email} style={{padding: '4px 0', borderBottom: '1px solid #eee'}}>
-                            <strong>{idx + 1}. {p.fullName}</strong>
-                            <div style={{fontSize: '12px', color: '#666'}}>
-                              {p.email}
-                              {p.group && <span> • {p.group}</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{marginTop: '8px', fontSize: '12px', color: '#888'}}>
-                        {addressLabel}
-                        {neighbourhood ? <div>District: {neighbourhood}</div> : null}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <strong>{firstPerson?.fullName}</strong>
-                      <div>{firstPerson?.email}</div>
-                      <div>{firstPerson?.addressLabel}</div>
-                      {neighbourhood ? <div className="muted">District: {neighbourhood}</div> : null}
-                      {coordsLabel ? <div className="muted">Coords: {coordsLabel}</div> : null}
-                      <div>{firstPerson?.skillsLabel}</div>
-                      {firstPerson?.personId && (
-                        <div style={{marginTop: '8px'}}>
-                          <a href={`/crm/people/${firstPerson.personId}`}>View person</a>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </Popup>
-              </CircleMarker>
-            )})}
-          </MapContainer>
-        )}
-        </div>
-      </div>
-    </div>
-    <div className="module-card module-card__wide panel crm-map-layout__people-table">
-      <div className="card-header">
-        <div>
-          <h3>Filtered people</h3>
-          <p className="muted">Results update as filters change.</p>
-        </div>
-      </div>
-      <div className="table table--scroll">
-        <div className="table-row table-row--map table-head">
-          <span>Name</span>
-          <span>Email</span>
-          <span>Group</span>
-          <span>Age</span>
-          <span>Gender</span>
-          <span>Time</span>
-          <span>Events</span>
-        </div>
-        {filtered.map((row) => (
-          <div className="table-row table-row--map" key={row.email}>
-            <span>{row.fullName}</span>
-            <span>{row.email}</span>
-            <span>{row.group}</span>
-            <span>{row.age ?? '—'}</span>
-            <span>{row.gender === 'F' ? 'Female' : row.gender === 'M' ? 'Male' : row.gender === 'O' ? 'Other' : row.gender === 'U' ? 'Unspecified' : row.gender || '—'}</span>
-            <span>{row.timeAvailability}</span>
-            <span>{row.eventAttendCount ?? 0}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-    </div>
-  )
+  return <CRMNeighborhoodMap />
 }
+

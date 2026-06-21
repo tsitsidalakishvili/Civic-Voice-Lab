@@ -298,6 +298,80 @@ def _normalize_geocode_address(address: str) -> Optional[str]:
 
 
 @lru_cache(maxsize=1024)
+def _derive_neighbourhood_from_address(address: Optional[str]) -> Optional[str]:
+    text = _clean_text(address)
+    if not text:
+        return None
+    lowered = text.lower()
+    pairs = [
+        ("დიღმის მასივი", "დიღმის მასივი"),
+        ("დიდი დიღომ", "დიდი დიღომი"),
+        ("სოფ.დიღომ", "დიღომი"),
+        ("სოფელი დიღომ", "დიღომი"),
+        ("ვაზისუბ", "ვაზისუბანი"),
+        ("ვარკეთილ", "ვარკეთილი"),
+        ("გლდან", "გლდანი"),
+        ("საბურთალ", "საბურთალო"),
+        ("ვაჟა", "საბურთალო"),
+        ("ნუცუბიძ", "საბურთალო"),
+        ("თამარაშვილ", "ვაკე"),
+        ("ჭავჭავაძ", "ვაკე"),
+        ("ვაკე", "ვაკე"),
+        ("ისან", "ისანი"),
+        ("ნავთლუღ", "ნავთლუღი"),
+        ("ნაძალადევ", "ნაძალადევი"),
+        ("ჩუღურეთ", "ჩუღურეთი"),
+        ("სოლოლაკ", "სოლოლაკი"),
+        ("მთაწმინდ", "მთაწმინდა"),
+        ("ვერა", "ვერა"),
+        ("ავლაბ", "ავლაბარი"),
+        ("ორთაჭალ", "ორთაჭალა"),
+        ("სამგორ", "სამგორი"),
+        ("ლილო", "ლილო"),
+        ("თბილისის ზღვა", "თბილისის ზღვა"),
+        ("რუსთავ", "რუსთავი"),
+        ("ბათუმ", "ბათუმი"),
+        ("ზუგდიდ", "ზუგდიდი"),
+        ("მარტვილ", "მარტვილი"),
+        ("ოზურგეთ", "ოზურგეთი"),
+        ("სიღნაღ", "სიღნაღი"),
+        ("საგარეჯ", "საგარეჯო"),
+        ("ახმეტ", "ახმეტა"),
+    ]
+    for needle, label in pairs:
+        if needle in lowered:
+            return label
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    district_index = next((idx for idx, part in enumerate(parts) if "რაიონი" in part), None)
+    if district_index is not None and district_index > 0:
+        return parts[district_index - 1]
+    if len(parts) >= 2 and parts[-1] in {"საქართველო", "Georgia"}:
+        return parts[-2]
+    return None
+
+
+NEIGHBOURHOOD_COMPONENT_TYPES = (
+    "neighborhood",
+    "sublocality_level_1",
+    "sublocality",
+    "administrative_area_level_3",
+    "administrative_area_level_2",
+)
+
+
+def _extract_google_neighbourhood(result: dict) -> Optional[str]:
+    components = result.get("address_components") or []
+    for component_type in NEIGHBOURHOOD_COMPONENT_TYPES:
+        for component in components:
+            types = component.get("types") or []
+            if component_type in types:
+                value = _clean_text(component.get("long_name"))
+                if value:
+                    return value
+    return _derive_neighbourhood_from_address(result.get("formatted_address"))
+
+
+@lru_cache(maxsize=1024)
 def _geocode_address(query: str) -> Optional[dict]:
     if not GOOGLE_MAPS_API_KEY or not query:
         return None
@@ -316,15 +390,20 @@ def _geocode_address(query: str) -> Optional[dict]:
     results = payload.get("results") or []
     if not results:
         return None
-    location = (results[0].get("geometry") or {}).get("location") or {}
+    first_result = results[0]
+    location = (first_result.get("geometry") or {}).get("location") or {}
     lat = location.get("lat")
     lon = location.get("lng")
     if lat is None or lon is None:
         return None
+    formatted_address = first_result.get("formatted_address")
     return {
         "lat": float(lat),
         "lon": float(lon),
-        "formatted_address": results[0].get("formatted_address"),
+        "formatted_address": formatted_address,
+        "neighbourhood": _extract_google_neighbourhood(first_result)
+        or _derive_neighbourhood_from_address(query)
+        or _derive_neighbourhood_from_address(formatted_address),
     }
 
 
@@ -360,6 +439,10 @@ def _persist_geocode_updates(rows: List[dict]) -> None:
                 p.address = CASE
                     WHEN p.address IS NULL OR trim(p.address) = '' THEN row.address
                     ELSE p.address
+                END,
+                p.neighbourhood = CASE
+                    WHEN row.neighbourhood IS NULL OR trim(row.neighbourhood) = '' THEN p.neighbourhood
+                    ELSE row.neighbourhood
                 END
             WITH p, row
             FOREACH (_ IN CASE WHEN row.address IS NULL OR row.address = '' THEN [] ELSE [1] END |
@@ -399,9 +482,12 @@ def _apply_geocoding(df: pd.DataFrame) -> pd.DataFrame:
         df.at[idx, "lat"] = result["lat"]
         df.at[idx, "lon"] = result["lon"]
         formatted_address = result.get("formatted_address")
+        neighbourhood = result.get("neighbourhood") or _derive_neighbourhood_from_address(address) or _derive_neighbourhood_from_address(formatted_address)
         address_value = address or formatted_address or None
         if not address and formatted_address:
             df.at[idx, "address"] = formatted_address
+        if neighbourhood:
+            df.at[idx, "neighbourhood"] = neighbourhood
         email = row.get("email")
         if email:
             updates.append(
@@ -410,6 +496,7 @@ def _apply_geocoding(df: pd.DataFrame) -> pd.DataFrame:
                     "lat": result["lat"],
                     "lon": result["lon"],
                     "address": address_value,
+                    "neighbourhood": neighbourhood,
                 }
             )
             budget -= 1

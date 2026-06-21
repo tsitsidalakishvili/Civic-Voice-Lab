@@ -393,6 +393,7 @@ function AppShell_() {
 
                     <h3>Survey &amp; Consensus</h3>
                     <p>The Survey &amp; Consensus module helps organizations understand what their communities think and where common ground exists. Beyond traditional surveys, the platform identifies patterns in responses, groups participants by shared perspectives, and highlights areas of agreement and disagreement.</p>
+                    <p>Results are shown as aggregated, anonymous outputs without identifying individual people. The platform can use generated anonymous participant and result identifiers so organizations can learn from community input while protecting personal identity.</p>
                     <p>This enables organizations to make decisions that are genuinely informed by their members and supporters.</p>
 
                     <hr />

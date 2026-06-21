@@ -1,0 +1,40 @@
+{
+  "batchId": "crm_people_2026_06",
+  "totalPreparedRows": 659,
+  "membersPrepared": 64,
+  "supportersPrepared": 595,
+  "validEmailRows": 522,
+  "generatedIdRows": 137,
+  "invalidRawEmailRows": 16,
+  "duplicateValidEmails": [
+    "analomtadze54@gmail.com",
+    "ananiashvili.nina@gmail.com",
+    "apkhazavam@yahoo.com",
+    "ditonatchkebia@gmail.com",
+    "ekaterine.burkadze@gmail.com",
+    "gkobulashvili2@gmail.com",
+    "gmachaidze055@gmail.com",
+    "gtsakadze13@gmail.com",
+    "ketibakut1963@gmail.com",
+    "kvirtig@gmail.com",
+    "lbasishvili@gmail.com",
+    "liatodua@gmail.com",
+    "megrelieliso09@gmail.com",
+    "mia_eka@hotmail.com",
+    "mikheilmumladze91@gmail.com",
+    "nina.gogokhia@tafu.edu.ge",
+    "rrukhadze@gmail.com",
+    "rusudangurgenidze7@gmail.com",
+    "skilasonia@gmail.com",
+    "talikomcthedlishvili@gmail.com",
+    "tamuna.teneishvili@gmail.com",
+    "ucha.chubinidze@gmail.com"
+  ],
+  "locationReviewRows": 0,
+  "skippedRows": 11,
+  "outputs": {
+    "preview": "C:\\Users\\Tsitsi\\Desktop\\FS\\data\\import_batches\\2026_06_crm_people\\normalized_people_preview.csv",
+    "review": "C:\\Users\\Tsitsi\\Desktop\\FS\\data\\import_batches\\2026_06_crm_people\\review_needed.csv",
+    "skipped": "C:\\Users\\Tsitsi\\Desktop\\FS\\data\\import_batches\\2026_06_crm_people\\skipped_rows.csv"
+  }
+}

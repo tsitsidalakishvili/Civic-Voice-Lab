@@ -33,6 +33,7 @@ from .routes_crm_helpers import (
     _build_segment_query,
     _build_segment_count_query,
     _extract_municipality,
+    _derive_neighbourhood_from_address,
     _split_list,
     SegmentFilter,
     segment_filter_from_stored_value,
@@ -499,6 +500,10 @@ def _load_map_data_df() -> pd.DataFrame:
     df["about"] = df["about"].fillna("")
     df["address"] = df["address"].fillna("")
     df["neighbourhood"] = df["neighbourhood"].fillna("")
+    df["neighbourhood"] = df.apply(
+        lambda row: row.get("neighbourhood") or _derive_neighbourhood_from_address(row.get("address")),
+        axis=1,
+    ).fillna("")
 
     def _format_address_label(row):
         address_value = str(row.get("address") or "").strip()

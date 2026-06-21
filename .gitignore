@@ -19,3 +19,10 @@ AIteam/agent_chain/runs/
 reports/
 DD/reports/
 DD/neo4j.txt
+# Local generated outputs
+*.log
+backend*.log
+crm_map_*.json
+React/Back end/regeocode_people_*.csv
+React/Front end/dist/
+React/Front end/node_modules/
