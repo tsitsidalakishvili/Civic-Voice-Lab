@@ -1651,17 +1651,17 @@ def list_people_summary(
     return df.to_dict(orient="records")
 
 
-@router.get("/people/{email}", response_model=PersonProfileOut)
-def get_person_profile(email: str):
-    profile = _load_profile(email)
+@router.get("/people/{identifier}", response_model=PersonProfileOut)
+def get_person_profile(identifier: str):
+    profile = _load_profile(identifier)
     if not profile:
         raise HTTPException(status_code=404, detail="Person not found")
     return profile
 
 
-@router.patch("/people/{email}", response_model=PersonProfileOut)
-def update_person_profile(email: str, payload: PersonProfileUpdate):
-    existing = _load_profile(email)
+@router.patch("/people/{identifier}", response_model=PersonProfileOut)
+def update_person_profile(identifier: str, payload: PersonProfileUpdate):
+    existing = _load_profile(identifier)
     if not existing:
         raise HTTPException(status_code=404, detail="Person not found")
     updated = {
@@ -1686,7 +1686,11 @@ def update_person_profile(email: str, payload: PersonProfileUpdate):
     }
     driver = get_driver()
     query = """
-    MATCH (p:Person {email: $email})
+    MATCH (p:Person)
+    WHERE p.email = $identifier
+       OR p.personId = $identifier
+       OR p.generatedId = $identifier
+       OR elementId(p) = $identifier
     SET p.firstName = $firstName,
         p.lastName = $lastName,
         p.phone = $phone,
@@ -1699,8 +1703,8 @@ def update_person_profile(email: str, payload: PersonProfileUpdate):
         p.facebookGroupMember = $facebookGroupMember
     """
     with _db_session(driver) as session:
-        _execute_write(session, query, {"email": email, **updated})
-    profile = _load_profile(email)
+        _execute_write(session, query, {"identifier": identifier, **updated})
+    profile = _load_profile(identifier)
     return profile or updated
 
 

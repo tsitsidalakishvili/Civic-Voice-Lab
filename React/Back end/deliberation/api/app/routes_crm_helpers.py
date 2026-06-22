@@ -679,7 +679,8 @@ def _load_supporter_summary_df() -> pd.DataFrame:
              count(DISTINCT refP) AS referredCount,
              count(DISTINCT sr) AS recruitedCount
         RETURN
-          p.email AS email,
+          coalesce(p.personId, p.email, elementId(p)) AS personId,
+      p.email AS email,
           p.firstName AS firstName,
           p.lastName AS lastName,
           coalesce(p.gender, 'Unspecified') AS gender,
@@ -1180,10 +1181,14 @@ def _generate_campaign_analysis(
 # People profile loader
 # ---------------------------------------------------------------------------
 
-def _load_profile(email: str) -> Optional[dict]:
+def _load_profile(identifier: str) -> Optional[dict]:
     driver = get_driver()
     query = """
-    MATCH (p:Person {email: $email})
+    MATCH (p:Person)
+    WHERE p.email = $identifier
+       OR p.personId = $identifier
+       OR p.generatedId = $identifier
+       OR elementId(p) = $identifier
     OPTIONAL MATCH (p)-[:CLASSIFIED_AS]->(st:SupporterType)
     OPTIONAL MATCH (p)-[:HAS_TAG]->(tag:Tag)
     OPTIONAL MATCH (p)-[:CAN_CONTRIBUTE_WITH]->(sk:Skill)
@@ -1196,7 +1201,8 @@ def _load_profile(email: str) -> Optional[dict]:
       collect(DISTINCT ia.name) AS involvementAreas,
       collect(DISTINCT t.name) AS topicsOfInterest
     RETURN
-      p.email AS email,
+      coalesce(p.personId, p.email, elementId(p)) AS personId,
+      coalesce(p.email, '') AS email,
       p.firstName AS firstName,
       p.lastName AS lastName,
       p.phone AS phone,
@@ -1224,7 +1230,7 @@ def _load_profile(email: str) -> Optional[dict]:
       topicsOfInterest
     """
     with _db_session(driver) as session:
-        records = _execute_read(session, query, {"email": email})
+        records = _execute_read(session, query, {"identifier": identifier})
     if not records:
         return None
     return records[0].data()

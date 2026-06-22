@@ -329,6 +329,37 @@ def _audience_group(row: dict) -> str:
     return _plain(row.get("group")) or "Unknown"
 
 
+def _normalized_gender(value: Any) -> str:
+    text = _plain(value)
+    normalized = normalize_location_text(text)
+    if normalized in {"f", "female", "1", "1.0", "ქალი", "მდედრობითი"}:
+        return "Female"
+    if normalized in {"m", "male", "2", "2.0", "კაცი", "მამრობითი"}:
+        return "Male"
+    if normalized in {"o", "other", "3", "3.0"}:
+        return "Other"
+    # In the imported Georgian CRM sheets, blank gender values represent male records.
+    if not normalized or normalized in {"u", "unknown", "unspecified", "nan", "none", "null"}:
+        return "Male"
+    return text or "Male"
+
+
+def _gender_matches_filter(value: Any, expected: Any) -> bool:
+    expected_text = normalize_location_text(expected)
+    if not expected_text:
+        return True
+    gender = normalize_location_text(_normalized_gender(value))
+    aliases = {
+        "f": "female",
+        "female": "female",
+        "m": "male",
+        "male": "male",
+        "o": "other",
+        "other": "other",
+    }
+    return gender == aliases.get(expected_text, expected_text)
+
+
 def _display_person(row: dict, location: dict | None = None) -> dict:
     group = _audience_group(row)
     full_name = _plain(row.get("fullName")) or " ".join(
@@ -341,7 +372,7 @@ def _display_person(row: dict, location: dict | None = None) -> dict:
         "phone": _plain(row.get("phone")),
         "type": group,
         "status": _plain(row.get("status")) or "Active",
-        "gender": _plain(row.get("gender")) or "Unspecified",
+        "gender": _normalized_gender(row.get("gender")),
         "age": int(_as_float(row.get("age"))) if _as_float(row.get("age")) is not None else None,
         "ageGroup": _age_group(row.get("age")),
         "timeAvailability": _plain(row.get("timeAvailability")) or "Unspecified",
@@ -437,10 +468,11 @@ def _matches_filter(row: dict, filters: dict) -> bool:
     supporter_type = normalize_location_text(filters.get("supporterType"))
     if supporter_type and supporter_type not in normalize_location_text(group):
         return False
-    for key, row_key in [("gender", "gender"), ("ageGroup", "ageGroup")]:
-        expected = normalize_location_text(filters.get(key))
-        if expected and expected != normalize_location_text(row.get(row_key)):
-            return False
+    if not _gender_matches_filter(row.get("gender"), filters.get("gender")):
+        return False
+    expected_age_group = normalize_location_text(filters.get("ageGroup"))
+    if expected_age_group and expected_age_group != normalize_location_text(row.get("ageGroup")):
+        return False
     tag = normalize_location_text(filters.get("tag"))
     if tag and tag not in [normalize_location_text(v) for v in _clean_list(row.get("tags"))]:
         return False

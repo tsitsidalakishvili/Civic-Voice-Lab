@@ -255,6 +255,7 @@ export function CRMPage({
   const [profile, setProfile] = useState(null)
   const [profileDraft, setProfileDraft] = useState(null)
   const [profileError, setProfileError] = useState('')
+  const [profileLoading, setProfileLoading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [furryRows, setFurryRows] = useState([])
   const [furryError, setFurryError] = useState('')
@@ -436,7 +437,7 @@ export function CRMPage({
         const nextPeople = Array.isArray(payload) ? payload : []
         setPeople(nextPeople)
         if (selectedEmail) {
-          const stillExists = nextPeople.some((person) => person.email === selectedEmail)
+          const stillExists = nextPeople.some((person) => (person.email || person.personId) === selectedEmail)
           if (!stillExists) {
             setSelectedEmail('')
             setProfile(null)
@@ -895,14 +896,18 @@ export function CRMPage({
 
   const loadProfile = (email) => {
     if (!email) return
+    setProfileLoading(true)
     setProfileError('')
-    getJson(`/crm/people/${encodeURIComponent(email)}`)
+    getJson(`/crm/people/${encodeURIComponent(email)}`, { cacheMs: 30000 })
       .then((payload) => {
         setProfile(payload)
-        setProfileDraft(payload)
+        setProfileDraft((current) => ({ ...(current || {}), ...(payload || {}) }))
       })
       .catch((err) => {
         setProfileError(err.message || 'Unable to load profile.')
+      })
+      .finally(() => {
+        setProfileLoading(false)
       })
   }
 
@@ -914,6 +919,28 @@ export function CRMPage({
     }
     loadProfile(selectedEmail)
   }, [selectedEmail])
+
+  const handleSelectPerson = (person) => {
+    const identifier = person?.email || person?.personId
+    if (!identifier) return
+    const nameParts = String(person.fullName || '').trim().split(/\s+/).filter(Boolean)
+    setSelectedEmail(identifier)
+    setProfileError('')
+    setProfileDraft({
+      personId: person.personId || identifier,
+      email: person.email || '',
+      firstName: person.firstName || nameParts[0] || '',
+      lastName: person.lastName || nameParts.slice(1).join(' '),
+      phone: person.phone || '',
+      gender: person.gender || '',
+      age: person.age || '',
+      timeAvailability: person.timeAvailability || 'Unspecified',
+      about: person.about || '',
+      agreesWithManifesto: !!person.agreesWithManifesto,
+      interestedInMembership: !!person.interestedInMembership,
+      facebookGroupMember: !!person.facebookGroupMember,
+    })
+  }
 
   const updateProfileField = (field, value) => {
     setProfileDraft((prev) => ({ ...(prev || {}), [field]: value }))
@@ -2069,12 +2096,12 @@ export function CRMPage({
                 {sortedPeople.map((person) => (
                     <button
                       className="table-row table-row--people table-row__button"
-                      key={person.email}
+                      key={person.email || person.personId}
                       type="button"
-                      onClick={() => setSelectedEmail(person.email)}
+                      onClick={() => handleSelectPerson(person)}
                     >
                       <span>{person.fullName || person.email}</span>
-                      <span>{person.email}</span>
+                      <span>{person.email || person.personId || '?'}</span>
                       <span>{person.group}</span>
                       <span>{person.effortScore ?? 'â€”'}</span>
                       <span>{person.eventAttendCount ?? 'â€”'}</span>
@@ -2093,10 +2120,11 @@ export function CRMPage({
                       Select a person above to view and edit their profile.
                     </p>
                   </div>
-                  {selectedEmail ? <div className="pill">{selectedEmail}</div> : null}
+                  {selectedEmail ? <div className="pill">{profileDraft?.email || selectedEmail}</div> : null}
                 </div>
 
                 {profileError ? <div className="module-alert">{profileError}</div> : null}
+                {profileLoading ? <p className="muted">Loading full profile...</p> : null}
 
                 {!selectedEmail && <p className="muted">No person selected.</p>}
 
@@ -4218,7 +4246,7 @@ function CRMDashboardTab({ mapStats } = {}) {
             {genderCounts.length > 0 ? (
               <div className="chart-frame chart-frame--tall">
                 {/* DEBUG: {JSON.stringify(genderCounts)} */}
-                <Pie
+                <Bar
                   data={{
                     labels: genderCounts.map(d =>
                       d.gender === 'F' ? 'Female' :
@@ -4227,12 +4255,13 @@ function CRMDashboardTab({ mapStats } = {}) {
                       d.gender === 'U' ? 'Unspecified' : d.gender
                     ),
                     datasets: [{
+                      label: 'People',
                       data: genderCounts.map(d => d.count),
                       backgroundColor: pickColors(genderCounts.length),
-                      borderWidth: 1,
+                      borderRadius: 8,
                     }]
                   }}
-                  options={dashboardPieOptions}
+                  options={dashboardBarOptions}
                 />
               </div>
             ) : (

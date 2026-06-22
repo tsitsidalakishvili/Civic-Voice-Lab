@@ -118,23 +118,33 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
   const [mapExpanded, setMapExpanded] = useState(false)
 
   const query = useMemo(() => buildQuery(filters), [filters])
+  const [debouncedQuery, setDebouncedQuery] = useState(query)
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query), 250)
+    return () => window.clearTimeout(timeout)
+  }, [query])
+
+  useEffect(() => {
+    getJson('/crm/locations/unmatched', { cacheMs: 60000 })
+      .then((payload) => setUnmatched(Array.isArray(payload) ? payload : []))
+      .catch(() => setUnmatched([]))
+  }, [])
 
   useEffect(() => {
     setLoading(true)
     setError('')
     Promise.all([
-      getJson(`/crm/map/neighborhoods${query}`, { forceRefresh: true }),
-      getJson(`/crm/map/people${query}`, { forceRefresh: true }),
-      getJson('/crm/locations/unmatched', { forceRefresh: true }),
+      getJson(`/crm/map/neighborhoods${debouncedQuery}`, { cacheMs: 30000 }),
+      getJson(`/crm/map/people${debouncedQuery}`, { cacheMs: 30000 }),
     ])
-      .then(([mapPayload, peoplePayload, unmatchedPayload]) => {
+      .then(([mapPayload, peoplePayload]) => {
         setNeighborhoods(Array.isArray(mapPayload) ? mapPayload : [])
         setAllPeople(Array.isArray(peoplePayload) ? peoplePayload : [])
-        setUnmatched(Array.isArray(unmatchedPayload) ? unmatchedPayload : [])
       })
       .catch((err) => setError(err.message || 'Unable to load neighborhood map.'))
       .finally(() => setLoading(false))
-  }, [query])
+  }, [debouncedQuery])
 
   useEffect(() => {
     if (!selected) {
@@ -143,13 +153,13 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
     }
     setPeopleLoading(true)
     setPeopleError('')
-    getJson(`/crm/map/neighborhoods/${encodeURIComponent(selected.id)}/people${query}`, {
-      forceRefresh: true,
+    getJson(`/crm/map/neighborhoods/${encodeURIComponent(selected.id)}/people${debouncedQuery}`, {
+      cacheMs: 30000,
     })
       .then((payload) => setSelectedPeople(Array.isArray(payload) ? payload : []))
       .catch((err) => setPeopleError(err.message || 'Unable to load neighborhood people.'))
       .finally(() => setPeopleLoading(false))
-  }, [selected, query])
+  }, [selected, debouncedQuery])
 
   const hasGeorgiaScope = neighborhoods.some((row) => row.city && row.city !== 'Tbilisi')
   const mapCenter = hasGeorgiaScope ? GEORGIA_CENTER : TBILISI_CENTER
@@ -163,7 +173,7 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
     const hasActiveFilters = Object.values(filters).some((value) => String(value || '').trim())
     return {
       filters,
-      query,
+      query: debouncedQuery,
       people: allPeople,
       neighborhoods,
       summary: {
@@ -173,7 +183,7 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
         hasActiveFilters,
       },
     }
-  }, [allPeople, neighborhoods, filters, query])
+  }, [allPeople, neighborhoods, filters, debouncedQuery])
 
   useEffect(() => {
     if (onStatsChange) onStatsChange(mapFilterStats)
@@ -258,10 +268,9 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
                     }
                   >
                     <option value="">All genders</option>
-                    <option value="F">Female</option>
-                    <option value="M">Male</option>
-                    <option value="O">Other</option>
-                    <option value="Unspecified">Unspecified</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other</option>
                   </select>
                 </label>
                 <label className="label">
