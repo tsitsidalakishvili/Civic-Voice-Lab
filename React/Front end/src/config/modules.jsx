@@ -131,9 +131,9 @@ export const buildModuleSections = (t) => ({
     flowSummary: t('nav.campaigns.flowSummary'),
     defaultTab: 'outreach',
     sections: [
-      { label: t('nav.campaigns.events'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.eventsHint') },
-      { label: t('nav.campaigns.share'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.shareHint') },
-      { label: t('nav.campaigns.results'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.resultsHint') },
+      { label: t('nav.campaigns.events'), type: 'anchor', value: 'campaign-events', hint: t('nav.campaigns.eventsHint') },
+      { label: t('nav.campaigns.share'), type: 'anchor', value: 'campaign-share', hint: t('nav.campaigns.shareHint') },
+      { label: t('nav.campaigns.results'), type: 'anchor', value: 'campaign-results', hint: t('nav.campaigns.resultsHint') },
     ],
   },
   deliberation: {

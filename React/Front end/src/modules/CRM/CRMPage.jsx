@@ -7,11 +7,11 @@ import {
 import {
   getInviteAudienceGroupEmail,
   getInviteAudienceLabel,
-  MAILTO_SEGMENT_BCC_LIMIT,
   openExternalShareLink,
 } from '../../lib/inviteDistribution'
 import { CivicStatGrid, PageHeader } from '../../ui'
 import {
+  IconBrandSlack,
   IconBrandWhatsapp,
   IconCircleCheck,
   IconCircleX,
@@ -22,6 +22,7 @@ import {
   IconMail,
   IconPlus,
   IconRefresh,
+  IconSend,
   IconTrash,
   IconUsers,
   IconTarget,
@@ -528,28 +529,7 @@ export function CRMPage({
       normalizedAudience,
     )
     if (normalizedChannel === 'email') {
-      const audienceGroupEmail = getInviteAudienceGroupEmail(
-        normalizedAudience,
-        supporterInviteGroupsConfig,
-      )
-      const targetEmail =
-        normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
-      if (!targetEmail) {
-        if (normalizedAudience === 'individual') {
-          setSupporterInviteError('Recipient email is required for single-recipient email sends.')
-        } else {
-          setSupporterInviteError(
-            `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
-          )
-        }
-        return
-      }
-      const subject = encodeURIComponent(
-        `Freedom Square ${normalizeSupporterTypeLabel(inviteType)} signup form (${getInviteAudienceLabel(normalizedAudience)})`,
-      )
-      const body = encodeURIComponent(message)
-      openExternalShareLink(`mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`)
-      setSupporterInviteStatus('Invite link created and email draft opened.')
+      setSupporterInviteStatus('Invite email was sent directly.')
       return
     }
     if (normalizedChannel === 'whatsapp') {
@@ -748,7 +728,7 @@ export function CRMPage({
       const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType)
       setLatestSupporterInviteLink(link)
       setLatestSupporterInviteType(inviteType)
-      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+      if (selectedChannel === 'email') {
         if (payload?.emailSent) {
           setSupporterInviteStatus(`Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
         } else {
@@ -835,20 +815,20 @@ export function CRMPage({
           note: 'Manual reminder sent from People directory.',
         },
       })
-      
+
       let statusMessage = ''
       if (response.emailSent) {
         statusMessage = `âœ… Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
       } else {
         statusMessage = `âš ï¸ Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
       }
-      
+
       const reminderText = buildSupporterReminderMessage(invite)
       if (navigator?.clipboard) {
         await navigator.clipboard.writeText(reminderText)
         statusMessage += ' Message copied to clipboard.'
       }
-      
+
       setSupporterInviteStatus(statusMessage)
       loadSupporterInvites()
     } catch (err) {
@@ -1557,42 +1537,20 @@ export function CRMPage({
       normalizedAudience,
     )
     if (normalizedChannel === 'email') {
-      if (normalizedAudience === 'segment' && segmentMemberEmails) {
-        const bcc = segmentMemberEmails.slice(0, MAILTO_SEGMENT_BCC_LIMIT)
-        const segName = selectedSegment?.name || 'segment'
-        const subject = encodeURIComponent(
-          `Freedom Square event: ${event.name || 'Registration'} (${segName})`,
-        )
-        const body = encodeURIComponent(message)
-        const bccParam = bcc.map((e) => encodeURIComponent(e)).join('%2C')
-        openExternalShareLink(`mailto:?bcc=${bccParam}&subject=${subject}&body=${body}`)
-        if (segmentMemberEmails.length > MAILTO_SEGMENT_BCC_LIMIT && navigator?.clipboard) {
-          try {
-            await navigator.clipboard.writeText(segmentMemberEmails.join('\n'))
-            setOutreachDistributionStatus(
-              `Draft opened with first ${bcc.length} addresses in Bcc. All ${segmentMemberEmails.length} emails copied for mail merge.`,
-            )
-          } catch {
-            setOutreachDistributionStatus(
-              `Draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment â€” copy from CRM if needed).`,
-            )
-          }
-        } else {
-          setOutreachDistributionStatus(
-            `Registration link draft opened with ${bcc.length} segment address(es) in Bcc.`,
-          )
-        }
-        return true
-      }
       const audienceGroupEmail = getInviteAudienceGroupEmail(
         normalizedAudience,
         supporterInviteGroupsConfig,
       )
+      const recipientEmails = normalizedAudience === 'segment' && segmentMemberEmails
+        ? segmentMemberEmails
+        : []
       const targetEmail =
         normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
-      if (!targetEmail) {
+      if (!targetEmail && recipientEmails.length === 0) {
         if (normalizedAudience === 'individual') {
           setOutreachDistributionError('Recipient email is required for email sends.')
+        } else if (normalizedAudience === 'segment') {
+          setOutreachDistributionError('This segment has no people with email addresses.')
         } else {
           setOutreachDistributionError(
             `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
@@ -1600,15 +1558,33 @@ export function CRMPage({
         }
         return false
       }
-      const audienceLabel = getInviteAudienceLabel(normalizedAudience)
-      const subject = encodeURIComponent(
-        `Freedom Square event: ${event.name || 'Registration'} (${audienceLabel})`,
-      )
-      const body = encodeURIComponent(message)
-      openExternalShareLink(
-        `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
-      )
-      setOutreachDistributionStatus('Registration link shared â€” email draft opened.')
+      const payload = await requestJson('/crm/event-invites', {
+        method: 'POST',
+        payload: {
+          eventId: event.eventId || '',
+          eventName: event.name || 'Registration',
+          inviteLink,
+          recipientName,
+          recipientEmail: targetEmail,
+          recipientEmails,
+          channel: 'email',
+          inviteAudience: normalizedAudience,
+          notes: trimmedNotes,
+        },
+      })
+      if (payload?.sentCount === payload?.totalCount && payload?.totalCount > 0) {
+        setOutreachDistributionStatus(
+          `Registration email sent to ${payload.totalCount} recipient${payload.totalCount === 1 ? '' : 's'}.`,
+        )
+      } else if (payload?.sentCount > 0) {
+        setOutreachDistributionStatus(
+          `Registration email sent to ${payload.sentCount} of ${payload.totalCount} recipients.`,
+        )
+      } else {
+        setOutreachDistributionStatus(
+          `Registration invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
+        )
+      }
       return true
     }
     if (normalizedChannel === 'whatsapp') {
@@ -2244,58 +2220,72 @@ export function CRMPage({
       {activeTab === 'intake' && (
         <div className="stack">
           <div className="module-card module-card__wide panel intake-flow">
-            <div className="card-header">
-              <div>
-                <h3>Send signup link</h3>
-                <p className="muted">
-                  Same invite flow as Outreach events and Survey &amp; Consensus â€” share signup links by
-                  email, WhatsApp, or Slack; track reminders and conversion below.
-                </p>
-              </div>
-              <div className="share-channel-icons" aria-label="Signup channel">
-                <button
-                  className={
-                    supporterInviteForm.channel === 'email'
-                      ? 'icon-button icon-button--primary active'
-                      : 'icon-button'
-                  }
-                  type="button"
-                  title="Email"
-                  aria-label="Email"
-                  onClick={() =>
-                    setSupporterInviteForm((prev) => ({
-                      ...prev,
-                      channel: 'email',
-                    }))
-                  }
-                >
-                  <IconMail size={17} />
-                </button>
-                <button
-                  className={
-                    supporterInviteForm.channel === 'whatsapp'
-                      ? 'icon-button icon-button--primary active'
-                      : 'icon-button'
-                  }
-                  type="button"
-                  title="WhatsApp"
-                  aria-label="WhatsApp"
-                  onClick={() =>
-                    setSupporterInviteForm((prev) => ({
-                      ...prev,
-                      channel: 'whatsapp',
-                    }))
-                  }
-                >
-                  <IconBrandWhatsapp size={17} />
-                </button>
-              </div>
-            </div>
             <div className="module-card intake-tile intake-order-links">
               <div className="intake-invite-compact">
                 <div className="intake-invite-compact__form">
                   <div className="intake-section-heading">
-                    <h4 className="intake-section-title">Invite</h4>
+                    <div>
+                      <h4 className="intake-section-title">Send signup link</h4>
+                      <p className="muted">
+                        Send signup invitations by email, WhatsApp, or Slack.
+                      </p>
+                    </div>
+                    <div className="share-channel-icons" aria-label="Signup channel">
+                      <button
+                        className={
+                          supporterInviteForm.channel === 'email'
+                            ? 'icon-button icon-button--primary active'
+                            : 'icon-button'
+                        }
+                        type="button"
+                        title="Email"
+                        aria-label="Email"
+                        onClick={() =>
+                          setSupporterInviteForm((prev) => ({
+                            ...prev,
+                            channel: 'email',
+                          }))
+                        }
+                      >
+                        <IconMail size={17} />
+                      </button>
+                      <button
+                        className={
+                          supporterInviteForm.channel === 'whatsapp'
+                            ? 'icon-button icon-button--primary active'
+                            : 'icon-button'
+                        }
+                        type="button"
+                        title="WhatsApp"
+                        aria-label="WhatsApp"
+                        onClick={() =>
+                          setSupporterInviteForm((prev) => ({
+                            ...prev,
+                            channel: 'whatsapp',
+                          }))
+                        }
+                      >
+                        <IconBrandWhatsapp size={17} />
+                      </button>
+                      <button
+                        className={
+                          supporterInviteForm.channel === 'slack'
+                            ? 'icon-button icon-button--primary active'
+                            : 'icon-button'
+                        }
+                        type="button"
+                        title="Slack"
+                        aria-label="Slack"
+                        onClick={() =>
+                          setSupporterInviteForm((prev) => ({
+                            ...prev,
+                            channel: 'slack',
+                          }))
+                        }
+                      >
+                        <IconBrandSlack size={17} />
+                      </button>
+                    </div>
                   </div>
                   <form
                     id="crm-supporter-invite-form"
@@ -2330,29 +2320,33 @@ export function CRMPage({
                         }))
                       }
                     />
-                    <input
-                      className="input"
-                      type="email"
-                      placeholder="Recipient email"
-                      value={supporterInviteForm.recipientEmail}
-                      onChange={(event) =>
-                        setSupporterInviteForm((prev) => ({
-                          ...prev,
-                          recipientEmail: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      className="input"
-                      placeholder="Recipient phone"
-                      value={supporterInviteForm.recipientPhone}
-                      onChange={(event) =>
-                        setSupporterInviteForm((prev) => ({
-                          ...prev,
-                          recipientPhone: event.target.value,
-                        }))
-                      }
-                    />
+                    {supporterInviteForm.channel === 'email' ? (
+                      <input
+                        className="input"
+                        type="email"
+                        placeholder="Recipient email"
+                        value={supporterInviteForm.recipientEmail}
+                        onChange={(event) =>
+                          setSupporterInviteForm((prev) => ({
+                            ...prev,
+                            recipientEmail: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : null}
+                    {supporterInviteForm.channel === 'whatsapp' ? (
+                      <input
+                        className="input"
+                        placeholder="Recipient phone"
+                        value={supporterInviteForm.recipientPhone}
+                        onChange={(event) =>
+                          setSupporterInviteForm((prev) => ({
+                            ...prev,
+                            recipientPhone: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : null}
                   </>
                 ) : supporterInviteForm.channel === 'email' ? (
                   <div className="form-grid__full">
@@ -2414,25 +2408,9 @@ export function CRMPage({
                     title="Send invite"
                     aria-label="Send invite"
                   >
-                    {supporterInviteLoading ? '...' : supporterInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}
+                    {supporterInviteLoading ? '...' : <IconSend size={17} />}
                   </button>
-                  <button
-                    className="icon-button intake-invite-combined__cta-copy"
-                    type="button"
-                    title="Copy link"
-                    aria-label="Copy link"
-                    onClick={() =>
-                      handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
-                    }
-                  ><IconCopy size={17} /></button>
-                  <a
-                    className="icon-button intake-invite-combined__cta-open"
-                    href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Open form"
-                    aria-label="Open form"
-                  ><IconExternalLink size={17} /></a>
+
                 </div>
               </div>
             </div>
@@ -3097,7 +3075,7 @@ export function CRMPage({
                   </div>
 
           {activeTab === 'outreach' ? (
-          <div className="module-card module-card__wide module-card--outreach-flow-events">
+          <div id="campaign-events" className="module-card module-card__wide module-card--outreach-flow-events">
                 <div className="card-header">
                   <div>
                 <h3>Events</h3>
@@ -3238,13 +3216,13 @@ export function CRMPage({
           ) : null}
 
           {activeTab === 'outreach' ? (
-          <div className="module-card module-card__wide module-card--outreach-flow-distribute">
+          <div id="campaign-share" className="module-card module-card__wide module-card--outreach-flow-distribute">
             <div className="card-header">
               <div>
                 <h3>Send registration link</h3>
                 <p className="muted">
-                  Choose single recipient, the saved segment (Bcc to member emails), or verified / registered
-                  Google groups. Then pick channel and send or copy the event link.
+                  Choose a single recipient, the saved segment, or verified / registered Google groups.
+                  Then pick a channel and send or copy the event link.
                 </p>
               </div>
               <div className="share-channel-icons" aria-label="Registration channel">
@@ -3283,6 +3261,24 @@ export function CRMPage({
                   }
                 >
                   <IconBrandWhatsapp size={17} />
+                </button>
+                <button
+                  className={
+                    outreachInviteForm.channel === 'slack'
+                      ? 'icon-button icon-button--primary active'
+                      : 'icon-button'
+                  }
+                  type="button"
+                  title="Slack"
+                  aria-label="Slack"
+                  onClick={() =>
+                    setOutreachInviteForm((prev) => ({
+                      ...prev,
+                      channel: 'slack',
+                    }))
+                  }
+                >
+                  <IconBrandSlack size={17} />
                 </button>
               </div>
             </div>
@@ -3333,37 +3329,40 @@ export function CRMPage({
                             }))
                           }
                         />
-                        <input
-                          className="input"
-                          type="email"
-                          placeholder="Recipient email"
-                          value={outreachInviteForm.recipientEmail}
-                          onChange={(event) =>
-                            setOutreachInviteForm((prev) => ({
-                              ...prev,
-                              recipientEmail: event.target.value,
-                            }))
-                          }
-                        />
-                        <input
-                          className="input"
-                          placeholder="Recipient phone"
-                          value={outreachInviteForm.recipientPhone}
-                          onChange={(event) =>
-                            setOutreachInviteForm((prev) => ({
-                              ...prev,
-                              recipientPhone: event.target.value,
-                            }))
-                          }
-                        />
+                        {outreachInviteForm.channel === 'email' ? (
+                          <input
+                            className="input"
+                            type="email"
+                            placeholder="Recipient email"
+                            value={outreachInviteForm.recipientEmail}
+                            onChange={(event) =>
+                              setOutreachInviteForm((prev) => ({
+                                ...prev,
+                                recipientEmail: event.target.value,
+                              }))
+                            }
+                          />
+                        ) : null}
+                        {outreachInviteForm.channel === 'whatsapp' ? (
+                          <input
+                            className="input"
+                            placeholder="Recipient phone"
+                            value={outreachInviteForm.recipientPhone}
+                            onChange={(event) =>
+                              setOutreachInviteForm((prev) => ({
+                                ...prev,
+                                recipientPhone: event.target.value,
+                              }))
+                            }
+                          />
+                        ) : null}
                       </>
                     ) : outreachInviteForm.inviteAudience === 'segment' &&
                       outreachInviteForm.channel === 'email' ? (
                       <div className="form-grid__full">
                         <p className="muted" style={{ margin: 0 }}>
-                          Opens your mail client with up to {MAILTO_SEGMENT_BCC_LIMIT} segment addresses in Bcc.
-                          If the segment is larger, remaining emails are copied to the clipboard for a mail
-                          merge.
+                          Sends the registration link directly to people in the selected segment who have
+                          email addresses.
                         </p>
                       </div>
                     ) : outreachInviteForm.channel === 'email' ? (
@@ -3417,7 +3416,7 @@ export function CRMPage({
                     disabled={!outreachEventId}
                     title="Send invite"
                     aria-label="Send invite"
-                  >{outreachInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}</button>
+                  ><IconSend size={17} /></button>
                   <button
                     className="icon-button intake-invite-combined__cta-copy"
                     type="button"
@@ -3435,6 +3434,29 @@ export function CRMPage({
                   ><IconExternalLink size={17} /></a>
                 </div>
               </div>
+            </div>
+          </div>
+          ) : null}
+
+          {activeTab === 'outreach' ? (
+          <div id="campaign-results" className="module-card module-card__wide module-card--outreach-flow-results">
+            <div className="card-header">
+              <div>
+                <h3>Results</h3>
+                <p className="muted">Registration and audience status for the selected event.</p>
+              </div>
+              <div className="pill">Results</div>
+            </div>
+            <div className="module-footer outreach-detail-footer">
+              <span>
+                <strong>Event:</strong> {outreachSelectedEvent?.name || 'Select an event'}
+              </span>
+              <span>
+                <strong>Registrations:</strong> {outreachSelectedEvent?.registrations ?? 0}
+              </span>
+              <span>
+                <strong>Audience:</strong> {selectedSegment?.name || 'No segment selected'}
+              </span>
             </div>
           </div>
           ) : null}
@@ -4098,10 +4120,10 @@ function CRMDashboardTab() {
                 {/* DEBUG: {JSON.stringify(genderCounts)} */}
                 <Pie
                   data={{
-                    labels: genderCounts.map(d => 
-                      d.gender === 'F' ? 'Female' : 
-                      d.gender === 'M' ? 'Male' : 
-                      d.gender === 'O' ? 'Other' : 
+                    labels: genderCounts.map(d =>
+                      d.gender === 'F' ? 'Female' :
+                      d.gender === 'M' ? 'Male' :
+                      d.gender === 'O' ? 'Other' :
                       d.gender === 'U' ? 'Unspecified' : d.gender
                     ),
                     datasets: [{
@@ -4228,7 +4250,7 @@ function CRMDashboardTab() {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { 
+                    plugins: {
                       legend: { display: false },
                       tooltip: {
                         callbacks: {

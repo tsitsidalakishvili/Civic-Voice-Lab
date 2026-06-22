@@ -279,6 +279,18 @@ class SurveyInviteCreate(BaseModel):
     notes: Optional[str] = ""
 
 
+class EventInviteCreate(BaseModel):
+    event_id: Optional[str] = Field(alias="eventId", default="")
+    event_name: Optional[str] = Field(alias="eventName", default="")
+    invite_link: str = Field(alias="inviteLink", min_length=1)
+    recipient_name: Optional[str] = Field(alias="recipientName", default="")
+    recipient_email: Optional[str] = Field(alias="recipientEmail", default="")
+    recipient_emails: List[str] = Field(alias="recipientEmails", default_factory=list)
+    channel: Optional[str] = "email"
+    invite_audience: Optional[str] = Field(alias="inviteAudience", default="individual")
+    notes: Optional[str] = ""
+
+
 class SupporterInviteReminderCreate(BaseModel):
     channel: Optional[str] = "manual"
     note: Optional[str] = ""
@@ -435,6 +447,33 @@ def _send_survey_invite_email(recipient_email: str, recipient_name: str, topic: 
         recipient_email,
         f"Freedom Square survey: {topic or 'Participate'}",
         _build_survey_invite_email_message(recipient_name, topic, invite_url, notes),
+    )
+
+
+def _build_event_invite_email_message(recipient_name: str, event_name: str, invite_url: str, notes: str = ""):
+    name = recipient_name or "friend"
+    event_label = event_name or "Freedom Square event"
+    note_block = f"\n\nNote: {notes}" if notes else ""
+    return f"""
+Hello, {name}!
+
+You are invited to register for this Freedom Square event:
+{event_label}
+
+Please click the link below to register:
+
+{invite_url}{note_block}
+
+Best regards,
+The Freedom Square Team
+""".strip()
+
+
+def _send_event_invite_email(recipient_email: str, recipient_name: str, event_name: str, invite_url: str, notes: str = ""):
+    return _send_smtp_email(
+        recipient_email,
+        f"Freedom Square event: {event_name or 'Registration'}",
+        _build_event_invite_email_message(recipient_name, event_name, invite_url, notes),
     )
 
 
@@ -859,19 +898,67 @@ def create_survey_invite(payload: SurveyInviteCreate):
     return result
 
 
+@router.post("/event-invites")
+def create_event_invite(payload: EventInviteCreate):
+    invite_link = _clean_text(payload.invite_link)
+    event_name = _clean_text(payload.event_name)
+    recipient_name = _clean_text(payload.recipient_name)
+    notes = _clean_text(payload.notes)
+    channel = (_clean_text(payload.channel) or "email").lower()
+    if channel != "email":
+        raise HTTPException(status_code=400, detail="Only email event invites are sent by this endpoint")
+    if not invite_link:
+        raise HTTPException(status_code=400, detail="Invite link is required")
+
+    recipients = []
+    single_email = _clean_text(payload.recipient_email)
+    if single_email:
+        recipients.append(single_email)
+    for email in payload.recipient_emails or []:
+        cleaned = _clean_text(email)
+        if cleaned:
+            recipients.append(cleaned)
+    recipients = list(dict.fromkeys(recipients))
+    if not recipients:
+        raise HTTPException(status_code=400, detail="Recipient email is required")
+
+    results = []
+    sent_count = 0
+    for email in recipients:
+        sent, status, error = _send_event_invite_email(
+            email,
+            recipient_name if len(recipients) == 1 else "",
+            event_name,
+            invite_link,
+            notes,
+        )
+        if sent:
+            sent_count += 1
+        results.append({"recipientEmail": email, "emailSent": sent, "emailStatus": status, "emailError": error or ""})
+
+    return {
+        "emailSent": sent_count > 0 and sent_count == len(recipients),
+        "sentCount": sent_count,
+        "failedCount": len(recipients) - sent_count,
+        "totalCount": len(recipients),
+        "emailStatus": "sent" if sent_count == len(recipients) else ("partial" if sent_count else (results[0]["emailStatus"] if results else "failed")),
+        "results": results,
+    }
+
+
 @router.post("/supporter-invites/{invite_code}/remind")
 def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCreate):
     code = _clean_text(invite_code)
     if not code:
         raise HTTPException(status_code=400, detail="Invite code is required")
-    
+
     driver = get_driver()
     with _db_session(driver) as session:
         invite_records = _execute_read(
             session,
             """
             MATCH (inv:SupporterInvite {inviteCode: $inviteCode})
-            RETURN 
+            RETURN
               inv.recipientEmail AS recipientEmail,
               inv.recipientName AS recipientName,
               inv.inviteCode AS inviteCode,
@@ -880,10 +967,10 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
             """,
             {"inviteCode": code},
         )
-    
+
     if not invite_records:
         raise HTTPException(status_code=404, detail="Invite not found")
-    
+
     invite_data = invite_records[0].data()
     recipient_email = invite_data.get("recipientEmail")
     recipient_name = invite_data.get("recipientName") or "მეგობარო"
@@ -891,7 +978,7 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
     email_sent, email_status, email_error = _send_supporter_reminder_email(
         recipient_email, recipient_name, code, supporter_type
     )
-    
+
     with _db_session(driver) as session:
         records = _execute_write(
             session,
@@ -921,17 +1008,17 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
                 "emailError": email_error or "",
             },
         )
-    
+
     if not records:
         raise HTTPException(status_code=404, detail="Invite not found")
-    
+
     result = records[0].data()
-    
+
     result["emailSent"] = email_sent
     result["emailStatus"] = email_status
     if email_error:
         result["emailError"] = email_error
-    
+
     return result
 
 
@@ -1279,7 +1366,7 @@ def decline_pending_supporter_signup(email: str):
         )
         if not rows:
             raise HTTPException(status_code=404, detail="Pending supporter/member not found")
-        
+
         # Update signup status to declined
         _execute_write(
             session,
@@ -1331,7 +1418,7 @@ def decline_pending_supporter_signup_by_id(signup_id: str):
         )
         if not rows:
             raise HTTPException(status_code=404, detail="Pending supporter/member not found")
-        
+
         # Update signup status to declined
         _execute_write(
             session,
@@ -1956,7 +2043,7 @@ def crm_dashboard():
         """
         MATCH (p:Person)
         WITH p,
-          CASE 
+          CASE
             WHEN p.gender IS NULL OR p.gender = '' THEN 'U'
             WHEN toString(p.gender) IN ['1', '1.0'] OR toLower(toString(p.gender)) CONTAINS 'female' THEN 'F'
             WHEN toString(p.gender) = 'nan' OR toString(p.gender) IN ['2', '2.0'] OR toLower(toString(p.gender)) CONTAINS 'male' THEN 'M'
@@ -2096,14 +2183,14 @@ def crm_dashboard():
         """
         MATCH (p:Person)
         OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
-        WITH p, 
-          CASE 
+        WITH p,
+          CASE
             WHEN a.fullAddress IS NOT NULL AND a.fullAddress <> '' THEN a.fullAddress
             WHEN p.address IS NOT NULL AND p.address <> '' THEN p.address
             ELSE ''
           END AS address
         WITH address,
-          CASE 
+          CASE
             WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' THEN 'Batumi'
             WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' THEN 'Kutaisi'
             WHEN toLower(address) CONTAINS 'რუსთავი' OR toLower(address) CONTAINS 'rustavi' THEN 'Rustavi'
@@ -2151,14 +2238,14 @@ def crm_dashboard():
         """
         MATCH (p:Person)
         OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
-        WITH p, 
-          CASE 
+        WITH p,
+          CASE
             WHEN a.fullAddress IS NOT NULL AND a.fullAddress <> '' THEN a.fullAddress
             WHEN p.address IS NOT NULL AND p.address <> '' THEN p.address
             ELSE ''
           END AS address
         WITH address,
-          CASE 
+          CASE
             WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi'
             WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' THEN 'Batumi'
             WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' THEN 'Kutaisi'
@@ -2218,8 +2305,8 @@ def crm_dashboard():
         OPTIONAL MATCH (p)-[:INTERESTED_IN]->(t:Topic)
         WITH p, s, ia, t
         WHERE s IS NOT NULL OR ia IS NOT NULL OR t IS NOT NULL
-        WITH 
-          CASE 
+        WITH
+          CASE
             WHEN s IS NOT NULL THEN s.name
             WHEN ia IS NOT NULL THEN ia.name
             WHEN t IS NOT NULL THEN t.name
@@ -2237,7 +2324,7 @@ def crm_dashboard():
         OPTIONAL MATCH (p)-[:LIVES_AT]->(a:Address)
         WITH p, coalesce(a.fullAddress, p.address, '') AS address
         WITH p, address,
-          CASE 
+          CASE
             WHEN toLower(address) CONTAINS 'თბილისი' OR toLower(address) CONTAINS 'tbilisi' THEN 'Tbilisi'
             WHEN toLower(address) CONTAINS 'ბათუმი' OR toLower(address) CONTAINS 'batumi' OR toLower(address) CONTAINS 'აჭარა' THEN 'Adjara (Batumi)'
             WHEN toLower(address) CONTAINS 'ქუთაისი' OR toLower(address) CONTAINS 'kutaisi' OR toLower(address) CONTAINS 'იმერეთი' THEN 'Imereti (Kutaisi)'
@@ -2260,14 +2347,14 @@ def crm_dashboard():
         MATCH (p:Person)
         WHERE p.joinDate IS NOT NULL AND p.joinDate <> ''
         WITH p,
-          CASE 
+          CASE
             WHEN p.joinDate CONTAINS '2024' THEN '2024'
             WHEN p.joinDate CONTAINS '17.11.2025' OR p.joinDate CONTAINS '17.11.2045' THEN 'Nov 2025'
             WHEN p.joinDate CONTAINS '2025' THEN '2025'
             ELSE 'Other'
           END AS joinPeriod
         RETURN joinPeriod AS period, count(*) AS count
-        ORDER BY 
+        ORDER BY
           CASE joinPeriod
             WHEN '2024' THEN 1
             WHEN '2025' THEN 2
@@ -2281,17 +2368,17 @@ def crm_dashboard():
     engagement_ready = _query_df(
         """
         MATCH (p:Person)
-        WHERE p.age IS NOT NULL 
+        WHERE p.age IS NOT NULL
           AND (p.timeAvailability IS NOT NULL AND p.timeAvailability <> '')
           AND (p.profession IS NOT NULL AND p.profession <> '')
         WITH p,
-          CASE 
+          CASE
             WHEN p.age <= 40 AND (toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'შაბათ' OR toLower(p.timeAvailability) CONTAINS 'თავისუფალი') THEN 'High Engagement'
             WHEN p.age <= 50 AND (toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'შაბათ') THEN 'Medium Engagement'
             ELSE 'Low Engagement'
           END AS engagement
         RETURN engagement AS level, count(*) AS count
-        ORDER BY 
+        ORDER BY
           CASE engagement
             WHEN 'High Engagement' THEN 1
             WHEN 'Medium Engagement' THEN 2
@@ -2307,14 +2394,14 @@ def crm_dashboard():
         MATCH (p:Person)
         WHERE p.timeAvailability IS NOT NULL AND p.timeAvailability <> ''
         WITH p,
-          CASE 
+          CASE
             WHEN toLower(p.timeAvailability) CONTAINS 'შაბათ' OR toLower(p.timeAvailability) CONTAINS 'კვირას' THEN 'Weekends'
             WHEN toLower(p.timeAvailability) CONTAINS 'სამუშაო' OR toLower(p.timeAvailability) CONTAINS 'ორშაბათი' OR toLower(p.timeAvailability) CONTAINS 'სამშაბათს' OR toLower(p.timeAvailability) CONTAINS 'ხუთშაბათს' THEN 'Weekdays'
             WHEN toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ' OR toLower(p.timeAvailability) CONTAINS 'თავისუფალი' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ დროს' THEN 'Flexible'
             ELSE 'Other/Unspecified'
           END AS timeGroup
         RETURN timeGroup AS group, count(*) AS count
-        ORDER BY 
+        ORDER BY
           CASE timeGroup
             WHEN 'Weekends' THEN 1
             WHEN 'Weekdays' THEN 2
@@ -2330,7 +2417,7 @@ def crm_dashboard():
         MATCH (p:Person)-[:WANTS_TO_HELP_WITH]->(ia:InvolvementArea)
         MATCH (p)-[:LIVES_AT]->(a:Address)
         WITH a, ia,
-          CASE 
+          CASE
             WHEN toLower(a.fullAddress) CONTAINS 'თბილისი' OR toLower(a.fullAddress) CONTAINS 'tbilisi' THEN 'Tbilisi'
             WHEN toLower(a.fullAddress) CONTAINS 'ბათუმი' OR toLower(a.fullAddress) CONTAINS 'batumi' THEN 'Batumi'
             WHEN toLower(a.fullAddress) CONTAINS 'ქუთაისი' OR toLower(a.fullAddress) CONTAINS 'kutaisi' THEN 'Kutaisi'
@@ -2751,4 +2838,3 @@ async def import_furry_file(file: UploadFile = File(...)):
             {"rows": rows},
         )
     return {"created": len(rows)}
-

@@ -24,9 +24,11 @@ import {
   IconPlus,
   IconRefresh,
   IconShare3,
+  IconSend,
   IconTrash,
   IconUsers,
   IconBrandWhatsapp,
+  IconBrandSlack,
 } from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import {
@@ -3302,6 +3304,15 @@ ${link}`
                 >
                   <IconBrandWhatsapp size={17} />
                 </button>
+                <button
+                  className={surveyInviteForm.channel === 'slack' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'slack' }))}
+                  title="Slack"
+                  aria-label="Slack"
+                >
+                  <IconBrandSlack size={17} />
+                </button>
               </div>
             </div>
             {!activeId ? (
@@ -3357,7 +3368,8 @@ ${link}`
                             setSurveyInviteForm((prev) => ({ ...prev, recipientEmail: event.target.value }))
                           }
                         />
-                      ) : (
+                      ) : null}
+                      {surveyInviteForm.channel === 'whatsapp' ? (
                         <input
                           className="input"
                           placeholder="Recipient phone"
@@ -3366,7 +3378,7 @@ ${link}`
                             setSurveyInviteForm((prev) => ({ ...prev, recipientPhone: event.target.value }))
                           }
                         />
-                      )}
+                      ) : null}
                     </>
                   ) : surveyInviteForm.channel === 'email' ? (
                     <input
@@ -3400,7 +3412,7 @@ ${link}`
                     title="Send invite"
                     aria-label="Send invite"
                   >
-                    {surveyInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}
+                    <IconSend size={17} />
                   </button>
                   <button
                     className="icon-button"
@@ -3640,7 +3652,7 @@ ${link}`
 
               {(statsSeries || reportCharts || topicMap || vennData) ? (
                 <details className="dashboard-detail">
-                  <summary>Charts</summary>
+                  <summary>Stats</summary>
                   <div className="dashboard-detail__body">
                     {statsSeries ? (
                       <div className="report-chart-row">
