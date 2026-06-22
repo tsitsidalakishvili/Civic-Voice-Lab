@@ -1244,7 +1244,7 @@ ${link}`
     const recipientName = surveyInviteForm.recipientName.trim()
     const recipientEmail = surveyInviteForm.recipientEmail.trim()
     const recipientPhone = surveyInviteForm.recipientPhone.trim()
-    const notes = surveyInviteForm.notes.trim()
+    const notes = ''
     try {
       if (selectedChannel === 'email') {
         if (selectedAudience !== 'individual') {
@@ -3391,14 +3391,6 @@ ${link}`
                       <option key={groupEmail} value={groupEmail} />
                     ))}
                   </datalist>
-                  <input
-                    className="input form-grid__full"
-                    placeholder="Notes (optional)"
-                    value={surveyInviteForm.notes}
-                    onChange={(event) =>
-                      setSurveyInviteForm((prev) => ({ ...prev, notes: event.target.value }))
-                    }
-                  />
                 </form>
                 <div className="share-link-strip share-link-actions">
                   <button

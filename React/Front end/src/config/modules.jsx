@@ -49,7 +49,7 @@ export const HUB_MODULE_IDS = [
 // All modules shown; Network and Survey/Consensus are active (others show "In Progress")
 export const buildModules = (t) => {
   const CampaignsModule = (props) => (
-    <CRMPage {...props} initialTab="campaigns" hideTabs />
+    <CRMPage {...props} initialTab="outreach" hideTabs />
   )
   return [
     {
@@ -77,7 +77,6 @@ export const buildModules = (t) => {
       id: 'campaigns',
       label: t('module.campaigns'),
       description: t('module.campaigns.desc'),
-      status: 'In Progress',
       Component: CampaignsModule,
     },
     {
@@ -122,7 +121,7 @@ export const buildModuleSections = (t) => ({
       { label: t('nav.crm.overview'), type: 'tab', value: 'overview', hint: t('nav.crm.overviewHint') },
       { label: t('nav.crm.intake'), type: 'tab', value: 'intake', hint: t('nav.crm.intakeHint') },
       { label: t('nav.crm.people'), type: 'tab', value: 'people', hint: t('nav.crm.peopleHint') },
-      { label: t('nav.crm.outreach'), type: 'tab', value: 'outreach', hint: t('nav.crm.outreachHint') },
+      { label: t('nav.crm.segments'), type: 'tab', value: 'segments', hint: t('nav.crm.segmentsHint') },
     ],
   },
   campaigns: {
@@ -130,11 +129,11 @@ export const buildModuleSections = (t) => ({
     description: t('module.campaigns.desc'),
     flowTitle: t('nav.campaigns.flowTitle'),
     flowSummary: t('nav.campaigns.flowSummary'),
-    defaultTab: 'campaigns',
+    defaultTab: 'outreach',
     sections: [
-      { label: t('nav.campaigns.overview'), type: 'anchor', value: 'campaigns-overview' },
-      { label: t('nav.campaigns.create'), type: 'anchor', value: 'campaigns-create' },
-      { label: t('nav.campaigns.list'), type: 'anchor', value: 'campaigns-list' },
+      { label: t('nav.campaigns.events'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.eventsHint') },
+      { label: t('nav.campaigns.share'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.shareHint') },
+      { label: t('nav.campaigns.results'), type: 'tab', value: 'outreach', hint: t('nav.campaigns.resultsHint') },
     ],
   },
   deliberation: {

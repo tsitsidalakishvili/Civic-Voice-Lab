@@ -153,14 +153,16 @@ const CRM_TAB_STORAGE_KEY = 'fs.crm.activeTab'
 const CRM_DEFAULT_TAB = 'overview'
 const CRM_TASKS_ENABLED = false
 const CRM_PRIMARY_TABS = new Set(
-  ['overview', 'intake', 'people', 'outreach', CRM_TASKS_ENABLED ? 'tasks' : null].filter(Boolean),
+  ['overview', 'intake', 'people', 'segments', CRM_TASKS_ENABLED ? 'tasks' : null].filter(Boolean),
 )
+const CRM_WORKSPACE_TABS = new Set(['outreach', 'campaigns'])
 
 const normalizeCrmTab = (tabId) => {
   if (!tabId) return CRM_DEFAULT_TAB
   if (tabId === 'events') return 'outreach'
   if (!CRM_TASKS_ENABLED && tabId === 'tasks') return CRM_DEFAULT_TAB
-  return CRM_PRIMARY_TABS.has(tabId) ? tabId : CRM_DEFAULT_TAB
+  if (CRM_PRIMARY_TABS.has(tabId) || CRM_WORKSPACE_TABS.has(tabId)) return tabId
+  return CRM_DEFAULT_TAB
 }
 
 export function CRMPage({
@@ -714,7 +716,7 @@ export function CRMPage({
     const selectedChannel = supporterInviteForm.channel
     const selectedAudience = supporterInviteForm.inviteAudience || 'individual'
     try {
-      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
+      if (selectedChannel === 'email') {
         await requestJson('/crm/supporter-invite-groups-config', {
           method: 'PATCH',
           payload: {
@@ -737,7 +739,7 @@ export function CRMPage({
           channel: selectedChannel,
           inviteAudience: selectedAudience,
           supporterType: supporterInviteForm.supporterType,
-          notes: supporterInviteForm.notes.trim(),
+          notes: '',
         },
       })
       const inviteType = normalizeSupporterTypeLabel(
@@ -746,12 +748,12 @@ export function CRMPage({
       const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType)
       setLatestSupporterInviteLink(link)
       setLatestSupporterInviteType(inviteType)
-      if (selectedChannel === 'email') {
+      if (selectedChannel === 'email' && selectedAudience !== 'individual') {
         if (payload?.emailSent) {
-          setSupporterInviteStatus(`âœ… Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
+          setSupporterInviteStatus(`Invite email sent to ${payload?.recipientEmail || targetEmail}.`)
         } else {
           setSupporterInviteStatus(
-            `âš ï¸ Invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
+            `Invite created but email failed (${payload?.emailStatus || 'unknown'}).`,
           )
         }
       } else {
@@ -1675,7 +1677,7 @@ export function CRMPage({
     const recipientName = outreachInviteForm.recipientName.trim()
     const recipientEmail = outreachInviteForm.recipientEmail.trim()
     const recipientPhone = outreachInviteForm.recipientPhone.trim()
-    const notes = outreachInviteForm.notes.trim()
+    const notes = ''
     try {
       if (
         selectedChannel === 'email' &&
@@ -1996,7 +1998,7 @@ export function CRMPage({
             { id: 'overview', label: 'Map & Coverage' },
             { id: 'intake', label: 'New supporters/members' },
             { id: 'people', label: 'People directory' },
-            { id: 'outreach', label: 'Outreach & events' },
+            { id: 'segments', label: 'Segments' },
             CRM_TASKS_ENABLED ? { id: 'tasks', label: 'Task board' } : null,
           ].filter(Boolean).map((tab) => (
             <button
@@ -2401,17 +2403,6 @@ export function CRMPage({
                   <option value="Supporter">Supporter form</option>
                   <option value="Member">Member form</option>
                 </select>
-                <input
-                  className="input"
-                  placeholder="Notes (optional)"
-                  value={supporterInviteForm.notes}
-                  onChange={(event) =>
-                    setSupporterInviteForm((prev) => ({
-                      ...prev,
-                      notes: event.target.value,
-                    }))
-                  }
-                />
               </form>
                 </div>
                 <div className="intake-invite-combined__cta-row intake-invite-compact__actions">
@@ -2873,15 +2864,16 @@ export function CRMPage({
           </div>
         </div>
       )}
-      {activeTab === 'outreach' && (
+      {(activeTab === 'segments' || activeTab === 'outreach') && (
         <div className="stack crm-outreach-flow">
           <div className="module-card module-card__wide module-card--outreach-flow-segment">
             <div className="card-header">
               <div>
-                <h3>Audience</h3>
+                <h3>{activeTab === 'segments' ? 'Segments' : 'Audience'}</h3>
                 <p className="muted">
-                  Save or pick a segment, then register its audience for the event you selected in Events
-                  above.
+                  {activeTab === 'segments'
+                    ? 'Create reusable audience groups from your people directory. Campaigns and surveys can use these same saved segments.'
+                    : 'Pick a saved Network segment, then register that audience for the selected event.'}
                 </p>
               </div>
               <div className="pill">Audience</div>
@@ -2906,13 +2898,15 @@ export function CRMPage({
                 disabled={!segmentSelectedId}
                 onClick={() => handleDeleteSegment(segmentSelectedId)}
               ><IconTrash size={17} /></button>
-              <button
-                className="button"
-                type="button"
-                onClick={() => setShowNewSegmentForm((prev) => !prev)}
-              >
-                {showNewSegmentForm ? <IconCircleX size={17} /> : <IconPlus size={17} />}
-              </button>
+              {activeTab === 'segments' ? (
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => setShowNewSegmentForm((prev) => !prev)}
+                >
+                  {showNewSegmentForm ? <IconCircleX size={17} /> : <IconPlus size={17} />}
+                </button>
+              ) : null}
           </div>
             {segmentSelectedId ? (
               <details
@@ -2966,6 +2960,7 @@ export function CRMPage({
                 Select a saved segment to view its details.
               </p>
             )}
+            {activeTab === 'outreach' ? (
             <div className="outreach-segment-to-event" style={{ marginTop: 14 }}>
               <h4 className="intake-section-title" style={{ margin: '0 0 8px', fontSize: '1rem' }}>
                 Register segment for selected event
@@ -3000,7 +2995,8 @@ export function CRMPage({
                 </div>
               ) : null}
             </div>
-            {showNewSegmentForm ? (
+            ) : null}
+            {activeTab === 'segments' && showNewSegmentForm ? (
                 <form className="stack" onSubmit={handleCreateSegment}>
                   <input
                     className="input"
@@ -3100,6 +3096,7 @@ export function CRMPage({
             ) : null}
                   </div>
 
+          {activeTab === 'outreach' ? (
           <div className="module-card module-card__wide module-card--outreach-flow-events">
                 <div className="card-header">
                   <div>
@@ -3238,6 +3235,9 @@ export function CRMPage({
                 ) : null}
                 </div>
 
+          ) : null}
+
+          {activeTab === 'outreach' ? (
           <div className="module-card module-card__wide module-card--outreach-flow-distribute">
             <div className="card-header">
               <div>
@@ -3407,17 +3407,6 @@ export function CRMPage({
                         Audience group lists are used when channel is Email.
                       </div>
                     )}
-                    <input
-                      className="input"
-                      placeholder="Notes (optional)"
-                      value={outreachInviteForm.notes}
-                      onChange={(event) =>
-                        setOutreachInviteForm((prev) => ({
-                          ...prev,
-                          notes: event.target.value,
-                        }))
-                      }
-                    />
                   </form>
                 </div>
                 <div className="intake-invite-combined__cta-row intake-invite-compact__actions">
@@ -3448,6 +3437,7 @@ export function CRMPage({
               </div>
             </div>
           </div>
+          ) : null}
         </div>
       )}
     </section>
