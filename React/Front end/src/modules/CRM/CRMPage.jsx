@@ -11,7 +11,21 @@ import {
   openExternalShareLink,
 } from '../../lib/inviteDistribution'
 import { CivicStatGrid, PageHeader } from '../../ui'
-import { IconTarget, IconUsers } from '@tabler/icons-react'
+import {
+  IconBrandWhatsapp,
+  IconCircleCheck,
+  IconCircleX,
+  IconCopy,
+  IconDownload,
+  IconExternalLink,
+  IconFileText,
+  IconMail,
+  IconPlus,
+  IconRefresh,
+  IconTrash,
+  IconUsers,
+  IconTarget,
+} from '@tabler/icons-react'
 import { Bar, Doughnut, Pie, PolarArea } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -2005,7 +2019,7 @@ export function CRMPage({
             <div className="module-layout">
               <aside className="module-sidebar">
             <div className="sidebar-card sidebar-card--accent">
-              <h3>Search filters</h3>
+              <h3>Find people</h3>
               <form className="stack" onSubmit={handlePeopleSearch}>
                 <label className="label">Search</label>
                 <input
@@ -2031,7 +2045,7 @@ export function CRMPage({
               </form>
             </div>
             <div className="sidebar-card">
-              <h3>Directory stats</h3>
+              <h3>Stats</h3>
               <div className="metric-row">
                 <span>Results</span>
                 <strong>{people.length}</strong>
@@ -2212,7 +2226,7 @@ export function CRMPage({
                       onClick={handleProfileSave}
                       disabled={profileSaving}
                     >
-                      {profileSaving ? 'Savingâ€¦' : 'Save profile'}
+                      {profileSaving ? 'Savingâ€¦' : <IconCircleCheck size={17} />}
                     </button>
                   </div>
                 </div>
@@ -2230,23 +2244,60 @@ export function CRMPage({
           <div className="module-card module-card__wide panel intake-flow">
             <div className="card-header">
               <div>
-                <h3>Distribution: new supporters &amp; members</h3>
+                <h3>Send signup link</h3>
                 <p className="muted">
                   Same invite flow as Outreach events and Survey &amp; Consensus â€” share signup links by
                   email, WhatsApp, or Slack; track reminders and conversion below.
                 </p>
               </div>
-              <div className="pill">Distribution</div>
+              <div className="share-channel-icons" aria-label="Signup channel">
+                <button
+                  className={
+                    supporterInviteForm.channel === 'email'
+                      ? 'icon-button icon-button--primary active'
+                      : 'icon-button'
+                  }
+                  type="button"
+                  title="Email"
+                  aria-label="Email"
+                  onClick={() =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      channel: 'email',
+                    }))
+                  }
+                >
+                  <IconMail size={17} />
+                </button>
+                <button
+                  className={
+                    supporterInviteForm.channel === 'whatsapp'
+                      ? 'icon-button icon-button--primary active'
+                      : 'icon-button'
+                  }
+                  type="button"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
+                  onClick={() =>
+                    setSupporterInviteForm((prev) => ({
+                      ...prev,
+                      channel: 'whatsapp',
+                    }))
+                  }
+                >
+                  <IconBrandWhatsapp size={17} />
+                </button>
+              </div>
             </div>
             <div className="module-card intake-tile intake-order-links">
-              <div className="intake-invite-combined">
-                <div className="intake-invite-combined__pane">
+              <div className="intake-invite-compact">
+                <div className="intake-invite-compact__form">
                   <div className="intake-section-heading">
-                    <h4 className="intake-section-title">Create and send invite form</h4>
+                    <h4 className="intake-section-title">Invite</h4>
                   </div>
                   <form
                     id="crm-supporter-invite-form"
-                    className="form-grid"
+                    className="form-grid intake-invite-form-compact"
                     onSubmit={handleCreateSupporterInvite}
                   >
                 <select
@@ -2350,20 +2401,6 @@ export function CRMPage({
                   <option value="Supporter">Supporter form</option>
                   <option value="Member">Member form</option>
                 </select>
-                <select
-                  className="select"
-                  value={supporterInviteForm.channel}
-                  onChange={(event) =>
-                    setSupporterInviteForm((prev) => ({
-                      ...prev,
-                      channel: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="slack">Slack</option>
-                </select>
                 <input
                   className="input"
                   placeholder="Notes (optional)"
@@ -2377,66 +2414,40 @@ export function CRMPage({
                 />
               </form>
                 </div>
-                <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
-                  <h4 className="intake-section-title">Latest invite link</h4>
-                  <label className="label" htmlFor="crm-latest-invite-url">
-                    Invite URL
-                  </label>
-                  <input
-                    id="crm-latest-invite-url"
-                    className="input"
-                    readOnly
-                    value={latestSupporterInviteLink || fallbackOpenFormLink}
-                    placeholder="Invite link appears here"
-                  />
-                  <div className="module-footer intake-invite-combined__footer">
-                    <span>
-                      <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
-                    </span>
-                    <span>
-                      <strong>Approved:</strong> {supporterInviteStats?.converted ?? 0}
-                    </span>
-                    <span>
-                      <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
-                    </span>
-                    <span>
-                      <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
-                    </span>
-                  </div>
-                </div>
-                <div className="intake-invite-combined__cta-row">
-                  <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
+                <div className="intake-invite-combined__cta-row intake-invite-compact__actions">
                   <button
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
-                    type="button"
-                    onClick={() =>
-                      handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
-                    }
-                  >
-                    Copy link
-                  </button>
-                  <button
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
+                    className="icon-button icon-button--primary intake-invite-combined__cta-send"
                     type="submit"
                     form="crm-supporter-invite-form"
                     disabled={supporterInviteLoading}
+                    title="Send invite"
+                    aria-label="Send invite"
                   >
-                    {supporterInviteLoading ? 'Creatingâ€¦' : 'Send invite link'}
+                    {supporterInviteLoading ? '...' : supporterInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}
                   </button>
+                  <button
+                    className="icon-button intake-invite-combined__cta-copy"
+                    type="button"
+                    title="Copy link"
+                    aria-label="Copy link"
+                    onClick={() =>
+                      handleCopySupporterInviteLink(latestSupporterInviteLink || fallbackOpenFormLink)
+                    }
+                  ><IconCopy size={17} /></button>
                   <a
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
+                    className="icon-button intake-invite-combined__cta-open"
                     href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
                     target="_blank"
                     rel="noreferrer"
-                  >
-                    Open latest form
-                  </a>
+                    title="Open form"
+                    aria-label="Open form"
+                  ><IconExternalLink size={17} /></a>
                 </div>
               </div>
             </div>
             <div className="module-card intake-tile stack intake-order-pending">
               <div className="card-header">
-                <h4 className="intake-section-title">Invite pipeline</h4>
+                <h4 className="intake-section-title">Pipeline</h4>
               </div>
               {supporterInviteError ? <div className="module-alert">{supporterInviteError}</div> : null}
               {supporterInviteStatus ? (
@@ -2579,7 +2590,7 @@ export function CRMPage({
                     onClick={loadSupporterInvites}
                     disabled={supporterInviteLoading}
                   >
-                    {supporterInviteLoading ? 'Refreshingâ€¦' : 'Refresh conversion'}
+                    {supporterInviteLoading ? '...' : <IconRefresh size={16} />}
                   </button>
                   <div className="pill">Live</div>
                 </div>
@@ -2650,7 +2661,7 @@ export function CRMPage({
                       onClick={handleSaveSupporterSignupVideo}
                       disabled={supporterSignupVideoSaving}
                     >
-                      {supporterSignupVideoSaving ? 'Savingâ€¦' : 'Save videos'}
+                      {supporterSignupVideoSaving ? 'Savingâ€¦' : <IconCircleCheck size={16} />}
                     </button>
                   </div>
                   {supporterSignupVideoEmbedUrl ? (
@@ -2867,7 +2878,7 @@ export function CRMPage({
           <div className="module-card module-card__wide module-card--outreach-flow-segment">
             <div className="card-header">
               <div>
-                <h3>Segment: create or select</h3>
+                <h3>Audience</h3>
                 <p className="muted">
                   Save or pick a segment, then register its audience for the event you selected in Events
                   above.
@@ -2894,15 +2905,13 @@ export function CRMPage({
                 type="button"
                 disabled={!segmentSelectedId}
                 onClick={() => handleDeleteSegment(segmentSelectedId)}
-              >
-                Delete segment
-              </button>
+              ><IconTrash size={17} /></button>
               <button
                 className="button"
                 type="button"
                 onClick={() => setShowNewSegmentForm((prev) => !prev)}
               >
-                {showNewSegmentForm ? 'Close new segment' : '+ New segment'}
+                {showNewSegmentForm ? <IconCircleX size={17} /> : <IconPlus size={17} />}
               </button>
           </div>
             {segmentSelectedId ? (
@@ -2912,7 +2921,7 @@ export function CRMPage({
                 defaultOpen
               >
                 <summary>
-                  <span className="intake-section-title">Selected segment details</span>
+                  <span className="intake-section-title">Segment details</span>
                 </summary>
                 <div className="dashboard-detail__body">
                   {selectedSegment ? (
@@ -2981,7 +2990,7 @@ export function CRMPage({
                     disabled={!segmentSelectedId || outreachAttachLoading}
                     onClick={handleAttachSegmentAudienceToEvent}
                   >
-                    {outreachAttachLoading ? 'Registeringâ€¦' : 'Register segment audience for this event'}
+                    {outreachAttachLoading ? '...' : <IconCircleCheck size={17} />}
                   </button>
                 </>
               )}
@@ -3094,7 +3103,7 @@ export function CRMPage({
           <div className="module-card module-card__wide module-card--outreach-flow-events">
                 <div className="card-header">
                   <div>
-                <h3>Events: create or select</h3>
+                <h3>Events</h3>
                 <p className="muted">
                   Create a new event or pick one from the list (no segment required). Then attach a segment
                   below if you want bulk registrations, and use distribution for links and invites.
@@ -3117,15 +3126,13 @@ export function CRMPage({
                   </option>
                 ))}
               </select>
-              <button className="button-secondary" type="button" onClick={loadOutreachEvents}>
-                Refresh events
-              </button>
+              <button className="button-secondary" type="button" onClick={loadOutreachEvents}><IconRefresh size={17} /></button>
                   <button
                     className="button"
                     type="button"
                 onClick={() => setShowNewEventForm((prev) => !prev)}
                   >
-                {showNewEventForm ? 'Close new event' : '+ New event'}
+                {showNewEventForm ? <IconCircleX size={17} /> : <IconPlus size={17} />}
                   </button>
                 </div>
             {outreachEventId ? (
@@ -3135,7 +3142,7 @@ export function CRMPage({
                 defaultOpen
               >
                 <summary>
-                  <span className="intake-section-title">Selected event details</span>
+                  <span className="intake-section-title">Event details</span>
                 </summary>
                 <div className="dashboard-detail__body">
                   {outreachSelectedEvent ? (
@@ -3234,13 +3241,50 @@ export function CRMPage({
           <div className="module-card module-card__wide module-card--outreach-flow-distribute">
             <div className="card-header">
               <div>
-                <h3>Distribution: invite &amp; registration link</h3>
+                <h3>Send registration link</h3>
                 <p className="muted">
                   Choose single recipient, the saved segment (Bcc to member emails), or verified / registered
                   Google groups. Then pick channel and send or copy the event link.
                 </p>
               </div>
-              <div className="pill">Distribution</div>
+              <div className="share-channel-icons" aria-label="Registration channel">
+                <button
+                  className={
+                    outreachInviteForm.channel === 'email'
+                      ? 'icon-button icon-button--primary active'
+                      : 'icon-button'
+                  }
+                  type="button"
+                  title="Email"
+                  aria-label="Email"
+                  onClick={() =>
+                    setOutreachInviteForm((prev) => ({
+                      ...prev,
+                      channel: 'email',
+                    }))
+                  }
+                >
+                  <IconMail size={17} />
+                </button>
+                <button
+                  className={
+                    outreachInviteForm.channel === 'whatsapp'
+                      ? 'icon-button icon-button--primary active'
+                      : 'icon-button'
+                  }
+                  type="button"
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
+                  onClick={() =>
+                    setOutreachInviteForm((prev) => ({
+                      ...prev,
+                      channel: 'whatsapp',
+                    }))
+                  }
+                >
+                  <IconBrandWhatsapp size={17} />
+                </button>
+              </div>
             </div>
             {outreachDistributionError ? (
               <div className="module-alert">{outreachDistributionError}</div>
@@ -3249,14 +3293,14 @@ export function CRMPage({
               <div className="module-alert module-alert--success">{outreachDistributionStatus}</div>
             ) : null}
             <div className="module-card intake-tile intake-order-links">
-              <div className="intake-invite-combined">
-                <div className="intake-invite-combined__pane">
+              <div className="intake-invite-compact">
+                <div className="intake-invite-compact__form">
                   <div className="intake-section-heading">
-                    <h4 className="intake-section-title">Create and send invite form</h4>
+                    <h4 className="intake-section-title">Invite</h4>
                   </div>
                   <form
                     id="crm-outreach-invite-form"
-                    className="form-grid"
+                    className="form-grid intake-invite-form-compact"
                     onSubmit={handleSubmitOutreachInvite}
                   >
                     <select
@@ -3363,30 +3407,6 @@ export function CRMPage({
                         Audience group lists are used when channel is Email.
                       </div>
                     )}
-                    <select
-                      className="select"
-                      value="event"
-                      aria-label="Registration form type"
-                      onChange={() => {
-                        /* Event tab only offers event registration links */
-                      }}
-                    >
-                      <option value="event">Event registration</option>
-                    </select>
-                    <select
-                      className="select"
-                      value={outreachInviteForm.channel}
-                      onChange={(event) =>
-                        setOutreachInviteForm((prev) => ({
-                          ...prev,
-                          channel: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="email">Email</option>
-                      <option value="whatsapp">WhatsApp</option>
-                      <option value="slack">Slack</option>
-                    </select>
                     <input
                       className="input"
                       placeholder="Notes (optional)"
@@ -3400,58 +3420,30 @@ export function CRMPage({
                     />
                   </form>
                 </div>
-                <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
-                  <h4 className="intake-section-title">Latest invite link</h4>
-                  <label className="label" htmlFor="crm-outreach-event-url">
-                    Invite URL
-                  </label>
-                  <input
-                    id="crm-outreach-event-url"
-                    className="input"
-                    readOnly
-                    value={outreachPublicLink}
-                    placeholder="Invite link appears here"
-                  />
-                  <div className="module-footer intake-invite-combined__footer">
-                    <span>
-                      <strong>Invites sent:</strong> {supporterInviteStats?.sent ?? 0}
-                    </span>
-                    <span>
-                      <strong>Approved:</strong> {supporterInviteStats?.converted ?? 0}
-                    </span>
-                    <span>
-                      <strong>Pending:</strong> {supporterInviteStats?.pending ?? 0}
-                    </span>
-                    <span>
-                      <strong>Reminders:</strong> {supporterInviteStats?.reminders ?? 0}
-                    </span>
-                  </div>
-                </div>
-                <div className="intake-invite-combined__cta-row">
-                  <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
+                <div className="intake-invite-combined__cta-row intake-invite-compact__actions">
                   <button
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
-                    type="button"
-                    onClick={handleCopyOutreachEventLink}
-                  >
-                    Copy link
-                  </button>
-                  <button
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
+                    className="icon-button icon-button--primary intake-invite-combined__cta-send"
                     type="submit"
                     form="crm-outreach-invite-form"
                     disabled={!outreachEventId}
-                  >
-                    Send invite link
-                  </button>
+                    title="Send invite"
+                    aria-label="Send invite"
+                  >{outreachInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}</button>
+                  <button
+                    className="icon-button intake-invite-combined__cta-copy"
+                    type="button"
+                    title="Copy link"
+                    aria-label="Copy link"
+                    onClick={handleCopyOutreachEventLink}
+                  ><IconCopy size={17} /></button>
                   <a
-                    className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
+                    className="icon-button intake-invite-combined__cta-open"
                     href={outreachPublicLink || '#'}
                     target="_blank"
                     rel="noreferrer"
-                  >
-                    Open latest form
-                  </a>
+                    title="Open form"
+                    aria-label="Open form"
+                  ><IconExternalLink size={17} /></a>
                 </div>
               </div>
             </div>
@@ -7847,4 +7839,3 @@ function CRMEventsTab() {
 function CRMMapTab() {
   return <CRMNeighborhoodMap />
 }
-

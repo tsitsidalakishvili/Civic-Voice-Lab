@@ -1,4 +1,4 @@
-"""
+﻿"""
 Vote submission endpoints — single vote, bulk import, bulk dataset import, simulate votes.
 """
 from typing import Optional
@@ -359,11 +359,14 @@ def simulate_votes(conversation_id: str, payload: SimulateVotesRequest):
             WHERE cm.status = "approved"
             MERGE (p:Participant {id: v.participant_id})
             ON CREATE SET p.createdAt = datetime()
+            SET p.isSynthetic = true,
+                p.syntheticSource = "simulate_votes"
             MERGE (p)-[:PARTICIPATED_IN]->(c)
             MERGE (p)-[r:VOTED]->(cm)
             SET r.choice = v.choice,
                 r.votedAt = datetime(),
-                r.important = false
+                r.important = false,
+                r.isSynthetic = true
             RETURN count(r) AS total
             """,
             {"cid": conversation_id, "votes": votes},
@@ -374,3 +377,4 @@ def simulate_votes(conversation_id: str, payload: SimulateVotesRequest):
         "votes_per_participant": votes_per_participant,
         "generated_votes": generated_votes,
     }
+

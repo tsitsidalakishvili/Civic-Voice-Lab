@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+﻿from fastapi import APIRouter
 
 from .db import get_active_database, get_driver
 
@@ -35,3 +35,4 @@ def deliberation_summary():
         "comments": int(row.get("comments") or 0),
         "participants": int(row.get("participants") or 0),
     }
+

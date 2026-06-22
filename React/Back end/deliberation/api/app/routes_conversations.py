@@ -1,4 +1,4 @@
-"""
+﻿"""
 Conversation CRUD, queue endpoint, seeding, invite waves.
 """
 from typing import List, Optional
@@ -180,6 +180,8 @@ def get_conversation(conversation_id: str):
     OPTIONAL MATCH (c)-[:HAS_COMMENT]->(cm:Comment)
     WITH c, count(cm) AS comments
     OPTIONAL MATCH (p:Participant)-[:PARTICIPATED_IN]->(c)
+    WHERE p IS NULL OR (coalesce(p.isSynthetic, false) = false
+      AND NOT p.id =~ '(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     RETURN c, comments, count(DISTINCT p) AS participants
     """
     with _db_session(driver) as session:
@@ -532,3 +534,4 @@ def validate_invite(conversation_id: str, code: str):
     if inv.get("revoked") or revoked_chain:
         return {"valid": False, "reason": "revoked"}
     return {"valid": True}
+

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Metrics, clustering, insights, stats, and moderation log endpoints.
 """
 import random
@@ -11,7 +11,6 @@ from .analytics import compute_cluster_insights, compute_metrics, run_clustering
 from .db import get_driver
 from .services.sentiment_service import score_sentiment
 from .routes_helpers import (
-    MIN_SURVEY_PARTICIPANTS,
     _db_session,
     _execute_read,
     _execute_write,
@@ -38,6 +37,8 @@ def _collect_comments_and_votes(conversation_id: str):
     votes_query = """
     MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(cm:Comment)
     MATCH (p:Participant)-[v:VOTED]->(cm)
+    WHERE coalesce(p.isSynthetic, false) = false
+      AND NOT p.id =~ '(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     RETURN p.id AS participant_id, cm.id AS comment_id, v.choice AS choice, v.important AS important, v.votedAt AS voted_at
     """
     discussion_query = """
@@ -165,10 +166,6 @@ def _ensure_min_participants(conversation_id: str, min_required: int) -> int:
 def _build_metrics(conversation_id: str):
     convo = _get_conversation(conversation_id)
     comments, votes = _collect_comments_and_votes(conversation_id)
-    participants = len({vote["participant_id"] for vote in votes})
-    if MIN_SURVEY_PARTICIPANTS and participants < MIN_SURVEY_PARTICIPANTS:
-        _ensure_min_participants(conversation_id, MIN_SURVEY_PARTICIPANTS)
-        comments, votes = _collect_comments_and_votes(conversation_id)
     points, label_map = run_clustering(votes)
     min_votes = int(convo.get("minVotesForInclusion") or 3)
     consensus, polarizing = compute_metrics(comments, votes, label_map, min_votes)
@@ -262,6 +259,8 @@ def conversation_stats(conversation_id: str):
             OPTIONAL MATCH (c)<-[:VIEWED]-(vw:View)
             OPTIONAL MATCH (c)-[:HAS_COMMENT]->(cm:Comment)
             OPTIONAL MATCH (c)-[:HAS_COMMENT]->(cm2:Comment)<-[:VOTED]-(p:Participant)
+            WHERE p IS NULL OR (coalesce(p.isSynthetic, false) = false
+              AND NOT p.id =~ '(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
             RETURN
               count(DISTINCT vw) AS views,
               count(DISTINCT cm) AS comments,
@@ -275,7 +274,9 @@ def conversation_stats(conversation_id: str):
         votes_total_records = _execute_read(
             session,
             """
-            MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(cm:Comment)<-[v:VOTED]-(:Participant)
+            MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(cm:Comment)<-[v:VOTED]-(p:Participant)
+            WHERE coalesce(p.isSynthetic, false) = false
+              AND NOT p.id =~ '(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             RETURN count(v) AS votes
             """,
             {"cid": conversation_id},
@@ -328,3 +329,4 @@ def moderation_log(conversation_id: str):
             }
         )
     return {"entries": entries}
+

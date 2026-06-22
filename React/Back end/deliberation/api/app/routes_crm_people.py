@@ -1,4 +1,4 @@
-"""
+﻿"""
 CRM – contacts / people CRUD, summary, dashboard, map, import/export,
 geocoding triggers, segments, distinct-values, and furry-friend registry.
 """
@@ -267,6 +267,18 @@ class SupporterInviteCreate(BaseModel):
     notes: Optional[str] = ""
 
 
+class SurveyInviteCreate(BaseModel):
+    conversation_id: str = Field(alias="conversationId", min_length=1)
+    topic: Optional[str] = ""
+    invite_link: str = Field(alias="inviteLink", min_length=1)
+    recipient_name: Optional[str] = Field(alias="recipientName", default="")
+    recipient_email: Optional[str] = Field(alias="recipientEmail", default="")
+    recipient_phone: Optional[str] = Field(alias="recipientPhone", default="")
+    channel: Optional[str] = "manual"
+    invite_audience: Optional[str] = Field(alias="inviteAudience", default="individual")
+    notes: Optional[str] = ""
+
+
 class SupporterInviteReminderCreate(BaseModel):
     channel: Optional[str] = "manual"
     note: Optional[str] = ""
@@ -396,6 +408,33 @@ def _send_supporter_invite_email(recipient_email: str, recipient_name: str, invi
         recipient_email,
         f"Freedom Square {_normalize_supporter_type(supporter_type, 'Supporter')} signup form",
         _build_supporter_invite_email_message(recipient_name, invite_url, supporter_type),
+    )
+
+
+def _build_survey_invite_email_message(recipient_name: str, topic: str, invite_url: str, notes: str = ""):
+    name = recipient_name or "friend"
+    topic_label = topic or "Freedom Square survey"
+    note_block = f"\n\nNote: {notes}" if notes else ""
+    return f"""
+Hello, {name}!
+
+You are invited to take part in this Freedom Square survey:
+{topic_label}
+
+Please click the link below to participate:
+
+{invite_url}{note_block}
+
+Best regards,
+The Freedom Square Team
+""".strip()
+
+
+def _send_survey_invite_email(recipient_email: str, recipient_name: str, topic: str, invite_url: str, notes: str = ""):
+    return _send_smtp_email(
+        recipient_email,
+        f"Freedom Square survey: {topic or 'Participate'}",
+        _build_survey_invite_email_message(recipient_name, topic, invite_url, notes),
     )
 
 
@@ -717,6 +756,101 @@ def create_supporter_invite(payload: SupporterInviteCreate):
         )
     if not records:
         raise HTTPException(status_code=500, detail="Unable to create invite")
+    result = records[0].data()
+    result["emailSent"] = invite_email_sent
+    result["emailStatus"] = invite_email_status
+    if invite_email_error:
+        result["emailError"] = invite_email_error
+    return result
+
+
+@router.post("/survey-invites")
+def create_survey_invite(payload: SurveyInviteCreate):
+    invite_id = str(uuid4())
+    conversation_id = _clean_text(payload.conversation_id)
+    topic = _clean_text(payload.topic)
+    invite_link = _clean_text(payload.invite_link)
+    recipient_name = _clean_text(payload.recipient_name)
+    recipient_email = _clean_text(payload.recipient_email)
+    recipient_phone = _clean_text(payload.recipient_phone)
+    channel = _clean_text(payload.channel) or "manual"
+    invite_audience = _clean_text(payload.invite_audience) or "individual"
+    notes = _clean_text(payload.notes)
+    if not conversation_id:
+        raise HTTPException(status_code=400, detail="Conversation is required")
+    if not invite_link:
+        raise HTTPException(status_code=400, detail="Invite link is required")
+
+    invite_email_sent = False
+    invite_email_status = "not_attempted"
+    invite_email_error = ""
+    if channel.lower() == "email":
+        invite_email_sent, invite_email_status, invite_email_error = _send_survey_invite_email(
+            recipient_email,
+            recipient_name,
+            topic,
+            invite_link,
+            notes,
+        )
+
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            """
+            CREATE (inv:SurveyInvite {
+              inviteId: $inviteId,
+              conversationId: $conversationId,
+              topic: $topic,
+              inviteLink: $inviteLink,
+              recipientName: $recipientName,
+              recipientEmail: $recipientEmail,
+              recipientPhone: $recipientPhone,
+              channel: $channel,
+              inviteAudience: $inviteAudience,
+              notes: $notes,
+              status: 'sent',
+              inviteEmailStatus: $inviteEmailStatus,
+              inviteEmailError: $inviteEmailError,
+              createdAt: datetime()
+            })
+            WITH inv
+            OPTIONAL MATCH (c:Conversation {id: $conversationId})
+            FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END |
+              MERGE (inv)-[:INVITES_TO]->(c)
+            )
+            RETURN
+              inv.inviteId AS inviteId,
+              inv.conversationId AS conversationId,
+              inv.topic AS topic,
+              inv.inviteLink AS inviteLink,
+              inv.recipientName AS recipientName,
+              inv.recipientEmail AS recipientEmail,
+              inv.recipientPhone AS recipientPhone,
+              inv.channel AS channel,
+              coalesce(inv.inviteAudience, 'individual') AS inviteAudience,
+              inv.status AS status,
+              inv.inviteEmailStatus AS inviteEmailStatus,
+              inv.inviteEmailError AS inviteEmailError,
+              toString(inv.createdAt) AS createdAt
+            """,
+            {
+                "inviteId": invite_id,
+                "conversationId": conversation_id,
+                "topic": topic,
+                "inviteLink": invite_link,
+                "recipientName": recipient_name,
+                "recipientEmail": recipient_email,
+                "recipientPhone": recipient_phone,
+                "channel": channel,
+                "inviteAudience": invite_audience,
+                "notes": notes,
+                "inviteEmailStatus": invite_email_status,
+                "inviteEmailError": invite_email_error or "",
+            },
+        )
+    if not records:
+        raise HTTPException(status_code=500, detail="Unable to create survey invite")
     result = records[0].data()
     result["emailSent"] = invite_email_sent
     result["emailStatus"] = invite_email_status
@@ -2617,3 +2751,4 @@ async def import_furry_file(file: UploadFile = File(...)):
             {"rows": rows},
         )
     return {"created": len(rows)}
+

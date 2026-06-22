@@ -11,7 +11,23 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js'
-import { IconChartDots, IconMessage2, IconPlus, IconTrash, IconUsers } from '@tabler/icons-react'
+import {
+  IconChartDots,
+  IconCircleCheck,
+  IconCircleX,
+  IconCopy,
+  IconDownload,
+  IconExternalLink,
+  IconFileText,
+  IconMail,
+  IconMessage2,
+  IconPlus,
+  IconRefresh,
+  IconShare3,
+  IconTrash,
+  IconUsers,
+  IconBrandWhatsapp,
+} from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import {
   getInviteAudienceGroupEmail,
@@ -379,6 +395,7 @@ export function DeliberationPage({
     channel: 'email',
     notes: '',
   })
+  const [showSurveyShareMenu, setShowSurveyShareMenu] = useState(false)
 
 
   const [shareSegments, setShareSegments] = useState([])
@@ -1090,23 +1107,17 @@ export function DeliberationPage({
     recipientName,
     topicLabel,
     link,
-    notes,
     inviteAudience,
-    segmentAudienceLine = '',
   ) => {
-    const trimmedNotes = String(notes || '').trim()
-    const noteBlock = trimmedNotes ? `\n\nNote: ${trimmedNotes}` : ''
     const audience = String(inviteAudience || 'individual').toLowerCase()
     const topic = topicLabel || 'this survey'
-    const prefix =
-      segmentAudienceLine && String(segmentAudienceLine).trim()
-        ? `${String(segmentAudienceLine).trim()}\n\n`
-        : ''
-    if (audience !== 'individual') {
-      return `${prefix}Hi team, here is the Freedom Square survey link for ${getInviteAudienceLabel(audience)} — ${topic}:\n\n${link}${noteBlock}`
+    if (audience && audience !== 'individual') {
+      return `Hi team, here is the Freedom Square survey link for ${getInviteAudienceLabel(audience)}:
+${link}`
     }
     const name = String(recipientName || '').trim() || 'there'
-    return `${prefix}Hi ${name}, you're invited to take part in our survey — ${topic}:\n\n${link}${noteBlock}`
+    return `Hi ${name}, here is your Freedom Square survey link for ${topic}:
+${link}`
   }
 
   const handleShareSurveyLinkByChannel = async ({
@@ -1116,127 +1127,27 @@ export function DeliberationPage({
     recipientName,
     recipientEmail,
     recipientPhone,
-    notes,
     topicLabel,
-    segmentAudienceLine,
   }) => {
     if (!inviteLink) return false
     const normalizedChannel = String(channel || '').toLowerCase()
     const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
-    let segmentMemberEmails = null
-
-    if (normalizedAudience === 'segment') {
-      if (!shareSegmentSelectedId) {
-        setSurveyDistributionError('Select a saved audience segment first.')
-        return false
-      }
-      try {
-        const rows = await getJson(
-          `/crm/segments/${encodeURIComponent(shareSegmentSelectedId)}/run?limit=500`,
-        )
-        const emails = Array.isArray(rows)
-          ? [...new Set(rows.map((row) => String(row?.email || '').trim()).filter(Boolean))]
-          : []
-        if (!emails.length && normalizedChannel === 'email') {
-          setSurveyDistributionError('This segment has no people with email addresses.')
-          return false
-        }
-        segmentMemberEmails = emails
-      } catch (err) {
-        setSurveyDistributionError(err.message || 'Unable to load segment members.')
-        return false
-      }
-    }
-
     const message = buildSurveyShareMessage(
       recipientName,
       topicLabel,
       inviteLink,
-      notes,
       normalizedAudience,
-      segmentAudienceLine,
     )
-    if (normalizedChannel === 'copy') {
-      if (!navigator?.clipboard) {
-        setSurveyDistributionError('Clipboard unavailable in this browser.')
-        return false
-      }
-      await navigator.clipboard.writeText(message)
-      setSurveyDistributionStatus('Survey invite message copied.')
-      return true
-    }
     if (normalizedChannel === 'email') {
-      if (normalizedAudience === 'segment' && segmentMemberEmails) {
-        const bcc = segmentMemberEmails.slice(0, MAILTO_SEGMENT_BCC_LIMIT)
-        const subject = encodeURIComponent(
-          `Freedom Square survey: ${topicLabel || 'Participate'} (${selectedShareSegment?.name || 'segment'})`,
-        )
-        const body = encodeURIComponent(message)
-        const bccParam = bcc.map((email) => encodeURIComponent(email)).join('%2C')
-        openExternalShareLink(`mailto:?bcc=${bccParam}&subject=${subject}&body=${body}`)
-        if (segmentMemberEmails.length > MAILTO_SEGMENT_BCC_LIMIT && navigator?.clipboard) {
-          try {
-            await navigator.clipboard.writeText(segmentMemberEmails.join('\n'))
-            setSurveyDistributionStatus(
-              `Email draft opened with first ${bcc.length} addresses in Bcc. All ${segmentMemberEmails.length} segment emails copied for mail merge.`,
-            )
-          } catch {
-            setSurveyDistributionStatus(
-              `Email draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment).`,
-            )
-          }
-        } else {
-          setSurveyDistributionStatus(
-            `Email draft opened with ${bcc.length} segment address(es) in Bcc.`,
-          )
-        }
-        return true
-      }
-      const audienceGroupEmail = getInviteAudienceGroupEmail(
-        normalizedAudience,
-        surveyInviteGroupsConfig,
-      )
-      const targetEmail =
-        normalizedAudience === 'individual' ? recipientEmail || '' : audienceGroupEmail
-      if (!targetEmail) {
-        if (normalizedAudience === 'individual') {
-          setSurveyDistributionError('Recipient email is required for email sends.')
-        } else {
-          setSurveyDistributionError(
-            `Missing Google email list for ${getInviteAudienceLabel(normalizedAudience)}.`,
-          )
-        }
-        return false
-      }
-      const subject = encodeURIComponent(
-        `Freedom Square survey: ${topicLabel || 'Participate'} (${getInviteAudienceLabel(normalizedAudience)})`,
-      )
-      const body = encodeURIComponent(message)
-      openExternalShareLink(
-        `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
-      )
-      setSurveyDistributionStatus('Survey link shared - email draft opened.')
-      return true
+      setSurveyDistributionError('Use Send invite link to send email invites.')
+      return false
     }
     if (normalizedChannel === 'whatsapp') {
-      if (normalizedAudience === 'segment' && segmentMemberEmails?.length && navigator?.clipboard) {
-        try {
-          await navigator.clipboard.writeText(
-            `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`,
-          )
-        } catch {
-          /* WhatsApp can still open with the message. */
-        }
-      }
       const text = encodeURIComponent(message)
       const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
       const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
       openExternalShareLink(whatsappUrl)
-      setSurveyDistributionStatus(
-        normalizedAudience === 'segment'
-          ? 'WhatsApp opened with the survey link; segment emails copied when available.'
-          : 'WhatsApp share opened with the survey link.',
-      )
+      setSurveyDistributionStatus('Invite link created and WhatsApp share opened.')
       return true
     }
     if (normalizedChannel === 'slack') {
@@ -1245,25 +1156,18 @@ export function DeliberationPage({
         return false
       }
       try {
-        const payload =
-          normalizedAudience === 'segment' && segmentMemberEmails?.length
-            ? `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`
-            : message
-        await navigator.clipboard.writeText(payload)
-        setSurveyDistributionStatus(
-          normalizedAudience === 'segment'
-            ? 'Slack-ready message and segment email list copied.'
-            : 'Slack message copied with the survey link.',
-        )
+        await navigator.clipboard.writeText(message)
+        setSurveyDistributionStatus('Invite link created and Slack message copied.')
         return true
       } catch {
-        setSurveyDistributionError('Unable to copy message for Slack.')
+        setSurveyDistributionError('Invite created, but unable to copy Slack message.')
         return false
       }
     }
-    setSurveyDistributionStatus('Survey link ready to share.')
+    setSurveyDistributionStatus('Invite link created.')
     return true
   }
+
   const buildShareSegmentFilter = () => {
     const tags = shareSegTags.filter(Boolean)
     const skills = shareSegSkills.filter(Boolean)
@@ -1337,32 +1241,68 @@ export function DeliberationPage({
     }
     const selectedChannel = channelOverride || surveyInviteForm.channel
     const selectedAudience = surveyInviteForm.inviteAudience || 'individual'
-    if (selectedAudience === 'segment' && !shareSegmentSelectedId) {
-      setSurveyDistributionError('Select a saved audience segment first (card above).')
-      return false
-    }
-    const segmentAudienceLine = selectedAudience === 'segment' && selectedShareSegment
-      ? `Audience segment: ${selectedShareSegment.name}${
-          shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount} people)` : ''
-        }`
-      : ''
     const recipientName = surveyInviteForm.recipientName.trim()
     const recipientEmail = surveyInviteForm.recipientEmail.trim()
     const recipientPhone = surveyInviteForm.recipientPhone.trim()
     const notes = surveyInviteForm.notes.trim()
     try {
-      if (
-        selectedChannel === 'email' &&
-        (selectedAudience === 'everyone' || selectedAudience === 'verified' || selectedAudience === 'registered')
-      ) {
-        await requestJson('/crm/supporter-invite-groups-config', {
-          method: 'PATCH',
+      if (selectedChannel === 'email') {
+        if (selectedAudience !== 'individual') {
+          await requestJson('/crm/supporter-invite-groups-config', {
+            method: 'PATCH',
+            payload: {
+              everyoneGroupEmail: surveyInviteGroupsConfig.everyoneGroupEmail.trim(),
+              verifiedGroupEmail: surveyInviteGroupsConfig.verifiedGroupEmail.trim(),
+              registeredGroupEmail: surveyInviteGroupsConfig.registeredGroupEmail.trim(),
+            },
+          })
+        }
+        const targetEmail =
+          selectedAudience === 'individual'
+            ? recipientEmail
+            : getInviteAudienceGroupEmail(selectedAudience, surveyInviteGroupsConfig)
+        if (!targetEmail) {
+          if (selectedAudience === 'individual') {
+            setSurveyDistributionError('Recipient email is required for single-recipient email sends.')
+          } else {
+            setSurveyDistributionError(
+              'Missing Google email list for ' + getInviteAudienceLabel(selectedAudience) + '.',
+            )
+          }
+          return false
+        }
+        const payload = await requestJson('/crm/survey-invites', {
+          method: 'POST',
           payload: {
-            everyoneGroupEmail: surveyInviteGroupsConfig.everyoneGroupEmail.trim(),
-            verifiedGroupEmail: surveyInviteGroupsConfig.verifiedGroupEmail.trim(),
-            registeredGroupEmail: surveyInviteGroupsConfig.registeredGroupEmail.trim(),
+            conversationId: activeId,
+            topic: topicLabel,
+            inviteLink: link,
+            recipientName,
+            recipientEmail: targetEmail,
+            recipientPhone,
+            channel: selectedChannel,
+            inviteAudience: selectedAudience,
+            notes,
           },
         })
+        if (payload?.emailSent) {
+          setSurveyDistributionStatus(
+            'Survey invite email sent to ' + (payload?.recipientEmail || targetEmail) + '.',
+          )
+        } else {
+          setSurveyDistributionStatus(
+            'Survey invite created but email failed (' + (payload?.emailStatus || 'unknown') + ').',
+          )
+        }
+        setSurveyInviteForm((prev) => ({
+          ...prev,
+          channel: selectedChannel,
+          recipientName: '',
+          recipientEmail: '',
+          recipientPhone: '',
+          notes: '',
+        }))
+        return true
       }
       const ok = await handleShareSurveyLinkByChannel({
         channel: selectedChannel,
@@ -1371,9 +1311,7 @@ export function DeliberationPage({
         recipientName,
         recipientEmail,
         recipientPhone,
-        notes,
         topicLabel,
-        segmentAudienceLine,
       })
       if (ok && selectedChannel !== 'copy') {
         setSurveyInviteForm((prev) => ({
@@ -1391,17 +1329,18 @@ export function DeliberationPage({
       return false
     }
   }
-
   const handleSubmitSurveyInvite = async (ev) => {
     ev.preventDefault()
     await shareSurveyInvite()
   }
 
   const handleShareSurveyChannelClick = async (channel) => {
+    setShowSurveyShareMenu(false)
     setSurveyInviteForm((prev) => ({ ...prev, channel }))
     await shareSurveyInvite(channel)
   }
   const handleCopySurveyLink = async () => {
+    setShowSurveyShareMenu(false)
     const value = String(questionnaireLink || '').trim()
     setSurveyDistributionError('')
     setSurveyDistributionStatus('')
@@ -2284,25 +2223,71 @@ export function DeliberationPage({
           {copyStatus.message}
         </div>
       ) : null}
+      {activeTab !== 'distribute' && surveyDistributionError ? (
+        <div className="module-alert">{surveyDistributionError}</div>
+      ) : null}
+      {activeTab !== 'distribute' && surveyDistributionStatus ? (
+        <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
+      ) : null}
 
       {showTabs ? (
-        <div className="subtabs">
-          {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'setup', label: 'Set Up' },
-            { id: 'distribute', label: 'Share' },
-            { id: 'moderation', label: 'Review queue' },
-            { id: 'insights', label: 'Insights' },
-          ].map((tab) => (
+        <div className="delib-tabbar">
+          <div className="subtabs">
+            {[
+              { id: 'overview', label: 'Overview' },
+              { id: 'setup', label: 'Set Up' },
+              { id: 'distribute', label: 'Share' },
+              { id: 'moderation', label: 'Review queue' },
+              { id: 'insights', label: 'Insights' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={tab.id === activeTab ? 'subtab active' : 'subtab'}
+                onClick={() => applyActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="survey-share-menu">
             <button
-              key={tab.id}
+              className="survey-share-menu__trigger"
               type="button"
-              className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-              onClick={() => applyActiveTab(tab.id)}
+              disabled={!questionnaireLink}
+              aria-expanded={showSurveyShareMenu}
+              aria-haspopup="menu"
+              onClick={() => setShowSurveyShareMenu((prev) => !prev)}
+              title="Share invite link"
             >
-              {tab.label}
+              <IconShare3 size={18} />
+              <span>Share</span>
             </button>
-          ))}
+            {showSurveyShareMenu ? (
+              <div className="survey-share-menu__panel" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleShareSurveyChannelClick('whatsapp')}
+                >
+                  <IconBrandWhatsapp size={18} />
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleShareSurveyChannelClick('email')}
+                >
+                  <IconMail size={18} />
+                  <span>Mail</span>
+                </button>
+                <button type="button" role="menuitem" onClick={handleCopySurveyLink}>
+                  <IconCopy size={18} />
+                  <span>Copy link</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -2317,22 +2302,13 @@ export function DeliberationPage({
             <div className="card-header">
               <div>
                 <h3>Conversations</h3>
-                <p className="muted">Open, close, and select the active conversation.</p>
+                <p className="muted">Manage ongoing conversations and choose one for admin work.</p>
               </div>
             </div>
-            <div className="table">
-              <div className="table-row table-row--conversations table-head">
-                <span>Topic</span>
-                <span>Status</span>
-                <span>Action</span>
-                <span>Active</span>
-                <span>Link</span>
-                <span>Statements</span>
-                <span>Export CSV</span>
-                <span>Delete</span>
-              </div>
-              {activeConversations.map((convo) => {
+            <div className="conversation-list">
+              {[...activeConversations, ...closedConversations].map((convo) => {
                 const isActive = activeId === convo.id
+                const isOpen = Boolean(convo.is_open)
                 const conversationLink = buildQuestionnaireLink(
                   'deliberation',
                   'participant',
@@ -2343,205 +2319,115 @@ export function DeliberationPage({
                   ? buildStatementPreview(approvedComments)
                   : 'Set active to preview statements.'
                 return (
-                  <div className="table-row table-row--conversations" key={convo.id}>
-                    <span>
-                      <a
-                        className="table-link"
-                        href={publicReportLink || '#'}
-                        target={publicReportLink ? '_blank' : undefined}
-                        rel={publicReportLink ? 'noreferrer' : undefined}
-                        title="Open public report"
-                        onClick={(event) => {
-                          if (publicReportLink) return
-                          event.preventDefault()
-                          handleOpenPublicReport(convo)
-                        }}
-                      >
-                        {convo.topic}
-                      </a>
-                    </span>
-                    <span>Open</span>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => handleToggleConversation(convo.id, false)}
-                      >
-                        Close
-                      </button>
+                  <article
+                    className={isActive ? 'conversation-item active' : 'conversation-item'}
+                    key={convo.id}
+                  >
+                    <div className="conversation-item__main">
+                      <div className="conversation-item__title-row">
+                        <a
+                          className="conversation-item__title"
+                          href={publicReportLink || '#'}
+                          target={publicReportLink ? '_blank' : undefined}
+                          rel={publicReportLink ? 'noreferrer' : undefined}
+                          title="Open public report"
+                          onClick={(event) => {
+                            if (publicReportLink) return
+                            event.preventDefault()
+                            handleOpenPublicReport(convo)
+                          }}
+                        >
+                          {convo.topic || 'Untitled conversation'}
+                        </a>
+                        <span className={isOpen ? 'conversation-pill conversation-pill--open' : 'conversation-pill'}>
+                          {isOpen ? 'Ongoing' : 'Ended'}
+                        </span>
+                      </div>
+                      <div className="conversation-item__meta">
+                        <span>{conversationLink ? 'Participant link ready' : 'No participant link'}</span>
+                      </div>
                     </div>
-                    <div className="table-actions">
+                    <div className="conversation-item__actions" aria-label={'Actions for ' + (convo.topic || 'conversation')}>
                       <button
-                        className="button"
+                        className="button-secondary conversation-action-btn"
                         type="button"
+                        title={isOpen ? 'Close conversation' : 'Reopen conversation'}
+                        aria-label={(isOpen ? 'Close ' : 'Reopen ') + (convo.topic || 'conversation')}
+                        onClick={() => handleToggleConversation(convo.id, !isOpen)}
+                      >
+                        {isOpen ? (
+                          <IconCircleX size={17} stroke={1.7} aria-hidden />
+                        ) : (
+                          <IconRefresh size={17} stroke={1.7} aria-hidden />
+                        )}
+                      </button>
+                      <button
+                        className="button conversation-action-btn"
+                        type="button"
+                        title={isActive ? 'Current conversation' : 'Work on this conversation'}
+                        aria-label={isActive ? (convo.topic || 'conversation') + ' is the current conversation' : 'Work on ' + (convo.topic || 'conversation')}
                         onClick={() => setActiveId(convo.id)}
                         disabled={isActive}
                       >
-                        {isActive ? 'Active' : 'Use'}
+                        <IconCircleCheck size={17} stroke={1.7} aria-hidden />
                       </button>
-                    </div>
-                    <div className="table-actions">
                       <button
-                        className="button-secondary button-secondary--small"
+                        className="button-secondary button-secondary--small conversation-action-btn"
                         type="button"
-                        title={conversationLink || 'Select a conversation to generate a link.'}
+                        title="Copy participant link"
+                        aria-label={'Copy participant link for ' + (convo.topic || 'conversation')}
                         onClick={() => handleCopy(conversationLink, 'Participant link')}
                         disabled={!conversationLink}
                       >
-                        Copy
+                        <IconCopy size={16} stroke={1.7} aria-hidden />
                       </button>
                       <a
-                        className="button-secondary button-secondary--small"
-                        href={conversationLink}
+                        className="button-secondary button-secondary--small conversation-action-btn"
+                        href={conversationLink || '#'}
                         target="_blank"
                         rel="noreferrer"
-                        title={conversationLink || 'Select a conversation to generate a link.'}
+                        title="Open participant form"
+                        aria-label={'Open participant form for ' + (convo.topic || 'conversation')}
                       >
-                        Open
+                        <IconExternalLink size={16} stroke={1.7} aria-hidden />
                       </a>
-                    </div>
-                    <div className="table-actions">
                       <button
-                        className="button-secondary button-secondary--small"
+                        className="button-secondary button-secondary--small conversation-action-btn"
                         type="button"
                         title={statementsTitle}
+                        aria-label={'Preview statements for ' + (convo.topic || 'conversation')}
                         onClick={() => {
                           if (!isActive) setActiveId(convo.id)
                         }}
                       >
-                        Statements
+                        <IconFileText size={16} stroke={1.7} aria-hidden />
                       </button>
-                    </div>
-                    <div className="table-actions">
                       <button
-                        className="button-secondary button-secondary--small"
+                        className="button-secondary button-secondary--small conversation-action-btn"
                         type="button"
+                        title={tableExportingConversationId === convo.id ? 'Exporting CSV' : 'Download CSV'}
+                        aria-label={'Download CSV for ' + (convo.topic || 'conversation')}
                         onClick={() => handleDownloadConversationCsv(convo.id)}
                         disabled={tableExportingConversationId === convo.id}
                       >
-                        {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
+                        <IconDownload size={16} stroke={1.7} aria-hidden />
                       </button>
-                    </div>
-                    <div className="table-actions">
                       <button
-                        className="button-secondary button-secondary--small"
+                        className="button-secondary button-secondary--small conversation-action-btn conversation-action-btn--danger"
                         type="button"
+                        title="Delete conversation"
+                        aria-label={'Delete ' + (convo.topic || 'conversation')}
                         onClick={() => handleDeleteConversation(convo.id, convo.topic)}
                       >
-                        Delete
+                        <IconTrash size={16} stroke={1.7} aria-hidden />
                       </button>
                     </div>
-                  </div>
+                  </article>
                 )
               })}
-              {closedConversations.map((convo) => {
-                const isActive = activeId === convo.id
-                const conversationLink = buildQuestionnaireLink(
-                  'deliberation',
-                  'participant',
-                  convo.id,
-                )
-                const publicReportLink = getPublicReportLink(convo)
-                const statementsTitle = isActive
-                  ? buildStatementPreview(approvedComments)
-                  : 'Set active to preview statements.'
-                return (
-                  <div className="table-row table-row--conversations" key={convo.id}>
-                    <span>
-                      <a
-                        className="table-link"
-                        href={publicReportLink || '#'}
-                        target={publicReportLink ? '_blank' : undefined}
-                        rel={publicReportLink ? 'noreferrer' : undefined}
-                        title="Open public report"
-                        onClick={(event) => {
-                          if (publicReportLink) return
-                          event.preventDefault()
-                          handleOpenPublicReport(convo)
-                        }}
-                      >
-                        {convo.topic}
-                      </a>
-                    </span>
-                    <span>Closed</span>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => handleToggleConversation(convo.id, true)}
-                      >
-                        Reopen
-                      </button>
-                    </div>
-                    <div className="table-actions">
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => setActiveId(convo.id)}
-                        disabled={isActive}
-                      >
-                        {isActive ? 'Active' : 'Use'}
-                      </button>
-                    </div>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary button-secondary--small"
-                        type="button"
-                        title={conversationLink || 'Select a conversation to generate a link.'}
-                        onClick={() => handleCopy(conversationLink, 'Participant link')}
-                        disabled={!conversationLink}
-                      >
-                        Copy
-                      </button>
-                      <a
-                        className="button-secondary button-secondary--small"
-                        href={conversationLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={conversationLink || 'Select a conversation to generate a link.'}
-                      >
-                        Open
-                      </a>
-                    </div>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary button-secondary--small"
-                        type="button"
-                        title={statementsTitle}
-                        onClick={() => {
-                          if (!isActive) setActiveId(convo.id)
-                        }}
-                      >
-                        Statements
-                      </button>
-                    </div>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary button-secondary--small"
-                        type="button"
-                        onClick={() => handleDownloadConversationCsv(convo.id)}
-                        disabled={tableExportingConversationId === convo.id}
-                      >
-                        {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
-                      </button>
-                    </div>
-                    <div className="table-actions">
-                      <button
-                        className="button-secondary button-secondary--small"
-                        type="button"
-                        onClick={() => handleDeleteConversation(convo.id, convo.topic)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-              {conversations.length === 0 && (
-                <div className="table-row table-row--conversations empty">
-                  No conversations yet.
-                </div>
-              )}
+              {conversations.length === 0 ? (
+                <div className="conversation-list__empty">No conversations yet.</div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -2549,31 +2435,38 @@ export function DeliberationPage({
 
       {activeTab === 'setup' && (
         <div className="stack">
-          <div className="module-card module-card__wide">
-            <h3>Start setup</h3>
-            <p className="muted">Create a new conversation or update an existing one.</p>
-            <div className="filter-row">
-              <button
-                className={setupMode === 'new' ? 'button' : 'button-secondary'}
-                type="button"
-                onClick={() => setSetupMode('new')}
-              >
-                New conversation
-              </button>
-              <button
-                className={setupMode === 'existing' ? 'button' : 'button-secondary'}
-                type="button"
-                onClick={() => setSetupMode('existing')}
-              >
-                Existing conversation
-              </button>
+          <div className="module-card module-card__wide setup-mode-card share-step-card">
+            <div className="card-header">
+              <div>
+                <h3>Set Up</h3>
+                <p className="muted">Create a conversation or edit the one you already use.</p>
+              </div>
+              <div className="share-channel-icons" aria-label="Setup mode">
+                <button
+                  className={setupMode === 'new' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSetupMode('new')}
+                  title="New conversation"
+                  aria-label="New conversation"
+                >
+                  <IconPlus size={17} />
+                </button>
+                <button
+                  className={setupMode === 'existing' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSetupMode('existing')}
+                  title="Edit conversation"
+                  aria-label="Edit conversation"
+                >
+                  <IconFileText size={17} />
+                </button>
+              </div>
             </div>
           </div>
 
           {setupMode === 'new' ? (
           <div className="module-card module-card__wide">
-            <h3>Create survey</h3>
-            <p className="muted">Give the survey a clear topic and description.</p>
+            <div className="card-header"><div><h3>Create survey</h3><p className="muted">Topic, statements, and basic rules.</p></div><span className="pill">New</span></div>
             <div className="form-grid">
               <div className="form-grid__full">
                 <input
@@ -2645,8 +2538,7 @@ export function DeliberationPage({
                       }))
                     }
                   >
-                    <IconPlus size={18} stroke={1.5} aria-hidden style={{ marginRight: 6 }} />
-                    Add statement
+                    <IconPlus size={18} stroke={1.5} aria-hidden />
                   </button>
                 </div>
                 <p className="muted">
@@ -2811,9 +2703,7 @@ export function DeliberationPage({
                 </details>
               </div>
               <div className="form-grid__full">
-                <button className="button" type="button" onClick={handleCreateConversation}>
-                  Create conversation
-                </button>
+                <button className="button" type="button" onClick={handleCreateConversation}><IconPlus size={17} />Create</button>
               </div>
             </div>
           </div>
@@ -2821,8 +2711,7 @@ export function DeliberationPage({
 
           {setupMode === 'existing' ? (
             <div className="module-card module-card__wide">
-              <h3>Edit survey settings</h3>
-              <p className="muted">Update the topic, description, and participation rules.</p>
+              <div className="card-header"><div><h3>Edit survey</h3><p className="muted">Text, statements, and basic rules.</p></div><span className="pill">Edit</span></div>
               {conversations.length === 0 ? (
                 <p className="muted">No conversations yet. Create one first.</p>
               ) : (
@@ -2908,8 +2797,7 @@ export function DeliberationPage({
                               setExistingStatementSlots((prev) => [...prev, { id: '', text: '' }])
                             }
                           >
-                            <IconPlus size={18} stroke={1.5} aria-hidden style={{ marginRight: 6 }} />
-                            Add statement
+                            <IconPlus size={18} stroke={1.5} aria-hidden />
                           </button>
                         </div>
                         <div className="filter-row">
@@ -2919,7 +2807,7 @@ export function DeliberationPage({
                             onClick={handleSaveExistingStatements}
                             disabled={savingExistingStatements}
                           >
-                            {savingExistingStatements ? 'Saving…' : 'Save statements'}
+                            {savingExistingStatements ? 'Saving…' : <IconCircleCheck size={17} />}
                           </button>
                           <span className="muted">
                             Edit, add (+), or remove statements; save to update voting cards.
@@ -3078,9 +2966,7 @@ export function DeliberationPage({
                         </details>
                       </div>
                       <div className="form-grid__full">
-                        <button className="button" type="button" onClick={handleUpdateConversation}>
-                          Save settings
-                        </button>
+                        <button className="button" type="button" onClick={handleUpdateConversation}><IconCircleCheck size={17} />Save</button>
                       </div>
                     </div>
                   ) : (
@@ -3122,9 +3008,7 @@ export function DeliberationPage({
                             setInviteForm((prev) => ({ ...prev, parentCode: event.target.value }))
                           }
                         />
-                        <button className="button" type="button" onClick={handleCreateInviteWave}>
-                          Create invite wave
-                        </button>
+                        <button className="button" type="button" onClick={handleCreateInviteWave}><IconPlus size={17} />Create wave</button>
                         {inviteError ? <p className="muted">{inviteError}</p> : null}
                         {inviteWaves.length ? (
                           <div className="stack">
@@ -3146,9 +3030,7 @@ export function DeliberationPage({
                                         className="button-secondary button-secondary--small"
                                         type="button"
                                         onClick={() => handleRevokeInvite(invite.id, true)}
-                                      >
-                                        Revoke
-                                      </button>
+                                      ><IconCircleX size={15} /></button>
                                     </div>
                                   ))}
                                 </div>
@@ -3168,221 +3050,263 @@ export function DeliberationPage({
       )}
 
       {activeTab === 'distribute' && (
-        <div className="stack">
-          <div className="module-card module-card__wide module-card--outreach-flow-segment">
+        <div className="stack share-flow">
+          <div className="module-card module-card__wide survey-conversation-picker share-step-card">
             <div className="card-header">
               <div>
-                <h3>Reach audience</h3>
-                <p className="muted">
-                  Same step as Network → Outreach &amp; events: define who you are reaching before you
-                  send. Segments are shared across the workspace.
-                </p>
+                <h3>Conversation</h3>
+                <p className="muted">Pick the conversation this invite link belongs to.</p>
               </div>
-              <div className="pill">Audience</div>
+              {activeConvo ? (
+                <span className={activeConvo.is_open ? 'conversation-pill conversation-pill--open' : 'conversation-pill'}>
+                  {activeConvo.is_open ? 'Ongoing' : 'Ended'}
+                </span>
+              ) : null}
+            </div>
+            <div className="share-compact-row">
+              <select
+                className="select"
+                value={activeId}
+                onChange={(event) => setActiveId(event.target.value)}
+              >
+                <option value="">Select conversation</option>
+                {activeConversations.length ? (
+                  <optgroup label="Ongoing">
+                    {activeConversations.map((convo) => (
+                      <option key={convo.id} value={convo.id}>
+                        {convo.topic || 'Untitled conversation'}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {closedConversations.length ? (
+                  <optgroup label="Ended">
+                    {closedConversations.map((convo) => (
+                      <option key={convo.id} value={convo.id}>
+                        {convo.topic || 'Untitled conversation'}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={handleCopySurveyLink}
+                disabled={!questionnaireLink}
+                title="Copy invite link"
+                aria-label="Copy invite link"
+              >
+                <IconCopy size={17} />
+              </button>
+              <a
+                className="icon-button"
+                href={questionnaireLink || '#'}
+                target="_blank"
+                rel="noreferrer"
+                title="Open participant form"
+                aria-label="Open participant form"
+              >
+                <IconExternalLink size={17} />
+              </a>
+            </div>
+            {activeConvo ? (
+              <p className="muted survey-conversation-picker__current">
+                Working on: <strong>{activeConvo.topic || 'Untitled conversation'}</strong>
+              </p>
+            ) : (
+              <div className="module-alert">Select a conversation before choosing an audience.</div>
+            )}
+          </div>
+
+          <div className="module-card module-card__wide module-card--outreach-flow-segment share-step-card">
+            <div className="card-header">
+              <div>
+                <h3>Audience</h3>
+                <p className="muted">Use a saved segment, or send to one recipient.</p>
+              </div>
+              <div className="share-icon-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={!shareSegmentSelectedId}
+                  onClick={() => handleShareDeleteSegment(shareSegmentSelectedId)}
+                  title="Delete segment"
+                  aria-label="Delete segment"
+                >
+                  <IconTrash size={17} />
+                </button>
+                <button
+                  className="icon-button icon-button--primary"
+                  type="button"
+                  onClick={() => setShowShareSegmentForm((prev) => !prev)}
+                  title={showShareSegmentForm ? 'Close segment form' : 'New segment'}
+                  aria-label={showShareSegmentForm ? 'Close segment form' : 'New segment'}
+                >
+                  {showShareSegmentForm ? <IconCircleX size={17} /> : <IconPlus size={17} />}
+                </button>
+              </div>
             </div>
             {shareSegmentsError ? <div className="module-alert">{shareSegmentsError}</div> : null}
-            {shareSegmentsLoading ? (
-              <p className="muted" style={{ margin: 0 }}>
-                Loading segments…
-              </p>
-            ) : null}
-            <div className="filter-row">
+            {shareSegmentsLoading ? <p className="muted">Loading segments…</p> : null}
+            <div className="share-compact-row">
               <select
                 className="select"
                 value={shareSegmentSelectedId}
                 onChange={(event) => setShareSegmentSelectedId(event.target.value)}
               >
-                <option value="">Select saved segment</option>
+                <option value="">No segment / single recipient</option>
                 {shareSegments.map((segment) => (
                   <option key={segment.segmentId} value={segment.segmentId}>
                     {segment.name}
                   </option>
                 ))}
               </select>
-              <button
-                className="button-secondary"
-                type="button"
-                disabled={!shareSegmentSelectedId}
-                onClick={() => handleShareDeleteSegment(shareSegmentSelectedId)}
-              >
-                Delete segment
-              </button>
-              <button
-                className="button"
-                type="button"
-                onClick={() => setShowShareSegmentForm((prev) => !prev)}
-              >
-                {showShareSegmentForm ? 'Close new segment' : '+ New segment'}
-              </button>
+              {selectedShareSegment ? (
+                <span className="share-segment-pill">
+                  {shareSegmentCountLoading
+                    ? 'Counting…'
+                    : shareSegmentMemberCount != null
+                      ? `${shareSegmentMemberCount} people`
+                      : 'Segment'}
+                </span>
+              ) : null}
             </div>
-            {shareSegmentSelectedId ? (
-              <details
-                className="dashboard-detail intake-tile outreach-detail-expander"
-                key={shareSegmentSelectedId}
-                defaultOpen
-              >
-                <summary>
-                  <span className="intake-section-title">Selected segment details</span>
-                </summary>
-                <div className="dashboard-detail__body">
-                  {selectedShareSegment ? (
-                    <div className="stack" style={{ marginTop: 0, gap: 12 }}>
-                      <div className="module-footer outreach-detail-footer">
-                        <span>
-                          <strong>Name:</strong> {selectedShareSegment.name || '—'}
-                        </span>
-                        <span>
-                          <strong>Description:</strong> {selectedShareSegment.description || '—'}
-                        </span>
-                        <span>
-                          <strong>Size:</strong>{' '}
-                          {shareSegmentCountLoading
-                            ? '…'
-                            : shareSegmentMemberCount != null
-                              ? shareSegmentMemberCount
-                              : '—'}
-                        </span>
-                        <span>
-                          <strong>Updated:</strong> {selectedShareSegment.updatedAt || '—'}
-                        </span>
-                        <span>
-                          <strong>ID:</strong> {selectedShareSegment.segmentId || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <strong>Filters</strong>
-                        <p
-                          className="muted"
-                          style={{ whiteSpace: 'pre-line', margin: '6px 0 0', lineHeight: 1.45 }}
-                        >
-                          {formatSegmentFilterSummary(selectedShareSegment.filterSpec || {})}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="muted" style={{ margin: 0 }}>
-                      Segment data is unavailable. Try leaving this tab and returning.
-                    </p>
-                  )}
-                </div>
-              </details>
-            ) : (
-              <p className="muted" style={{ margin: 0 }}>
-                Select a saved segment to view its details.
+            {selectedShareSegment ? (
+              <p className="muted share-segment-summary">
+                {formatSegmentFilterSummary(selectedShareSegment.filterSpec || {})}
               </p>
-            )}
+            ) : null}
             {showShareSegmentForm ? (
-              <form className="stack" onSubmit={handleShareCreateSegment}>
-                <input
-                  className="input"
-                  value={shareSegName}
-                  onChange={(event) => setShareSegName(event.target.value)}
-                  placeholder="Segment name"
-                />
-                <input
-                  className="input"
-                  value={shareSegDescription}
-                  onChange={(event) => setShareSegDescription(event.target.value)}
-                  placeholder="Description"
-                />
-                <div className="filter-row">
-                  <select
-                    className="select"
-                    value={shareSegGroup}
-                    onChange={(event) => setShareSegGroup(event.target.value)}
-                  >
-                    <option value="All">All groups</option>
-                    <option value="Supporter">Supporters</option>
-                    <option value="Member">Members</option>
-                  </select>
-                  <select
-                    className="select"
-                    value={shareSegTimeAvailability}
-                    onChange={(event) => setShareSegTimeAvailability(event.target.value)}
-                  >
-                    <option value="All">Any availability</option>
-                    <option value="Weekends">Weekends</option>
-                    <option value="Evenings">Evenings</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Ad-hoc">Ad-hoc</option>
-                  </select>
-                </div>
-                <div className="filter-row">
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={shareSegMinEffort}
-                    onChange={(event) => setShareSegMinEffort(event.target.value)}
-                    placeholder="Min effort hours"
-                  />
-                  <input
-                    className="input"
-                    value={shareSegNameContains}
-                    onChange={(event) => setShareSegNameContains(event.target.value)}
-                    placeholder="Name contains"
-                  />
-                  <input
-                    className="input"
-                    value={shareSegAddressContains}
-                    onChange={(event) => setShareSegAddressContains(event.target.value)}
-                    placeholder="Address contains"
-                  />
-                </div>
-                <div className="filter-row">
-                  <select
-                    className="select"
-                    multiple
-                    value={shareSegTags}
-                    onChange={(event) =>
-                      setShareSegTags(Array.from(event.target.selectedOptions, (opt) => opt.value))
-                    }
-                  >
-                    {shareSegTagOptions.map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="select"
-                    multiple
-                    value={shareSegSkills}
-                    onChange={(event) =>
-                      setShareSegSkills(Array.from(event.target.selectedOptions, (opt) => opt.value))
-                    }
-                  >
-                    {shareSegSkillOptions.map((skill) => (
-                      <option key={skill} value={skill}>
-                        {skill}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button className="button" type="submit">
-                  Save segment
-                </button>
-              </form>
+              <details className="dashboard-detail share-advanced" open>
+                <summary>Segment builder</summary>
+                <form className="stack" onSubmit={handleShareCreateSegment}>
+                  <div className="form-grid">
+                    <input
+                      className="input"
+                      value={shareSegName}
+                      onChange={(event) => setShareSegName(event.target.value)}
+                      placeholder="Segment name"
+                    />
+                    <select
+                      className="select"
+                      value={shareSegGroup}
+                      onChange={(event) => setShareSegGroup(event.target.value)}
+                    >
+                      <option value="All">All groups</option>
+                      <option value="Supporter">Supporters</option>
+                      <option value="Member">Members</option>
+                    </select>
+                    <input
+                      className="input"
+                      value={shareSegNameContains}
+                      onChange={(event) => setShareSegNameContains(event.target.value)}
+                      placeholder="Name contains"
+                    />
+                    <input
+                      className="input"
+                      value={shareSegAddressContains}
+                      onChange={(event) => setShareSegAddressContains(event.target.value)}
+                      placeholder="Address contains"
+                    />
+                    <input
+                      className="input form-grid__full"
+                      value={shareSegDescription}
+                      onChange={(event) => setShareSegDescription(event.target.value)}
+                      placeholder="Description"
+                    />
+                  </div>
+                  <details className="dashboard-detail share-advanced__nested">
+                    <summary>Advanced filters</summary>
+                    <div className="form-grid dashboard-detail__body">
+                      <select
+                        className="select"
+                        value={shareSegTimeAvailability}
+                        onChange={(event) => setShareSegTimeAvailability(event.target.value)}
+                      >
+                        <option value="All">Any availability</option>
+                        <option value="Weekends">Weekends</option>
+                        <option value="Evenings">Evenings</option>
+                        <option value="Full-time">Full-time</option>
+                        <option value="Ad-hoc">Ad-hoc</option>
+                      </select>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={shareSegMinEffort}
+                        onChange={(event) => setShareSegMinEffort(event.target.value)}
+                        placeholder="Min effort hours"
+                      />
+                      <select
+                        className="select"
+                        multiple
+                        value={shareSegTags}
+                        onChange={(event) =>
+                          setShareSegTags(Array.from(event.target.selectedOptions, (opt) => opt.value))
+                        }
+                      >
+                        {shareSegTagOptions.map((tag) => (
+                          <option key={tag} value={tag}>
+                            {tag}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="select"
+                        multiple
+                        value={shareSegSkills}
+                        onChange={(event) =>
+                          setShareSegSkills(Array.from(event.target.selectedOptions, (opt) => opt.value))
+                        }
+                      >
+                        {shareSegSkillOptions.map((skill) => (
+                          <option key={skill} value={skill}>
+                            {skill}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </details>
+                  <button className="button" type="submit">
+                    Save segment
+                  </button>
+                </form>
+              </details>
             ) : null}
           </div>
 
-          <div className="module-card module-card__wide module-card--outreach-flow-distribute">
+          <div className="module-card module-card__wide module-card--outreach-flow-distribute share-step-card">
             <div className="card-header">
               <div>
-                <h3>Distribution: survey participant link</h3>
-                <p className="muted">
-                  After you pick an audience segment above, choose channel (email, WhatsApp, Slack),
-                  copy or send the participant link — same pattern as event registration in Network.
-                  Survey access still follows identity and invite settings in your configuration
-                  above.
-                </p>
+                <h3>Send link</h3>
+                <p className="muted">Choose a channel and send the participant survey link.</p>
               </div>
-              <div className="pill">Distribution</div>
+              <div className="share-channel-icons" aria-label="Invite channel">
+                <button
+                  className={surveyInviteForm.channel === 'email' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'email' }))}
+                  title="Email"
+                  aria-label="Email"
+                >
+                  <IconMail size={17} />
+                </button>
+                <button
+                  className={surveyInviteForm.channel === 'whatsapp' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'whatsapp' }))}
+                  title="WhatsApp"
+                  aria-label="WhatsApp"
+                >
+                  <IconBrandWhatsapp size={17} />
+                </button>
+              </div>
             </div>
             {!activeId ? (
               <ActiveConversationRequired
-                message="Create or select a conversation in Set Up, or pick one in Overview, to get a shareable link."
+                message="Select a conversation first to get a shareable link."
                 onOpenOverview={() => applyActiveTab('overview')}
               />
             ) : questionnaireLink ? (
@@ -3393,208 +3317,118 @@ export function DeliberationPage({
                 {surveyDistributionStatus ? (
                   <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
                 ) : null}
-                <div className="module-card intake-tile intake-order-links">
-                  <div className="intake-invite-combined">
-                    <div className="intake-invite-combined__pane">
-                      <div className="intake-section-heading">
-                        <h4 className="intake-section-title">Create and send invite form</h4>
-                      </div>
-                      <form
-                        id="delib-survey-invite-form"
-                        className="form-grid"
-                        onSubmit={handleSubmitSurveyInvite}
-                      >
-                        <select
-                          className="select"
-                          value={surveyInviteForm.inviteAudience}
-                          onChange={(event) =>
-                            setSurveyInviteForm((prev) => ({
-                              ...prev,
-                              inviteAudience: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="individual">Single recipient</option>
-                          <option value="segment">Selected segment</option>
-                          <option value="everyone">Everyone (group list)</option>
-                          <option value="verified">Verified users (group list)</option>
-                          <option value="registered">Registered users (group list)</option>
-                        </select>
-                        {surveyInviteForm.inviteAudience === 'individual' ? (
-                          <>
-                            <input
-                              className="input"
-                              placeholder="Recipient name"
-                              value={surveyInviteForm.recipientName}
-                              onChange={(event) =>
-                                setSurveyInviteForm((prev) => ({
-                                  ...prev,
-                                  recipientName: event.target.value,
-                                }))
-                              }
-                            />
-                            <input
-                              className="input"
-                              type="email"
-                              placeholder="Recipient email"
-                              value={surveyInviteForm.recipientEmail}
-                              onChange={(event) =>
-                                setSurveyInviteForm((prev) => ({
-                                  ...prev,
-                                  recipientEmail: event.target.value,
-                                }))
-                              }
-                            />
-                            <input
-                              className="input"
-                              placeholder="Recipient phone"
-                              value={surveyInviteForm.recipientPhone}
-                              onChange={(event) =>
-                                setSurveyInviteForm((prev) => ({
-                                  ...prev,
-                                  recipientPhone: event.target.value,
-                                }))
-                              }
-                            />
-                          </>
-                        ) : surveyInviteForm.channel === 'email' ? (
-                          <div className="form-grid__full">
-                            <label className="label">Group email list</label>
-                            <input
-                              className="input"
-                              type="email"
-                              list="delib-survey-invite-group-options"
-                              placeholder="group@googlegroups.com"
-                              value={getInviteAudienceGroupEmail(
-                                surveyInviteForm.inviteAudience,
-                                surveyInviteGroupsConfig,
-                              )}
-                              onChange={(event) =>
-                                setSurveyInviteAudienceGroupEmail(
-                                  surveyInviteForm.inviteAudience,
-                                  event.target.value,
-                                )
-                              }
-                            />
-                            <datalist id="delib-survey-invite-group-options">
-                              {[
-                                ...new Set(
-                                  Object.values(surveyInviteGroupsConfig).filter(Boolean),
-                                ),
-                              ].map((groupEmail) => (
-                                <option key={groupEmail} value={groupEmail} />
-                              ))}
-                            </datalist>
-                            <p className="muted">
-                              Outlook opens with this group email in To: field for{' '}
-                              {getInviteAudienceLabel(surveyInviteForm.inviteAudience)}.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="form-grid__full muted">
-                            Audience group lists are used when channel is Email.
-                          </div>
-                        )}
-                        <select
-                          className="select"
-                          value="participant"
-                          aria-label="Survey link type"
-                          onChange={() => {
-                            /* Participant survey is the default share target */
-                          }}
-                        >
-                          <option value="participant">Participant survey</option>
-                        </select>
-                        <select
-                          className="select"
-                          value={surveyInviteForm.channel}
-                          onChange={(event) =>
-                            setSurveyInviteForm((prev) => ({
-                              ...prev,
-                              channel: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="email">Email</option>
-                          <option value="whatsapp">WhatsApp</option>
-                          <option value="slack">Slack</option>
-                        </select>
+                <form
+                  id="delib-survey-invite-form"
+                  className="form-grid share-send-form"
+                  onSubmit={handleSubmitSurveyInvite}
+                >
+                  <select
+                    className="select"
+                    value={surveyInviteForm.inviteAudience}
+                    onChange={(event) =>
+                      setSurveyInviteForm((prev) => ({
+                        ...prev,
+                        inviteAudience: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="individual">Single recipient</option>
+                    <option value="everyone">Everyone</option>
+                    <option value="verified">Verified users</option>
+                    <option value="registered">Registered users</option>
+                  </select>
+                  {surveyInviteForm.inviteAudience === 'individual' ? (
+                    <>
+                      <input
+                        className="input"
+                        placeholder="Recipient name"
+                        value={surveyInviteForm.recipientName}
+                        onChange={(event) =>
+                          setSurveyInviteForm((prev) => ({ ...prev, recipientName: event.target.value }))
+                        }
+                      />
+                      {surveyInviteForm.channel === 'email' ? (
                         <input
                           className="input"
-                          placeholder="Notes (optional)"
-                          value={surveyInviteForm.notes}
+                          type="email"
+                          placeholder="Recipient email"
+                          value={surveyInviteForm.recipientEmail}
                           onChange={(event) =>
-                            setSurveyInviteForm((prev) => ({
-                              ...prev,
-                              notes: event.target.value,
-                            }))
+                            setSurveyInviteForm((prev) => ({ ...prev, recipientEmail: event.target.value }))
                           }
                         />
-                      </form>
-                    </div>
-                    <div className="intake-invite-combined__pane intake-invite-combined__pane--aside">
-                      <h4 className="intake-section-title">Latest invite link</h4>
-                      <label className="label" htmlFor="delib-survey-invite-url">
-                        Invite URL
-                      </label>
-                      <input
-                        id="delib-survey-invite-url"
-                        className="input"
-                        readOnly
-                        value={questionnaireLink}
-                        placeholder="Invite link appears here"
-                      />
-                      <div className="module-footer intake-invite-combined__footer">
-                        <span>
-                          <strong>Segment:</strong>{' '}
-                          {selectedShareSegment
-                            ? `${truncateText(selectedShareSegment.name, 36)}${
-                                shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount})` : ''
-                              }`
-                            : '—'}
-                        </span>
-                        <span>
-                          <strong>Topic:</strong>{' '}
-                          {truncateText(activeConvo?.topic || '—', 48)}
-                        </span>
-                        <span>
-                          <strong>Views:</strong> {stats?.views ?? '—'}
-                        </span>
-                        <span>
-                          <strong>Voters:</strong> {stats?.voters ?? '—'}
-                        </span>
-                        <span>
-                          <strong>Commenters:</strong> {stats?.commenters ?? '—'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="intake-invite-combined__cta-row">
-                      <div className="intake-invite-combined__cta-spacer" aria-hidden="true" />
-                      <button
-                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-copy"
-                        type="button"
-                        onClick={handleCopySurveyLink}
-                      >
-                        Copy link
-                      </button>
-                      <button
-                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
-                        type="submit"
-                        form="delib-survey-invite-form"
-                        disabled={surveyInviteForm.inviteAudience === 'segment' && !shareSegmentSelectedId}
-                      >
-                        Send invite link
-                      </button>
-                      <a
-                        className="button intake-invite-combined__cta-btn intake-invite-combined__cta-open"
-                        href={questionnaireLink || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open latest form
-                      </a>
-                    </div>
-                  </div>
+                      ) : (
+                        <input
+                          className="input"
+                          placeholder="Recipient phone"
+                          value={surveyInviteForm.recipientPhone}
+                          onChange={(event) =>
+                            setSurveyInviteForm((prev) => ({ ...prev, recipientPhone: event.target.value }))
+                          }
+                        />
+                      )}
+                    </>
+                  ) : surveyInviteForm.channel === 'email' ? (
+                    <input
+                      className="input"
+                      type="email"
+                      list="delib-survey-invite-group-options"
+                      placeholder="Group email list"
+                      value={getInviteAudienceGroupEmail(
+                        surveyInviteForm.inviteAudience,
+                        surveyInviteGroupsConfig,
+                      )}
+                      onChange={(event) =>
+                        setSurveyInviteAudienceGroupEmail(
+                          surveyInviteForm.inviteAudience,
+                          event.target.value,
+                        )
+                      }
+                    />
+                  ) : null}
+                  <datalist id="delib-survey-invite-group-options">
+                    {[...new Set(Object.values(surveyInviteGroupsConfig).filter(Boolean))].map((groupEmail) => (
+                      <option key={groupEmail} value={groupEmail} />
+                    ))}
+                  </datalist>
+                  <input
+                    className="input form-grid__full"
+                    placeholder="Notes (optional)"
+                    value={surveyInviteForm.notes}
+                    onChange={(event) =>
+                      setSurveyInviteForm((prev) => ({ ...prev, notes: event.target.value }))
+                    }
+                  />
+                </form>
+                <div className="share-link-strip share-link-actions">
+                  <button
+                    className="icon-button icon-button--primary"
+                    type="submit"
+                    form="delib-survey-invite-form"
+                    title="Send invite"
+                    aria-label="Send invite"
+                  >
+                    {surveyInviteForm.channel === 'email' ? <IconMail size={17} /> : <IconBrandWhatsapp size={17} />}
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={handleCopySurveyLink}
+                    title="Copy link"
+                    aria-label="Copy link"
+                  >
+                    <IconCopy size={17} />
+                  </button>
+                  <a
+                    className="icon-button"
+                    href={questionnaireLink || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open form"
+                    aria-label="Open form"
+                  >
+                    <IconExternalLink size={17} />
+                  </a>
                 </div>
               </>
             ) : (
@@ -3603,7 +3437,6 @@ export function DeliberationPage({
           </div>
         </div>
       )}
-
       {activeTab === 'moderation' && (
         <div className="stack">
           {!activeConvo ? (
@@ -3683,44 +3516,58 @@ export function DeliberationPage({
               onOpenOverview={() => applyActiveTab('overview')}
             />
           ) : (
-            <div className="module-card module-card__wide">
-              <div className="module-card">
-                <div className="card-header">
-                  <div>
-                    <h4>Conversation in focus</h4>
-                    <p className="muted">{activeConvo?.topic || 'Untitled conversation'}</p>
-                  </div>
-                  <span className="pill">{activeConvo?.is_open ? 'Open' : 'Closed'}</span>
+            <div className="module-card module-card__wide insights-focus-card share-step-card">
+              <div className="card-header">
+                <div>
+                  <h3>Insights</h3>
+                  <p className="muted">{activeConvo?.topic || 'Untitled conversation'}</p>
                 </div>
-                <div className="module-footer">
-                  <span>
-                    <strong>ID:</strong> {activeConvo?.id || activeId}
-                  </span>
+                <div className="share-icon-actions" aria-label="Insights actions">
+                  <button
+                    className="icon-button icon-button--primary"
+                    type="button"
+                    onClick={handleRunAnalysis}
+                    title="Run analysis"
+                    aria-label="Run analysis"
+                  >
+                    <IconChartDots size={17} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={handleLoadReport}
+                    title="Load report"
+                    aria-label="Load report"
+                  >
+                    <IconFileText size={17} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={handleLoadStats}
+                    disabled={loadingStats}
+                    title="Refresh stats"
+                    aria-label="Refresh stats"
+                  >
+                    <IconRefresh size={17} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={handleDownloadExport}
+                    disabled={exporting}
+                    title="Download export"
+                    aria-label="Download export"
+                  >
+                    <IconDownload size={17} />
+                  </button>
                 </div>
               </div>
-              <div className="filter-row">
-                <button className="button" type="button" onClick={handleRunAnalysis}>
-                  Run analysis
-                </button>
-                <button className="button-secondary" type="button" onClick={handleLoadReport}>
-                  Load report
-                </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={handleLoadStats}
-                disabled={loadingStats}
-              >
-                {loadingStats ? 'Refreshing stats…' : 'Refresh stats'}
-              </button>
-              <button
-                className="button-secondary"
-                type="button"
-                onClick={handleDownloadExport}
-                disabled={exporting}
-              >
-                {exporting ? 'Preparing export…' : 'Download export'}
-              </button>
+              <div className="module-footer insights-focus-footer">
+                <span className={activeConvo?.is_open ? 'conversation-pill conversation-pill--open' : 'conversation-pill'}>
+                  {activeConvo?.is_open ? 'Ongoing' : 'Ended'}
+                </span>
+                <span>{loadingStats ? 'Refreshing stats…' : exporting ? 'Preparing export…' : 'Ready'}</span>
               </div>
               {reportError ? <div className="module-alert">{reportError}</div> : null}
             {statsError ? <div className="module-alert">{statsError}</div> : null}
@@ -3731,7 +3578,7 @@ export function DeliberationPage({
               <div className="stack report-stack">
                 <div className="report-header">
                   <div>
-                    <h4>Key insights</h4>
+                    <h4>Snapshot</h4>
                     <p className="muted">Live participation signals and report totals.</p>
                     {report && activeConvo?.min_votes_for_inclusion ? (
                       <p className="muted">
@@ -3801,7 +3648,7 @@ export function DeliberationPage({
 
               {(statsSeries || reportCharts || topicMap || vennData) ? (
                 <details className="dashboard-detail">
-                  <summary>Charts & visualizations</summary>
+                  <summary>Charts</summary>
                   <div className="dashboard-detail__body">
                     {statsSeries ? (
                       <div className="report-chart-row">

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Comment creation, listing, moderation, status updates, and deletion.
 """
 import re
@@ -161,6 +161,8 @@ def list_comments(
         MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(cm:Comment)
         WHERE $status IS NULL OR cm.status = $status
         OPTIONAL MATCH (p:Participant)-[v:VOTED]->(cm)
+        WHERE p IS NULL OR (coalesce(p.isSynthetic, false) = false
+          AND NOT p.id =~ '(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
         WITH cm,
             sum(CASE WHEN v.choice = 1 THEN 1 ELSE 0 END) AS agree_count,
             sum(CASE WHEN v.choice = -1 THEN 1 ELSE 0 END) AS disagree_count,
@@ -577,3 +579,4 @@ def ingest_text(conversation_id: str, payload: IngestRequest):
         if len(deduped) >= payload.max_items:
             break
     return {"items": deduped, "total": len(deduped)}
+
