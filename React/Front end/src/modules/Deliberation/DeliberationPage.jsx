@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
+import QRCode from 'qrcode'
 import {
   ArcElement,
   BarElement,
@@ -23,6 +24,7 @@ import {
   IconMessage2,
   IconPlus,
   IconRefresh,
+  IconQrcode,
   IconShare3,
   IconSend,
   IconTrash,
@@ -389,6 +391,8 @@ export function DeliberationPage({
   })
   const [surveyDistributionError, setSurveyDistributionError] = useState('')
   const [surveyDistributionStatus, setSurveyDistributionStatus] = useState('')
+  const [surveyQrExpanded, setSurveyQrExpanded] = useState(false)
+  const [surveyQrDataUrl, setSurveyQrDataUrl] = useState('')
   const [surveyInviteForm, setSurveyInviteForm] = useState({
     inviteAudience: 'individual',
     recipientName: '',
@@ -1062,6 +1066,32 @@ export function DeliberationPage({
     () => buildQuestionnaireLink('deliberation', 'participant'),
     [activeId, language],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!questionnaireLink || !surveyQrExpanded) {
+      setSurveyQrDataUrl('')
+      return undefined
+    }
+    QRCode.toDataURL(questionnaireLink, {
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 280,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    })
+      .then((url) => {
+        if (!cancelled) setSurveyQrDataUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setSurveyQrDataUrl('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [questionnaireLink, surveyQrExpanded])
   const selectedShareSegment = useMemo(
     () => shareSegments.find((s) => s.segmentId === shareSegmentSelectedId) || null,
     [shareSegmentSelectedId, shareSegments],
@@ -3313,6 +3343,16 @@ ${link}`
                 >
                   <IconBrandSlack size={17} />
                 </button>
+                <button
+                  className={surveyQrExpanded ? 'icon-button icon-button--primary active' : 'icon-button'}
+                  type="button"
+                  onClick={() => setSurveyQrExpanded((prev) => !prev)}
+                  title="QR code"
+                  aria-label="Show QR code"
+                  disabled={!questionnaireLink}
+                >
+                  <IconQrcode size={17} />
+                </button>
               </div>
             </div>
             {!activeId ? (
@@ -3327,6 +3367,21 @@ ${link}`
                 ) : null}
                 {surveyDistributionStatus ? (
                   <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
+                ) : null}
+                {surveyQrExpanded ? (
+                  <div className="share-qr-panel">
+                    <div className="share-qr-panel__code" aria-label="Conversation QR code">
+                      {surveyQrDataUrl ? (
+                        <img src={surveyQrDataUrl} alt="QR code for the participant survey link" />
+                      ) : (
+                        <span className="muted">Generating QR code...</span>
+                      )}
+                    </div>
+                    <div className="share-qr-panel__meta">
+                      <strong>Scan to open the conversation</strong>
+                      <p className="muted">Participants can scan this code with their phone camera.</p>
+                    </div>
+                  </div>
                 ) : null}
                 <form
                   id="delib-survey-invite-form"
