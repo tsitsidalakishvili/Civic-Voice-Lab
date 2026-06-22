@@ -107,6 +107,9 @@ class StatementDiscussionCommentOut(BaseModel):
     agree_count: int = 0
     disagree_count: int = 0
     insightful_count: int = 0
+    sentiment_score: float = 0.0
+    sentiment_label: str = "neutral"
+    consensus_impact: float = 0.0
     my_reaction: Optional[str] = None
 
 
@@ -205,6 +208,9 @@ class CommentMetric(BaseModel):
     disagree_count: int
     pass_count: int
     important_count: int = 0
+    discussion_sentiment_score: float = 0.0
+    negative_comment_weight: float = 0.0
+    adjusted_support_score: float = 0.0
     status: str
 
 

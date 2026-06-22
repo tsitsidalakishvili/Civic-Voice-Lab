@@ -1,4 +1,4 @@
-﻿import json
+import json
 import math
 import re
 import unicodedata
@@ -10,6 +10,19 @@ from typing import Any, Iterable
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "tbilisi_neighborhoods.json"
 TBILISI_CENTER = {"lat": 41.7151, "lng": 44.8271}
+
+SABURTALO_ROLLUP_LOCATION = {
+    "id": "tbilisi_saburtalo",
+    "city": "Tbilisi",
+    "district": "Saburtalo",
+    "area": "Saburtalo",
+    "micro_area": "Saburtalo",
+    "lat": 41.7248,
+    "lng": 44.7550,
+    "aliases": ["saburtalo", "vazha pshavela", "vaja pshavela", "lower saburtalo"],
+}
+
+ROLLUP_NEIGHBORHOODS = [SABURTALO_ROLLUP_LOCATION]
 
 CITY_LOCATIONS = [
     {
@@ -113,21 +126,34 @@ def normalize_location_text(text: Any) -> str:
     return value
 
 
+def _with_normalized_aliases(row: dict) -> dict:
+    aliases = {row["micro_area"], row.get("area", ""), row.get("district", "")}
+    aliases.update(row.get("aliases") or [])
+    normalized_aliases = sorted(
+        {normalize_location_text(alias) for alias in aliases if normalize_location_text(alias)},
+        key=len,
+        reverse=True,
+    )
+    return {**row, "aliases_normalized": normalized_aliases}
+
+
 @lru_cache(maxsize=1)
 def load_neighborhoods() -> list[dict]:
     with DATA_PATH.open("r", encoding="utf-8") as handle:
         rows = json.load(handle)
-    neighborhoods = []
-    for row in rows:
-        aliases = {row["micro_area"], row.get("area", ""), row.get("district", "")}
-        aliases.update(row.get("aliases") or [])
-        normalized_aliases = sorted(
-            {normalize_location_text(alias) for alias in aliases if normalize_location_text(alias)},
-            key=len,
-            reverse=True,
-        )
-        neighborhoods.append({**row, "aliases_normalized": normalized_aliases})
-    return neighborhoods
+    return [_with_normalized_aliases(row) for row in [*ROLLUP_NEIGHBORHOODS, *rows]]
+
+
+def rollup_location(location: dict | None) -> dict | None:
+    if not location:
+        return location
+    if (
+        location.get("city") == "Tbilisi"
+        and location.get("district") == "Saburtalo"
+        and location.get("area") == "Saburtalo"
+    ):
+        return {**location, **SABURTALO_ROLLUP_LOCATION}
+    return location
 
 
 def _as_float(value: Any) -> float | None:
@@ -343,6 +369,7 @@ def assign_location_fields(person: dict) -> dict:
         neighbourhood=person.get("neighbourhood"),
     )
     if matched:
+        matched = rollup_location(matched)
         return {
             "city": matched["city"],
             "district": matched["district"],

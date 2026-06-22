@@ -36,7 +36,7 @@ export const renderModuleIcon = (moduleId, size = 18) => {
   return <Icon size={size} />
 }
 
-// All modules shown, only Network/CRM is fully active
+// All modules shown; Network and Survey/Consensus are active
 export const HUB_MODULE_IDS = [
   'crm',
   'campaigns',
@@ -46,7 +46,7 @@ export const HUB_MODULE_IDS = [
   'data-hub',
 ]
 
-// All modules shown, only Network/CRM is fully active (others show "In Progress")
+// All modules shown; Network and Survey/Consensus are active (others show "In Progress")
 export const buildModules = (t) => {
   const CampaignsModule = (props) => (
     <CRMPage {...props} initialTab="campaigns" hideTabs />
@@ -66,12 +66,11 @@ export const buildModules = (t) => {
       Component: CRMPage,
       // No status = Ready/Active
     },
-    // INACTIVE MODULES - shown but not clickable (status: 'In Progress')
+    // Unfinished modules keep status: 'In Progress' and are shown but not clickable
     {
       id: 'deliberation',
       label: t('module.deliberation'),
       description: t('module.deliberation.desc'),
-      status: 'In Progress',
       Component: DeliberationPage,
     },
     {
@@ -147,6 +146,7 @@ export const buildModuleSections = (t) => ({
     sections: [
       { label: t('nav.deliberation.overview'), type: 'tab', value: 'overview', hint: t('nav.deliberation.overviewHint') },
       { label: t('nav.deliberation.setup'), type: 'tab', value: 'setup', hint: t('nav.deliberation.setupHint') },
+      { label: t('nav.deliberation.share'), type: 'tab', value: 'distribute', hint: t('nav.deliberation.shareHint') },
       { label: t('nav.deliberation.insights'), type: 'tab', value: 'insights', hint: t('nav.deliberation.insightsHint') },
       { label: t('nav.deliberation.moderation'), type: 'tab', value: 'moderation', hint: t('nav.deliberation.moderationHint') },
     ],

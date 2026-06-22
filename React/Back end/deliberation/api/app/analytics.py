@@ -174,11 +174,17 @@ def compute_metrics(
             comment_id, {"agree": 0, "disagree": 0, "pass": 0, "important": 0}
         )
         agree = counts["agree"] + comment_bonus
+        support_votes = counts["agree"]
         disagree = counts["disagree"]
         passed = counts["pass"]
         important_count = counts["important"]
-        participation = agree + disagree + passed
-        agreement_ratio = agree / (agree + disagree) if (agree + disagree) > 0 else 0.0
+        discussion_sentiment = float(comment.get("discussion_sentiment_score") or 0.0)
+        negative_comment_weight = float(comment.get("negative_comment_weight") or 0.0)
+        adjusted_support_score = support_votes - disagree + discussion_sentiment
+        sentiment_participation = abs(discussion_sentiment)
+        participation = agree + disagree + passed + int(round(sentiment_participation))
+        support_denominator = max(support_votes + disagree + sentiment_participation, 1.0)
+        agreement_ratio = max(0.0, adjusted_support_score) / support_denominator
         variance = cluster_variance.get(comment_id, 0.0)
         participation_factor = min(participation / 10.0, 1.0)
         importance_weight = 1.0 + min(important_count / 10.0, 1.0) * 0.3
@@ -202,6 +208,9 @@ def compute_metrics(
                 "disagree_count": disagree,
                 "pass_count": passed,
                 "important_count": important_count,
+                "discussion_sentiment_score": round(discussion_sentiment, 3),
+                "negative_comment_weight": round(negative_comment_weight, 3),
+                "adjusted_support_score": round(adjusted_support_score, 3),
             }
         )
 

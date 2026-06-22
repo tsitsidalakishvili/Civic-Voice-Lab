@@ -779,32 +779,44 @@ export function DeliberationQuestionnaire({
                           <strong>Like</strong> {item.like_count || 0}
                         </span>
                         <span>
-                          <strong>Dislike</strong> {item.disagree_count || 0}
+                          <strong>Agree</strong> {item.agree_count || 0}
+                        </span>
+                        <span>
+                          <strong>Disagree</strong> {item.disagree_count || 0}
+                        </span>
+                        <span>
+                          <strong>Insightful</strong> {item.insightful_count || 0}
+                        </span>
+                        <span>
+                          <strong>Sentiment</strong> {item.sentiment_label || 'neutral'}
+                        </span>
+                        <span>
+                          <strong>Impact</strong> {Number(item.consensus_impact || 0).toFixed(1)}
                         </span>
                         {item.my_reaction ? (
                           <span>
                             <strong>{discussionCopy.yourReaction}</strong>{' '}
-                            {item.my_reaction === 'disagree' ? 'dislike' : item.my_reaction}
+                            {item.my_reaction === 'disagree' ? 'disagree' : item.my_reaction}
                           </span>
                         ) : null}
                       </div>
                       <div className="filter-row">
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleReactToStatementDiscussionComment(item.id, 'like')}
-                          disabled={Boolean(statementDiscussionReactionBusyById[item.id])}
-                        >
-                          👍 Like
-                        </button>
-                        <button
-                          className="button-secondary button-secondary--small"
-                          type="button"
-                          onClick={() => handleReactToStatementDiscussionComment(item.id, 'disagree')}
-                          disabled={Boolean(statementDiscussionReactionBusyById[item.id])}
-                        >
-                          👎 Dislike
-                        </button>
+                        {[
+                          ['like', 'Like'],
+                          ['agree', 'Agree'],
+                          ['disagree', 'Disagree'],
+                          ['insightful', 'Insightful'],
+                        ].map(([reaction, label]) => (
+                          <button
+                            className={item.my_reaction === reaction ? 'button button-secondary--small' : 'button-secondary button-secondary--small'}
+                            type="button"
+                            key={reaction}
+                            onClick={() => handleReactToStatementDiscussionComment(item.id, reaction)}
+                            disabled={Boolean(statementDiscussionReactionBusyById[item.id])}
+                          >
+                            {label}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   ))}

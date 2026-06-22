@@ -229,17 +229,15 @@ const DELIBERATION_DEFAULT_TAB = 'overview'
 const DELIBERATION_PRIMARY_TABS = new Set([
   'overview',
   'setup',
+  'distribute',
   'insights',
   'moderation',
 ])
 
 const normalizeDeliberationTab = (tabId) => {
   if (!tabId) return DELIBERATION_DEFAULT_TAB
-  // Share tab was merged into setup; keep old stored/module links working.
-  if (tabId === 'distribute') return 'setup'
   return DELIBERATION_PRIMARY_TABS.has(tabId) ? tabId : DELIBERATION_DEFAULT_TAB
 }
-
 function ActiveConversationRequired({ message, onOpenOverview }) {
   return (
     <div className="module-card module-card__wide">
@@ -1130,6 +1128,31 @@ export function DeliberationPage({
     if (!inviteLink) return false
     const normalizedChannel = String(channel || '').toLowerCase()
     const normalizedAudience = String(inviteAudience || 'individual').toLowerCase()
+    let segmentMemberEmails = null
+
+    if (normalizedAudience === 'segment') {
+      if (!shareSegmentSelectedId) {
+        setSurveyDistributionError('Select a saved audience segment first.')
+        return false
+      }
+      try {
+        const rows = await getJson(
+          `/crm/segments/${encodeURIComponent(shareSegmentSelectedId)}/run?limit=500`,
+        )
+        const emails = Array.isArray(rows)
+          ? [...new Set(rows.map((row) => String(row?.email || '').trim()).filter(Boolean))]
+          : []
+        if (!emails.length && normalizedChannel === 'email') {
+          setSurveyDistributionError('This segment has no people with email addresses.')
+          return false
+        }
+        segmentMemberEmails = emails
+      } catch (err) {
+        setSurveyDistributionError(err.message || 'Unable to load segment members.')
+        return false
+      }
+    }
+
     const message = buildSurveyShareMessage(
       recipientName,
       topicLabel,
@@ -1138,7 +1161,42 @@ export function DeliberationPage({
       normalizedAudience,
       segmentAudienceLine,
     )
+    if (normalizedChannel === 'copy') {
+      if (!navigator?.clipboard) {
+        setSurveyDistributionError('Clipboard unavailable in this browser.')
+        return false
+      }
+      await navigator.clipboard.writeText(message)
+      setSurveyDistributionStatus('Survey invite message copied.')
+      return true
+    }
     if (normalizedChannel === 'email') {
+      if (normalizedAudience === 'segment' && segmentMemberEmails) {
+        const bcc = segmentMemberEmails.slice(0, MAILTO_SEGMENT_BCC_LIMIT)
+        const subject = encodeURIComponent(
+          `Freedom Square survey: ${topicLabel || 'Participate'} (${selectedShareSegment?.name || 'segment'})`,
+        )
+        const body = encodeURIComponent(message)
+        const bccParam = bcc.map((email) => encodeURIComponent(email)).join('%2C')
+        openExternalShareLink(`mailto:?bcc=${bccParam}&subject=${subject}&body=${body}`)
+        if (segmentMemberEmails.length > MAILTO_SEGMENT_BCC_LIMIT && navigator?.clipboard) {
+          try {
+            await navigator.clipboard.writeText(segmentMemberEmails.join('\n'))
+            setSurveyDistributionStatus(
+              `Email draft opened with first ${bcc.length} addresses in Bcc. All ${segmentMemberEmails.length} segment emails copied for mail merge.`,
+            )
+          } catch {
+            setSurveyDistributionStatus(
+              `Email draft opened with first ${bcc.length} addresses in Bcc (${segmentMemberEmails.length} total in segment).`,
+            )
+          }
+        } else {
+          setSurveyDistributionStatus(
+            `Email draft opened with ${bcc.length} segment address(es) in Bcc.`,
+          )
+        }
+        return true
+      }
       const audienceGroupEmail = getInviteAudienceGroupEmail(
         normalizedAudience,
         surveyInviteGroupsConfig,
@@ -1162,15 +1220,28 @@ export function DeliberationPage({
       openExternalShareLink(
         `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}&body=${body}`,
       )
-      setSurveyDistributionStatus('Survey link shared — email draft opened.')
+      setSurveyDistributionStatus('Survey link shared - email draft opened.')
       return true
     }
     if (normalizedChannel === 'whatsapp') {
+      if (normalizedAudience === 'segment' && segmentMemberEmails?.length && navigator?.clipboard) {
+        try {
+          await navigator.clipboard.writeText(
+            `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`,
+          )
+        } catch {
+          /* WhatsApp can still open with the message. */
+        }
+      }
       const text = encodeURIComponent(message)
       const phone = String(recipientPhone || '').replace(/[^\d]/g, '')
       const whatsappUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
       openExternalShareLink(whatsappUrl)
-      setSurveyDistributionStatus('WhatsApp share opened with the survey link.')
+      setSurveyDistributionStatus(
+        normalizedAudience === 'segment'
+          ? 'WhatsApp opened with the survey link; segment emails copied when available.'
+          : 'WhatsApp share opened with the survey link.',
+      )
       return true
     }
     if (normalizedChannel === 'slack') {
@@ -1179,8 +1250,16 @@ export function DeliberationPage({
         return false
       }
       try {
-        await navigator.clipboard.writeText(message)
-        setSurveyDistributionStatus('Slack message copied with the survey link.')
+        const payload =
+          normalizedAudience === 'segment' && segmentMemberEmails?.length
+            ? `${message}\n\n---\nSegment emails (${segmentMemberEmails.length}):\n${segmentMemberEmails.join('\n')}`
+            : message
+        await navigator.clipboard.writeText(payload)
+        setSurveyDistributionStatus(
+          normalizedAudience === 'segment'
+            ? 'Slack-ready message and segment email list copied.'
+            : 'Slack message copied with the survey link.',
+        )
         return true
       } catch {
         setSurveyDistributionError('Unable to copy message for Slack.')
@@ -1190,7 +1269,6 @@ export function DeliberationPage({
     setSurveyDistributionStatus('Survey link ready to share.')
     return true
   }
-
   const buildShareSegmentFilter = () => {
     const tags = shareSegTags.filter(Boolean)
     const skills = shareSegSkills.filter(Boolean)
@@ -1253,26 +1331,25 @@ export function DeliberationPage({
     }
   }
 
-  const handleSubmitSurveyInvite = async (ev) => {
-    ev.preventDefault()
+  const shareSurveyInvite = async (channelOverride = surveyInviteForm.channel) => {
     setSurveyDistributionError('')
     setSurveyDistributionStatus('')
     const link = questionnaireLink
     const topicLabel = activeConvo?.topic || 'Survey'
     if (!activeId || !link) {
       setSurveyDistributionError('Select a conversation to get a survey link.')
-      return
+      return false
     }
     if (!shareSegmentSelectedId) {
       setSurveyDistributionError('Select a saved audience segment first (card above).')
-      return
+      return false
     }
     const segmentAudienceLine = selectedShareSegment
       ? `Audience segment: ${selectedShareSegment.name}${
           shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount} people)` : ''
         }`
       : ''
-    const selectedChannel = surveyInviteForm.channel
+    const selectedChannel = channelOverride || surveyInviteForm.channel
     const selectedAudience = surveyInviteForm.inviteAudience || 'individual'
     const recipientName = surveyInviteForm.recipientName.trim()
     const recipientEmail = surveyInviteForm.recipientEmail.trim()
@@ -1281,7 +1358,7 @@ export function DeliberationPage({
     try {
       if (
         selectedChannel === 'email' &&
-        (selectedAudience === 'verified' || selectedAudience === 'registered')
+        (selectedAudience === 'everyone' || selectedAudience === 'verified' || selectedAudience === 'registered')
       ) {
         await requestJson('/crm/supporter-invite-groups-config', {
           method: 'PATCH',
@@ -1303,20 +1380,32 @@ export function DeliberationPage({
         topicLabel,
         segmentAudienceLine,
       })
-      if (ok) {
+      if (ok && selectedChannel !== 'copy') {
         setSurveyInviteForm((prev) => ({
           ...prev,
+          channel: selectedChannel,
           recipientName: '',
           recipientEmail: '',
           recipientPhone: '',
           notes: '',
         }))
       }
+      return ok
     } catch (err) {
       setSurveyDistributionError(err.message || 'Unable to share survey link.')
+      return false
     }
   }
 
+  const handleSubmitSurveyInvite = async (ev) => {
+    ev.preventDefault()
+    await shareSurveyInvite()
+  }
+
+  const handleShareSurveyChannelClick = async (channel) => {
+    setSurveyInviteForm((prev) => ({ ...prev, channel }))
+    await shareSurveyInvite(channel)
+  }
   const handleCopySurveyLink = async () => {
     const value = String(questionnaireLink || '').trim()
     setSurveyDistributionError('')
@@ -1429,6 +1518,26 @@ export function DeliberationPage({
     }
   }
 
+  const handleDeleteConversation = async (conversationId, topic) => {
+    if (!conversationId) return
+    const label = topic ? `"${topic}"` : 'this conversation'
+    if (!window.confirm(`Delete ${label}? This removes its statements, votes, comments, and reports.`)) {
+      return
+    }
+    setConvoError('')
+    try {
+      await requestJson(`/conversations/${conversationId}`, { method: 'DELETE' })
+      if (activeId === conversationId) {
+        setActiveId('')
+        setActiveConvo(null)
+        setApprovedComments([])
+        setPendingComments([])
+      }
+      loadConversations()
+    } catch (err) {
+      setConvoError(err.message || 'Unable to delete conversation.')
+    }
+  }
   const handleUpdateConversation = async () => {
     if (!activeId || !updateForm) return
     setConvoError('')
@@ -2185,7 +2294,8 @@ export function DeliberationPage({
         <div className="subtabs">
           {[
             { id: 'overview', label: 'Overview' },
-            { id: 'setup', label: 'Set up & share' },
+            { id: 'setup', label: 'Set Up' },
+            { id: 'distribute', label: 'Share' },
             { id: 'moderation', label: 'Review queue' },
             { id: 'insights', label: 'Insights' },
           ].map((tab) => (
@@ -2224,6 +2334,7 @@ export function DeliberationPage({
                 <span>Link</span>
                 <span>Statements</span>
                 <span>Export CSV</span>
+                <span>Delete</span>
               </div>
               {activeConversations.map((convo) => {
                 const isActive = activeId === convo.id
@@ -2314,6 +2425,15 @@ export function DeliberationPage({
                         disabled={tableExportingConversationId === convo.id}
                       >
                         {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        onClick={() => handleDeleteConversation(convo.id, convo.topic)}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -2408,6 +2528,15 @@ export function DeliberationPage({
                         disabled={tableExportingConversationId === convo.id}
                       >
                         {tableExportingConversationId === convo.id ? 'Exporting…' : 'Download CSV'}
+                      </button>
+                    </div>
+                    <div className="table-actions">
+                      <button
+                        className="button-secondary button-secondary--small"
+                        type="button"
+                        onClick={() => handleDeleteConversation(convo.id, convo.topic)}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -3040,10 +3169,15 @@ export function DeliberationPage({
             </div>
           ) : null}
 
+        </div>
+      )}
+
+      {activeTab === 'distribute' && (
+        <div className="stack">
           <div className="module-card module-card__wide module-card--outreach-flow-segment">
             <div className="card-header">
               <div>
-                <h3>Segment: create or select</h3>
+                <h3>Reach audience</h3>
                 <p className="muted">
                   Same step as Network → Outreach &amp; events: define who you are reaching before you
                   send. Segments are shared across the workspace.
@@ -3253,7 +3387,7 @@ export function DeliberationPage({
             </div>
             {!activeId ? (
               <ActiveConversationRequired
-                message="Create or select a conversation above, or pick one in Overview, to get a shareable link."
+                message="Create or select a conversation in Set Up, or pick one in Overview, to get a shareable link."
                 onOpenOverview={() => applyActiveTab('overview')}
               />
             ) : questionnaireLink ? (

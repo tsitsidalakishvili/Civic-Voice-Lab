@@ -3148,17 +3148,19 @@ button.module-flow__step:hover {
 }
 
 .map-count-tooltip {
-  background: transparent;
+  background: rgba(15, 23, 42, 0.92);
   border: 0;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
   color: #fff;
-  font-weight: 800;
-  line-height: 1;
-  pointer-events: none;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 6px 8px;
 }
 
 .map-count-tooltip::before {
-  display: none;
+  border-top-color: rgba(15, 23, 42, 0.92);
 }
 
 .map-legend {

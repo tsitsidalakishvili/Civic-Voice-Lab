@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { IconMaximize, IconMinimize } from '@tabler/icons-react'
-import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip as LeafletTooltip, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, TileLayer, Tooltip as LeafletTooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getJson } from '../../../../services/api'
 
 const TBILISI_CENTER = [41.7151, 44.8271]
+const GEORGIA_CENTER = [42.05, 43.65]
 const TBILISI_BOUNDS = [
   [41.55, 44.6],
   [41.9, 45.05],
+]
+const GEORGIA_BOUNDS = [
+  [41.0, 40.0],
+  [43.8, 46.8],
 ]
 
 const defaultFilters = {
@@ -28,17 +33,9 @@ function buildQuery(filters) {
 }
 
 function bubbleRadius(total) {
-  return Math.max(8, Math.min(42, Math.sqrt(Number(total) || 0) * 5))
+  return Math.max(3, Math.min(12, Math.sqrt(Number(total) || 0) * 1.1))
 }
 
-function typeBreakdown(row) {
-  return [
-    ['Supporters', row.supporters],
-    ['Members', row.members],
-    ['Partners', row.partners],
-    ['Other', row.unknown],
-  ].filter(([, value]) => Number(value) > 0)
-}
 
 function markerColor(row) {
   if (row.members > row.supporters) return '#f97316'
@@ -46,13 +43,16 @@ function markerColor(row) {
   return '#7c3aed'
 }
 
-function MapResizer({ trigger }) {
+function MapViewport({ bounds, trigger }) {
   const map = useMap()
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => map.invalidateSize(), 180)
+    const timeout = window.setTimeout(() => {
+      map.invalidateSize()
+      map.fitBounds(bounds, { padding: [24, 24] })
+    }, 180)
     return () => window.clearTimeout(timeout)
-  }, [map, trigger])
+  }, [bounds, map, trigger])
 
   return null
 }
@@ -151,12 +151,10 @@ export default function CRMNeighborhoodMap() {
       .finally(() => setPeopleLoading(false))
   }, [selected, query])
 
-  const center = useMemo(() => {
-    if (!neighborhoods.length) return TBILISI_CENTER
-    const lat = neighborhoods.reduce((sum, row) => sum + Number(row.lat || 0), 0) / neighborhoods.length
-    const lng = neighborhoods.reduce((sum, row) => sum + Number(row.lng || 0), 0) / neighborhoods.length
-    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : TBILISI_CENTER
-  }, [neighborhoods])
+  const hasGeorgiaScope = neighborhoods.some((row) => row.city && row.city !== 'Tbilisi')
+  const mapCenter = hasGeorgiaScope ? GEORGIA_CENTER : TBILISI_CENTER
+  const mapBounds = hasGeorgiaScope ? GEORGIA_BOUNDS : TBILISI_BOUNDS
+  const mapZoom = hasGeorgiaScope ? 7 : 12
 
   const totalPeople = neighborhoods.reduce((sum, row) => sum + Number(row.total || 0), 0)
 
@@ -285,8 +283,8 @@ export default function CRMNeighborhoodMap() {
           <p className="muted">No matched neighborhoods for the selected filters.</p>
         ) : null}
         {!loading && !error && neighborhoods.length > 0 ? (
-          <MapContainer center={center} zoom={12} maxBounds={TBILISI_BOUNDS} className="map-canvas">
-            <MapResizer trigger={mapExpanded} />
+          <MapContainer center={mapCenter} zoom={mapZoom} maxBounds={mapBounds} className="map-canvas">
+            <MapViewport bounds={mapBounds} trigger={mapExpanded} />
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             {neighborhoods.map((row) => {
               const color = markerColor(row)
@@ -295,21 +293,13 @@ export default function CRMNeighborhoodMap() {
                   key={row.id}
                   center={[row.lat, row.lng]}
                   radius={bubbleRadius(row.total)}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.82, opacity: 1, weight: 2 }}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.68, opacity: 0.92, weight: 1 }}
                   eventHandlers={{ click: () => setSelected(row) }}
                 >
-                  <LeafletTooltip permanent direction="center" className="map-count-tooltip">
-                    {row.total}
+                  <LeafletTooltip direction="top" className="map-count-tooltip">
+                    {row.microArea}: {row.total} people
                   </LeafletTooltip>
-                  <Popup>
-                    <div className="neighborhood-popup">
-                      <strong>{row.microArea}</strong>
-                      <span>{row.total} people</span>
-                      {typeBreakdown(row).map(([label, value]) => (
-                        <span key={label}>{value} {label.toLowerCase()}</span>
-                      ))}
-                    </div>
-                  </Popup>
+
                 </CircleMarker>
               )
             })}

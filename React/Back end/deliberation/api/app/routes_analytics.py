@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from .analytics import compute_cluster_insights, compute_metrics, run_clustering
 from .db import get_driver
+from .services.sentiment_service import score_sentiment
 from .routes_helpers import (
     MIN_SURVEY_PARTICIPANTS,
     _db_session,
@@ -39,10 +40,43 @@ def _collect_comments_and_votes(conversation_id: str):
     MATCH (p:Participant)-[v:VOTED]->(cm)
     RETURN p.id AS participant_id, cm.id AS comment_id, v.choice AS choice, v.important AS important, v.votedAt AS voted_at
     """
+    discussion_query = """
+    MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(cm:Comment)
+    OPTIONAL MATCH (sc:StatementComment)-[:ON_STATEMENT]->(cm)
+    WITH cm.id AS comment_id, sc
+    WHERE sc IS NOT NULL
+    RETURN comment_id, sc.text AS text, sc.sentimentScore AS sentiment_score
+    """
     with _db_session(driver) as session:
         comment_records = _execute_read(session, comments_query, {"cid": conversation_id})
         vote_records = _execute_read(session, votes_query, {"cid": conversation_id})
-    comments = [_node_to_dict(record["cm"]) for record in comment_records]
+        discussion_records = _execute_read(session, discussion_query, {"cid": conversation_id})
+    discussion_scores = {}
+    for record in discussion_records:
+        comment_id = record.get("comment_id")
+        if not comment_id:
+            continue
+        score = record.get("sentiment_score")
+        if score is None:
+            score = score_sentiment(record.get("text") or "").score
+        score = float(score or 0)
+        bucket = discussion_scores.setdefault(
+            comment_id,
+            {"discussion_sentiment_score": 0.0, "negative_comment_weight": 0.0},
+        )
+        bucket["discussion_sentiment_score"] += score
+        if score < 0:
+            bucket["negative_comment_weight"] += abs(score)
+    comments = []
+    for record in comment_records:
+        comment = _node_to_dict(record["cm"])
+        comment.update(
+            discussion_scores.get(
+                comment.get("id"),
+                {"discussion_sentiment_score": 0.0, "negative_comment_weight": 0.0},
+            )
+        )
+        comments.append(comment)
     votes = [record.data() for record in vote_records]
     return comments, votes
 

@@ -34,7 +34,7 @@ def _parse_int(value, default):
         return default
 
 
-MIN_SURVEY_PARTICIPANTS = max(0, _parse_int(os.getenv("SURVEY_MIN_PARTICIPANTS"), 100))
+MIN_SURVEY_PARTICIPANTS = max(0, _parse_int(os.getenv("SURVEY_MIN_PARTICIPANTS"), 0))
 EXPORT_DIR = os.getenv(
     "SURVEY_EXPORT_DIR",
     os.path.join(os.path.dirname(__file__), "..", "exports"),

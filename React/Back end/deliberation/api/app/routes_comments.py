@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from .db import get_driver
+from .services.sentiment_service import score_sentiment
 from .routes_helpers import (
     _contains_profanity,
     _db_session,
@@ -38,6 +39,16 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
     my_reaction = record.get("my_reaction")
     if not my_reaction and my_participant_hash:
         my_reaction = None
+    sentiment_score = comment.get("sentimentScore")
+    sentiment_label = comment.get("sentimentLabel")
+    if sentiment_score is None or not sentiment_label:
+        sentiment = score_sentiment(comment.get("text") or "")
+        sentiment_score = sentiment.score
+        sentiment_label = sentiment.label
+    like_count = int(record.get("like_count") or 0)
+    agree_count = int(record.get("agree_count") or 0)
+    disagree_count = int(record.get("disagree_count") or 0)
+    consensus_impact = like_count + agree_count - disagree_count + float(sentiment_score or 0)
     return {
         "id": comment["id"],
         "statement_id": comment.get("statementId") or "",
@@ -46,10 +57,13 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
         "created_at": str(comment.get("createdAt")) if comment.get("createdAt") else None,
         "updated_at": str(comment.get("updatedAt")) if comment.get("updatedAt") else None,
         "author_hash": comment.get("authorHash"),
-        "like_count": int(record.get("like_count") or 0),
-        "agree_count": int(record.get("agree_count") or 0),
-        "disagree_count": int(record.get("disagree_count") or 0),
+        "like_count": like_count,
+        "agree_count": agree_count,
+        "disagree_count": disagree_count,
         "insightful_count": int(record.get("insightful_count") or 0),
+        "sentiment_score": round(float(sentiment_score or 0), 3),
+        "sentiment_label": sentiment_label or "neutral",
+        "consensus_impact": round(consensus_impact, 3),
         "my_reaction": my_reaction,
     }
 
@@ -419,6 +433,7 @@ def create_statement_discussion_comment(
     if not cleaned_text:
         raise HTTPException(status_code=400, detail="Comment text is required")
     discussion_comment_id = str(uuid4())
+    sentiment = score_sentiment(cleaned_text)
     driver = get_driver()
     query = """
     MATCH (c:Conversation {id: $cid})-[:HAS_COMMENT]->(st:Comment {id: $sid})
@@ -428,6 +443,8 @@ def create_statement_discussion_comment(
         conversationId: $cid,
         text: $text,
         authorHash: $author_hash,
+        sentimentScore: $sentiment_score,
+        sentimentLabel: $sentiment_label,
         createdAt: datetime(),
         updatedAt: datetime()
     })
@@ -445,6 +462,8 @@ def create_statement_discussion_comment(
                 "id": discussion_comment_id,
                 "text": cleaned_text,
                 "author_hash": author_hash,
+                "sentiment_score": sentiment.score,
+                "sentiment_label": sentiment.label,
             },
         )
     if not records:

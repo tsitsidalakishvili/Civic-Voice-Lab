@@ -146,10 +146,6 @@ function AppShell_() {
     if (defaultTab) setModuleTabs((prev) => ({ ...prev, [activeModuleId]: defaultTab }))
   }, [activeModuleId, moduleTabs])
 
-  useEffect(() => {
-    if (moduleTabs.deliberation !== 'distribute') return
-    setModuleTabs((prev) => ({ ...prev, deliberation: 'setup' }))
-  }, [moduleTabs.deliberation])
 
   const handleModuleTabChange = (moduleId, tabValue) => {
     if (!moduleId || !tabValue) return
