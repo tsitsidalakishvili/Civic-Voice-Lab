@@ -103,7 +103,7 @@ function NeighborhoodPeoplePanel({ neighborhood, people, loading, error, onClose
   )
 }
 
-export default function CRMNeighborhoodMap() {
+export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
   const [neighborhoods, setNeighborhoods] = useState([])
   const [unmatched, setUnmatched] = useState([])
   const [allPeople, setAllPeople] = useState([])
@@ -157,6 +157,27 @@ export default function CRMNeighborhoodMap() {
   const mapZoom = hasGeorgiaScope ? 7 : 12
 
   const totalPeople = neighborhoods.reduce((sum, row) => sum + Number(row.total || 0), 0)
+  const mapFilterStats = useMemo(() => {
+    const supporters = allPeople.filter((person) => person.type === 'Supporter').length
+    const members = allPeople.filter((person) => person.type === 'Member').length
+    const hasActiveFilters = Object.values(filters).some((value) => String(value || '').trim())
+    return {
+      filters,
+      query,
+      people: allPeople,
+      neighborhoods,
+      summary: {
+        totalPeople: allPeople.length,
+        supporters,
+        members,
+        hasActiveFilters,
+      },
+    }
+  }, [allPeople, neighborhoods, filters, query])
+
+  useEffect(() => {
+    if (onStatsChange) onStatsChange(mapFilterStats)
+  }, [mapFilterStats, onStatsChange])
 
   useEffect(() => {
     document.body.classList.toggle('crm-map-is-expanded', mapExpanded)

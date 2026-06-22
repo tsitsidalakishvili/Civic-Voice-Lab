@@ -72,6 +72,7 @@ def _load_people_for_locations() -> list[dict]:
           p.age AS age,
           coalesce(p.gender, 'Unspecified') AS gender,
           coalesce(p.timeAvailability, 'Unspecified') AS timeAvailability,
+          p.agreesWithManifesto AS agreesWithManifesto,
           p.supporterType AS group,
           coalesce(p.status, 'Active') AS status,
           coalesce(p.city, addr.city) AS city,

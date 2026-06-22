@@ -222,6 +222,7 @@ export function CRMPage({
   })
   const [latestSupporterInviteLink, setLatestSupporterInviteLink] = useState('')
   const [latestSupporterInviteType, setLatestSupporterInviteType] = useState('Supporter')
+  const [overviewMapStats, setOverviewMapStats] = useState(null)
 
   const normalizeTab = (tabId) => {
     return normalizeCrmTab(tabId)
@@ -1801,6 +1802,8 @@ export function CRMPage({
     },
   }
 
+  const overviewPulseSummary = activeTab === 'overview' ? overviewMapStats?.summary : null
+
   const crmPulseStats = useMemo(() => {
     const rate = Number(supporterInviteStats?.conversionRate ?? 0)
     const conversionDisplay =
@@ -1808,19 +1811,19 @@ export function CRMPage({
     return [
       {
         label: 'Total people',
-        value: summary?.total_people ?? people.length ?? 'â€”',
+        value: overviewPulseSummary?.totalPeople ?? summary?.total_people ?? people.length ?? '\u2014',
         icon: <IconUsers size={18} />,
-        badge: 'Active',
+        badge: overviewPulseSummary?.hasActiveFilters ? 'Filtered' : 'Active',
       },
       {
         label: 'Supporters',
-        value: summary?.supporters ?? 'â€”',
+        value: overviewPulseSummary?.supporters ?? summary?.supporters ?? '\u2014',
         icon: <IconUsers size={18} />,
         note: 'Community reach',
       },
       {
         label: 'Members',
-        value: summary?.members ?? 'â€”',
+        value: overviewPulseSummary?.members ?? summary?.members ?? '\u2014',
         icon: <IconUsers size={18} />,
         note: 'Core base',
       },
@@ -1831,7 +1834,7 @@ export function CRMPage({
         note: 'Supporter invite form',
       },
     ]
-  }, [people.length, summary, supporterInviteStats])
+  }, [overviewPulseSummary, people.length, summary, supporterInviteStats])
   const conversionInvitesSent = Number(supporterInviteStats?.sent || 0)
   const conversionRegisteredCount = Number(supporterInviteStats?.converted || 0)
   const conversionPendingCount = Number(supporterInviteStats?.pending || 0)
@@ -1964,7 +1967,9 @@ export function CRMPage({
 
       <CivicStatGrid
         title="Network pulse"
-        description="Live health checks for supporters, conversion, and outreach readiness."
+        description={overviewPulseSummary?.hasActiveFilters
+          ? 'Filtered by the current Map & Coverage filters.'
+          : 'Live health checks for supporters, conversion, and outreach readiness.'}
         items={crmPulseStats}
       />
 
@@ -1989,7 +1994,9 @@ export function CRMPage({
         </div>
       ) : null}
 
-      {activeTab === 'overview' && <CRMOverviewTab />}
+      {activeTab === 'overview' && (
+        <CRMOverviewTab mapStats={overviewMapStats} onMapStatsChange={setOverviewMapStats} />
+      )}
 
       {activeTab === 'people' && (
         <div className="stack">
@@ -3954,7 +3961,7 @@ function CRMDataEntryTab() {
   )
 }
 
-function CRMDashboardTab() {
+function CRMDashboardTab({ mapStats } = {}) {
   const [dashboard, setDashboard] = useState(null)
   const [error, setError] = useState('')
 
@@ -3974,23 +3981,112 @@ function CRMDashboardTab() {
     }
   }, [])
 
-  const groupCounts = dashboard?.charts?.groupCounts || []
-  const genderCounts = dashboard?.charts?.genderCounts || []
-  const ageGroups = dashboard?.charts?.ageGroups || []
-  const professionCounts = dashboard?.charts?.professionCounts || []
-  const regionCounts = dashboard?.charts?.regionCounts || []
-  const regionDetail = dashboard?.charts?.regionDetail || []
-  const partyMembership = dashboard?.charts?.partyMembership || []
-  const involvementAreas = dashboard?.charts?.involvementAreas || []
-  const membershipGrowth = dashboard?.charts?.membershipGrowth || []
-  const engagementReady = dashboard?.charts?.engagementReady || []
-  const manifesto = dashboard?.charts?.manifesto || []
-  const membershipInterest = dashboard?.charts?.membership || []
-  const timeAvailability = dashboard?.charts?.timeAvailability || []
-  const timeAvailabilityGrouped = dashboard?.charts?.timeAvailabilityGrouped || []
-  const regionGrouped = dashboard?.charts?.regionGrouped || []
-  const combinedExpertise = dashboard?.charts?.combinedExpertise || []
-  const regionalSkills = dashboard?.charts?.regionalSkills || []
+  const filteredCharts = useMemo(() => {
+    if (!Array.isArray(mapStats?.people)) return null
+    const rows = mapStats.people
+    const countValues = (values, keyName) => {
+      const counts = new Map()
+      values.forEach((value) => {
+        const label = String(value || '').trim() || 'Unspecified'
+        counts.set(label, (counts.get(label) || 0) + 1)
+      })
+      return Array.from(counts.entries())
+        .map(([label, count]) => ({ [keyName]: label, count }))
+        .sort((a, b) => b.count - a.count || String(a[keyName]).localeCompare(String(b[keyName])))
+    }
+    const byGroup = countValues(rows.map((person) => person.type || 'Unspecified'), 'group')
+    const byGender = countValues(rows.map((person) => person.gender || 'U'), 'gender')
+    const ageOrder = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'Unknown', 'Unspecified']
+    const byAge = countValues(rows.map((person) => person.ageGroup || 'Unknown'), 'group').sort((a, b) => {
+      const aIndex = ageOrder.indexOf(a.group)
+      const bIndex = ageOrder.indexOf(b.group)
+      if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
+      return String(a.group).localeCompare(String(b.group))
+    })
+    const groupTimeAvailability = (value) => {
+      const text = String(value || '').trim().toLowerCase()
+      if (!text || text === 'unspecified' || text === 'unknown') return 'Flexible/unspecified'
+      if (text.includes('full')) return 'Full-time'
+      if (text.includes('weekend')) return 'Weekends'
+      if (text.includes('evening')) return 'Evenings'
+      return 'Flexible/unspecified'
+    }
+    const timeOrder = ['Full-time', 'Evenings', 'Weekends', 'Flexible/unspecified']
+    const byTime = countValues(rows.map((person) => groupTimeAvailability(person.timeAvailability)), 'group').sort(
+      (a, b) => timeOrder.indexOf(a.group) - timeOrder.indexOf(b.group),
+    )
+    const byRegion = countValues(rows.map((person) => person.city || 'Unknown'), 'group').slice(0, 12)
+    const normalizeManifesto = (value) => {
+      if (value === true) return 'Yes'
+      if (value === false) return 'No'
+      const text = String(value ?? '').trim().toLowerCase()
+      if (!text) return 'Unspecified'
+      if (['true', 'yes', '1', 'agree', 'agreed'].includes(text)) return 'Yes'
+      if (['false', 'no', '0', 'disagree'].includes(text)) return 'No'
+      return 'Unspecified'
+    }
+    const byManifesto = countValues(rows.map((person) => normalizeManifesto(person.agreesWithManifesto)), 'agrees')
+    const skillValues = rows.flatMap((person) => {
+      if (Array.isArray(person.skills)) return person.skills
+      return String(person.skills || '')
+        .split(',')
+        .map((skill) => skill.trim())
+        .filter(Boolean)
+    })
+    const bySkill = countValues(skillValues, 'expertise').slice(0, 15)
+    const regionalSkillCounts = new Map()
+    rows.forEach((person) => {
+      const region = String(person.city || person.neighborhood || 'Unknown').trim() || 'Unknown'
+      const skills = Array.isArray(person.skills)
+        ? person.skills
+        : String(person.skills || '')
+            .split(',')
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+      skills.forEach((skill) => {
+        const label = String(skill || '').trim()
+        if (!label) return
+        const key = `${region}|||${label}`
+        regionalSkillCounts.set(key, (regionalSkillCounts.get(key) || 0) + 1)
+      })
+    })
+    const regionalSkillsRows = Array.from(regionalSkillCounts.entries())
+      .map(([key, count]) => {
+        const [region, skill] = key.split('|||')
+        return { region, skill, count }
+      })
+      .sort((a, b) => b.count - a.count)
+
+    return {
+      groupCounts: byGroup,
+      genderCounts: byGender,
+      ageGroups: byAge,
+      timeAvailabilityGrouped: byTime,
+      regionGrouped: byRegion,
+      combinedExpertise: bySkill,
+      regionalSkills: regionalSkillsRows,
+      manifesto: byManifesto,
+    }
+  }, [mapStats])
+
+  const activeCharts = filteredCharts || dashboard?.charts || {}
+  const groupCounts = activeCharts.groupCounts || []
+  const genderCounts = activeCharts.genderCounts || []
+  const ageGroups = activeCharts.ageGroups || []
+  const professionCounts = activeCharts.professionCounts || []
+  const regionCounts = activeCharts.regionCounts || []
+  const regionDetail = activeCharts.regionDetail || []
+  const partyMembership = activeCharts.partyMembership || []
+  const involvementAreas = activeCharts.involvementAreas || []
+  const membershipGrowth = activeCharts.membershipGrowth || []
+  const engagementReady = activeCharts.engagementReady || []
+  const manifesto = activeCharts.manifesto || []
+  const membershipInterest = activeCharts.membership || []
+  const timeAvailability = activeCharts.timeAvailability || []
+  const timeAvailabilityGrouped = activeCharts.timeAvailabilityGrouped || []
+  const regionGrouped = activeCharts.regionGrouped || []
+  const combinedExpertise = activeCharts.combinedExpertise || []
+  const regionalSkills = activeCharts.regionalSkills || []
 
   const chartPalette = [
     '#2563eb',
@@ -4094,7 +4190,11 @@ function CRMDashboardTab() {
         <div className="card-header">
           <div>
             <h3>Stats</h3>
-            <p className="muted">Engagement, skills, and activity at a glance.</p>
+            <p className="muted">
+              {filteredCharts
+                ? 'Filtered by the current Map & Coverage filters.'
+                : 'Engagement, skills, and activity at a glance.'}
+            </p>
           </div>
         </div>
       </div>
@@ -4215,10 +4315,10 @@ function CRMDashboardTab() {
           </div>
           <div className="module-card dashboard-chart">
             <h3>Manifesto</h3>
-            {dashboard?.charts?.manifesto?.length ? (
+            {manifesto.length ? (
               <div className="chart-frame">
                 <Pie
-                  data={radialData(dashboard.charts.manifesto, 'agrees', 'count')}
+                  data={radialData(manifesto, 'agrees', 'count')}
                   options={dashboardPieOptions}
                 />
               </div>
@@ -4283,7 +4383,7 @@ function CRMDashboardTab() {
   )
 }
 
-function CRMOverviewTab() {
+function CRMOverviewTab({ mapStats, onMapStatsChange } = {}) {
   const reportRef = useRef(null)
   const reportTimestamp = useMemo(
     () =>
@@ -4358,8 +4458,8 @@ function CRMOverviewTab() {
           <p className="muted network-report__timestamp">Snapshot generated {reportTimestamp}</p>
         </div>
       </div>
-      <CRMMapTab />
-      <CRMDashboardTab />
+      <CRMMapTab onStatsChange={onMapStatsChange} />
+      <CRMDashboardTab mapStats={mapStats} />
     </div>
   )
 }
@@ -7848,6 +7948,6 @@ function CRMEventsTab() {
   )
 }
 
-function CRMMapTab() {
-  return <CRMNeighborhoodMap />
+function CRMMapTab({ onStatsChange } = {}) {
+  return <CRMNeighborhoodMap onStatsChange={onStatsChange} />
 }
