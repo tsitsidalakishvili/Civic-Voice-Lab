@@ -380,11 +380,6 @@ export function DeliberationPage({
     notes: '',
   })
 
-  useEffect(() => {
-    setSurveyInviteForm((prev) =>
-      prev.inviteAudience === 'everyone' ? { ...prev, inviteAudience: 'verified' } : prev,
-    )
-  }, [])
 
   const [shareSegments, setShareSegments] = useState([])
   const [shareSegmentsError, setShareSegmentsError] = useState('')
@@ -893,7 +888,7 @@ export function DeliberationPage({
   }, [activeId, conversations])
 
   useEffect(() => {
-    if (activeTab !== 'setup') return
+    if (activeTab !== 'distribute') return
     getJson('/crm/supporter-invite-groups-config')
       .then((payload) => {
         setSurveyInviteGroupsConfig({
@@ -906,7 +901,7 @@ export function DeliberationPage({
   }, [activeTab])
 
   useEffect(() => {
-    if (activeTab !== 'setup') return
+    if (activeTab !== 'distribute') return
     setShareSegmentsLoading(true)
     setShareSegmentsError('')
     getJson('/crm/segments')
@@ -925,7 +920,7 @@ export function DeliberationPage({
   }, [activeTab])
 
   useEffect(() => {
-    if (activeTab !== 'setup' || !shareSegmentSelectedId) {
+    if (activeTab !== 'distribute' || !shareSegmentSelectedId) {
       setShareSegmentMemberCount(null)
       setShareSegmentCountLoading(false)
       return undefined
@@ -1340,17 +1335,17 @@ export function DeliberationPage({
       setSurveyDistributionError('Select a conversation to get a survey link.')
       return false
     }
-    if (!shareSegmentSelectedId) {
+    const selectedChannel = channelOverride || surveyInviteForm.channel
+    const selectedAudience = surveyInviteForm.inviteAudience || 'individual'
+    if (selectedAudience === 'segment' && !shareSegmentSelectedId) {
       setSurveyDistributionError('Select a saved audience segment first (card above).')
       return false
     }
-    const segmentAudienceLine = selectedShareSegment
+    const segmentAudienceLine = selectedAudience === 'segment' && selectedShareSegment
       ? `Audience segment: ${selectedShareSegment.name}${
           shareSegmentMemberCount != null ? ` (~${shareSegmentMemberCount} people)` : ''
         }`
       : ''
-    const selectedChannel = channelOverride || surveyInviteForm.channel
-    const selectedAudience = surveyInviteForm.inviteAudience || 'individual'
     const recipientName = surveyInviteForm.recipientName.trim()
     const recipientEmail = surveyInviteForm.recipientEmail.trim()
     const recipientPhone = surveyInviteForm.recipientPhone.trim()
@@ -3420,6 +3415,8 @@ export function DeliberationPage({
                           }
                         >
                           <option value="individual">Single recipient</option>
+                          <option value="segment">Selected segment</option>
+                          <option value="everyone">Everyone (group list)</option>
                           <option value="verified">Verified users (group list)</option>
                           <option value="registered">Registered users (group list)</option>
                         </select>
@@ -3584,7 +3581,7 @@ export function DeliberationPage({
                         className="button intake-invite-combined__cta-btn intake-invite-combined__cta-send"
                         type="submit"
                         form="delib-survey-invite-form"
-                        disabled={!shareSegmentSelectedId}
+                        disabled={surveyInviteForm.inviteAudience === 'segment' && !shareSegmentSelectedId}
                       >
                         Send invite link
                       </button>
