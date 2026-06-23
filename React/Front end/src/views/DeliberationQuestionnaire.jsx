@@ -278,6 +278,17 @@ export function DeliberationQuestionnaire({
     language,
     { enabled: Boolean(discussionTexts.length && language) },
   )
+  const renderDiscussionText = (text) => {
+    const original = String(text || '')
+    const translated = translateDiscussionText(original)
+    const showTranslation = translated && translated !== original
+    return (
+      <div className="statement-discussion-text">
+        <p>{original}</p>
+        {showTranslation ? <p className="muted">{translated}</p> : null}
+      </div>
+    )
+  }
   const identityRequired = conversation?.identity_mode === 'xid_required' && !xid
   const votingDisabled =
     (conversation && conversation.allow_voting === false) || identityRequired
@@ -791,7 +802,7 @@ export function DeliberationQuestionnaire({
                 <div className="stack">
                   {currentStatementDiscussion.map((item) => (
                     <div className="module-card" key={item.id}>
-                      <p>{translateDiscussionText(item.text)}</p>
+                      {renderDiscussionText(item.text)}
                       <div className="module-footer">
                         <span className="muted">{item.created_at || 'Live'}</span>
                         <span>

@@ -29,7 +29,9 @@ def _fetch_comments(session, conversation_id: str | None) -> list[dict]:
       sc.conversationId AS conversation_id,
       sc.text AS text,
       sc.sentimentScore AS old_score,
-      sc.sentimentLabel AS old_label
+      sc.sentimentLabel AS old_label,
+      sc.sentimentProvider AS old_provider,
+      sc.sentimentConfidence AS old_confidence
     ORDER BY sc.createdAt DESC
     """
     return [record.data() for record in session.run(query, {"conversation_id": conversation_id})]
@@ -90,9 +92,24 @@ def main() -> None:
                 "old_score": comment.get("old_score"),
                 "old_label": comment.get("old_label"),
             }
+            old_provider = str(comment.get("old_provider") or "").strip()
+            old_confidence = round(float(comment.get("old_confidence") or 0), 3)
+            provider_needs_update = (
+                not old_provider
+                or old_provider == "unavailable"
+                or old_provider == "ai-not-configured"
+                or old_provider == "ai-url-not-configured"
+                or old_provider == "ai-empty-response"
+                or old_provider.startswith("ai-call-failed")
+                or old_provider.startswith("transformer-load-failed")
+                or old_provider == "model-not-configured"
+                or old_provider == "transformer-disabled-on-windows"
+            )
             if row["id"] and (
                 row["old_label"] != row["label"]
                 or round(float(row["old_score"] or 0), 3) != row["score"]
+                or provider_needs_update
+                or old_confidence != row["confidence"]
             ):
                 updates.append({
                     "id": row["id"],
