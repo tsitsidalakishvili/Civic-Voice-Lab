@@ -10,8 +10,12 @@ const sentimentWasAnalyzed = (item) => {
   const score = Number(item?.sentiment_score || 0)
   if (!provider) return label === 'positive' || label === 'negative' || score !== 0
   return provider !== 'unavailable'
+    && provider !== 'ai-not-configured'
+    && provider !== 'ai-url-not-configured'
+    && provider !== 'ai-empty-response'
     && provider !== 'model-not-configured'
     && provider !== 'transformer-disabled-on-windows'
+    && !provider.startsWith('ai-call-failed')
     && !provider.startsWith('transformer-load-failed')
 }
 

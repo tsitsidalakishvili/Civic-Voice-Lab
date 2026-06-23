@@ -72,6 +72,7 @@ GEORGIAN_STOP_WORDS = {
 }
 
 VALID_LABELS = {"negative", "neutral", "positive"}
+_LAST_AI_ERROR = ""
 _LAST_TRANSFORMER_ERROR = ""
 
 
@@ -211,7 +212,7 @@ def _call_chat_completions(prompt: str, api_url: str, api_key: str, model: str) 
             "response_format": {"type": "json_object"},
         },
         headers={"Authorization": f"Bearer {api_key}"},
-        timeout=float(os.getenv("SENTIMENT_LLM_TIMEOUT", "12")),
+        timeout=float(os.getenv("SENTIMENT_LLM_TIMEOUT", "20")),
     )
     response.raise_for_status()
     data = response.json()
@@ -220,26 +221,41 @@ def _call_chat_completions(prompt: str, api_url: str, api_key: str, model: str) 
 
 
 def _score_with_llm(original: str, processed: str, language: str) -> SentimentResult | None:
-    api_url = (
-        os.getenv("SENTIMENT_LLM_API_URL", "").strip()
-        or os.getenv("LLM_API_URL", "").strip()
-    )
+    global _LAST_AI_ERROR
+    _LAST_AI_ERROR = ""
     api_key = (
         os.getenv("SENTIMENT_LLM_API_KEY", "").strip()
+        or os.getenv("OPENAI_API_KEY", "").strip()
         or os.getenv("LLM_API_KEY", "").strip()
+    )
+    api_url = (
+        os.getenv("SENTIMENT_LLM_API_URL", "").strip()
+        or os.getenv("OPENAI_CHAT_COMPLETIONS_URL", "").strip()
+        or os.getenv("LLM_API_URL", "").strip()
+        or ("https://api.openai.com/v1/chat/completions" if api_key else "")
     )
     model = (
         os.getenv("SENTIMENT_LLM_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
         or os.getenv("LLM_MODEL", "").strip()
         or "gpt-4.1-mini"
     )
-    if not api_url or not api_key:
+    if not api_key:
+        _LAST_AI_ERROR = "ai-not-configured"
+        return None
+    if not api_url:
+        _LAST_AI_ERROR = "ai-url-not-configured"
         return None
     prompt = _build_llm_prompt(original, processed, language)
-    payload = _call_chat_completions(prompt, api_url, api_key, model)
-    if not payload:
+    try:
+        payload = _call_chat_completions(prompt, api_url, api_key, model)
+    except Exception as exc:
+        _LAST_AI_ERROR = f"ai-call-failed:{type(exc).__name__}"
         return None
-    return _normalize_ai_payload(payload, processed, f"llm:{model}")
+    if not payload:
+        _LAST_AI_ERROR = "ai-empty-response"
+        return None
+    return _normalize_ai_payload(payload, processed, f"ai:{model}")
 
 
 DEFAULT_TRANSFORMER_MODEL = "cardiffnlp/twitter-xlm-roberta-base-sentiment"
@@ -325,17 +341,17 @@ def score_sentiment(text: Any) -> SentimentResult:
     if not original:
         return SentimentResult(score=0.0, label="neutral", processed_text="")
 
-    provider = os.getenv("SENTIMENT_PROVIDER", "transformer").strip().lower()
-    if provider in {"transformer", "local", "auto"}:
-        result = _score_with_local_transformer(original, processed)
-        if result is not None:
-            return result
+    provider = os.getenv("SENTIMENT_PROVIDER", "ai").strip().lower()
     if provider in {"llm", "ai", "auto"}:
         result = _score_with_llm(original, processed, language)
         if result is not None:
             return result
+    if provider in {"transformer", "local", "auto"}:
+        result = _score_with_local_transformer(original, processed)
+        if result is not None:
+            return result
 
-    provider_reason = _LAST_TRANSFORMER_ERROR or "unavailable"
+    provider_reason = _LAST_AI_ERROR or _LAST_TRANSFORMER_ERROR or "unavailable"
     return SentimentResult(
         score=0.0,
         label="neutral",

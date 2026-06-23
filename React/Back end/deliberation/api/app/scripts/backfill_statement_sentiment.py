@@ -72,6 +72,10 @@ def main() -> None:
             sentiment = score_sentiment(comment.get("text") or "")
             provider_unavailable = (
                 sentiment.provider == "unavailable"
+                or sentiment.provider == "ai-not-configured"
+                or sentiment.provider == "ai-url-not-configured"
+                or sentiment.provider == "ai-empty-response"
+                or sentiment.provider.startswith("ai-call-failed")
                 or sentiment.provider.startswith("transformer-load-failed")
                 or sentiment.provider == "model-not-configured"
                 or sentiment.provider == "transformer-disabled-on-windows"
