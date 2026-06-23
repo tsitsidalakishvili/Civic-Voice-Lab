@@ -3310,158 +3310,174 @@ ${link}`
           </div>
 
           <div className="module-card module-card__wide module-card--outreach-flow-distribute share-step-card">
-            <div className="card-header">
-              <div>
-                <h3>Send link</h3>
-                <p className="muted">Choose a channel and send the participant survey link.</p>
-              </div>
-              <div className="share-channel-icons" aria-label="Invite channel">
-                <button
-                  className={surveyInviteForm.channel === 'email' ? 'icon-button icon-button--primary active' : 'icon-button'}
-                  type="button"
-                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'email' }))}
-                  title="Email"
-                  aria-label="Email"
-                >
-                  <IconMail size={17} />
-                </button>
-                <button
-                  className={surveyInviteForm.channel === 'whatsapp' ? 'icon-button icon-button--primary active' : 'icon-button'}
-                  type="button"
-                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'whatsapp' }))}
-                  title="WhatsApp"
-                  aria-label="WhatsApp"
-                >
-                  <IconBrandWhatsapp size={17} />
-                </button>
-                <button
-                  className={surveyInviteForm.channel === 'slack' ? 'icon-button icon-button--primary active' : 'icon-button'}
-                  type="button"
-                  onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'slack' }))}
-                  title="Slack"
-                  aria-label="Slack"
-                >
-                  <IconBrandSlack size={17} />
-                </button>
-                <button
-                  className={surveyQrExpanded ? 'icon-button icon-button--primary active' : 'icon-button'}
-                  type="button"
-                  onClick={() => setSurveyQrExpanded((prev) => !prev)}
-                  title="QR code"
-                  aria-label="Show QR code"
-                  disabled={!questionnaireLink}
-                >
-                  <IconQrcode size={17} />
-                </button>
-              </div>
-            </div>
-            {!activeId ? (
-              <ActiveConversationRequired
-                message="Select a conversation first to get a shareable link."
-                onOpenOverview={() => applyActiveTab('overview')}
-              />
-            ) : questionnaireLink ? (
-              <>
-                {surveyDistributionError ? (
-                  <div className="module-alert">{surveyDistributionError}</div>
-                ) : null}
-                {surveyDistributionStatus ? (
-                  <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
-                ) : null}
-                {surveyQrExpanded ? (
-                  <div className="share-qr-panel">
-                    <div className="share-qr-panel__code" aria-label="Conversation QR code">
-                      {surveyQrDataUrl ? (
-                        <img src={surveyQrDataUrl} alt="QR code for the participant survey link" />
-                      ) : (
-                        <span className="muted">Generating QR code...</span>
-                      )}
-                    </div>
-                    <div className="share-qr-panel__meta">
-                      <strong>Scan to open the conversation</strong>
-                      <p className="muted">Participants can scan this code with their phone camera.</p>
-                    </div>
+            <div className="intake-invite-compact">
+              <div className="intake-invite-compact__form">
+                <div className="intake-section-heading">
+                  <div>
+                    <h4 className="intake-section-title">Send link</h4>
+                    <p className="muted">Send survey invitations by email, WhatsApp, or Slack.</p>
                   </div>
-                ) : null}
-                <form
-                  id="delib-survey-invite-form"
-                  className="form-grid share-send-form"
-                  onSubmit={handleSubmitSurveyInvite}
-                >
-                  <select
-                    className="select"
-                    value={surveyInviteForm.inviteAudience}
-                    onChange={(event) =>
-                      setSurveyInviteForm((prev) => ({
-                        ...prev,
-                        inviteAudience: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="individual">Single recipient</option>
-                    <option value="everyone">Everyone</option>
-                    <option value="verified">Verified users</option>
-                    <option value="registered">Registered users</option>
-                  </select>
-                  {surveyInviteForm.inviteAudience === 'individual' ? (
-                    <>
-                      <input
-                        className="input"
-                        placeholder="Recipient name"
-                        value={surveyInviteForm.recipientName}
+                  <div className="share-channel-icons" aria-label="Invite channel">
+                    <button
+                      className={surveyInviteForm.channel === 'email' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                      type="button"
+                      onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'email' }))}
+                      title="Email"
+                      aria-label="Email"
+                    >
+                      <IconMail size={17} />
+                    </button>
+                    <button
+                      className={surveyInviteForm.channel === 'whatsapp' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                      type="button"
+                      onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'whatsapp' }))}
+                      title="WhatsApp"
+                      aria-label="WhatsApp"
+                    >
+                      <IconBrandWhatsapp size={17} />
+                    </button>
+                    <button
+                      className={surveyInviteForm.channel === 'slack' ? 'icon-button icon-button--primary active' : 'icon-button'}
+                      type="button"
+                      onClick={() => setSurveyInviteForm((prev) => ({ ...prev, channel: 'slack' }))}
+                      title="Slack"
+                      aria-label="Slack"
+                    >
+                      <IconBrandSlack size={17} />
+                    </button>
+                    <button
+                      className={surveyQrExpanded ? 'icon-button icon-button--primary active' : 'icon-button'}
+                      type="button"
+                      onClick={() => setSurveyQrExpanded((prev) => !prev)}
+                      title="QR code"
+                      aria-label="Show QR code"
+                      disabled={!questionnaireLink}
+                    >
+                      <IconQrcode size={17} />
+                    </button>
+                  </div>
+                </div>
+
+                {!activeId ? (
+                  <ActiveConversationRequired
+                    message="Select a conversation first to get a shareable link."
+                    onOpenOverview={() => applyActiveTab('overview')}
+                  />
+                ) : questionnaireLink ? (
+                  <>
+                    {surveyDistributionError ? (
+                      <div className="module-alert">{surveyDistributionError}</div>
+                    ) : null}
+                    {surveyDistributionStatus ? (
+                      <div className="module-alert module-alert--success">{surveyDistributionStatus}</div>
+                    ) : null}
+                    {surveyQrExpanded ? (
+                      <div className="share-qr-panel">
+                        <div className="share-qr-panel__code" aria-label="Conversation QR code">
+                          {surveyQrDataUrl ? (
+                            <img src={surveyQrDataUrl} alt="QR code for the participant survey link" />
+                          ) : (
+                            <span className="muted">Generating QR code...</span>
+                          )}
+                        </div>
+                        <div className="share-qr-panel__meta">
+                          <strong>Scan to open the conversation</strong>
+                          <p className="muted">Participants can scan this code with their phone camera.</p>
+                        </div>
+                      </div>
+                    ) : null}
+                    <form
+                      id="delib-survey-invite-form"
+                      className="form-grid intake-invite-form-compact"
+                      onSubmit={handleSubmitSurveyInvite}
+                    >
+                      <select
+                        className="select"
+                        value={surveyInviteForm.inviteAudience}
                         onChange={(event) =>
-                          setSurveyInviteForm((prev) => ({ ...prev, recipientName: event.target.value }))
+                          setSurveyInviteForm((prev) => ({
+                            ...prev,
+                            inviteAudience: event.target.value,
+                          }))
                         }
-                      />
-                      {surveyInviteForm.channel === 'email' ? (
-                        <input
-                          className="input"
-                          type="email"
-                          placeholder="Recipient email"
-                          value={surveyInviteForm.recipientEmail}
-                          onChange={(event) =>
-                            setSurveyInviteForm((prev) => ({ ...prev, recipientEmail: event.target.value }))
-                          }
-                        />
-                      ) : null}
-                      {surveyInviteForm.channel === 'whatsapp' ? (
-                        <input
-                          className="input"
-                          placeholder="Recipient phone"
-                          value={surveyInviteForm.recipientPhone}
-                          onChange={(event) =>
-                            setSurveyInviteForm((prev) => ({ ...prev, recipientPhone: event.target.value }))
-                          }
-                        />
-                      ) : null}
-                    </>
-                  ) : surveyInviteForm.channel === 'email' ? (
-                    <input
-                      className="input"
-                      type="email"
-                      list="delib-survey-invite-group-options"
-                      placeholder="Group email list"
-                      value={getInviteAudienceGroupEmail(
-                        surveyInviteForm.inviteAudience,
-                        surveyInviteGroupsConfig,
+                      >
+                        <option value="individual">Single recipient</option>
+                        <option value="everyone">Everyone</option>
+                        <option value="verified">Verified users</option>
+                        <option value="registered">Registered users</option>
+                      </select>
+                      {surveyInviteForm.inviteAudience === 'individual' ? (
+                        <>
+                          <input
+                            className="input"
+                            placeholder="Recipient name"
+                            value={surveyInviteForm.recipientName}
+                            onChange={(event) =>
+                              setSurveyInviteForm((prev) => ({ ...prev, recipientName: event.target.value }))
+                            }
+                          />
+                          {surveyInviteForm.channel === 'email' ? (
+                            <input
+                              className="input"
+                              type="email"
+                              placeholder="Recipient email"
+                              value={surveyInviteForm.recipientEmail}
+                              onChange={(event) =>
+                                setSurveyInviteForm((prev) => ({ ...prev, recipientEmail: event.target.value }))
+                              }
+                            />
+                          ) : null}
+                          {surveyInviteForm.channel === 'whatsapp' ? (
+                            <input
+                              className="input"
+                              placeholder="Recipient phone"
+                              value={surveyInviteForm.recipientPhone}
+                              onChange={(event) =>
+                                setSurveyInviteForm((prev) => ({ ...prev, recipientPhone: event.target.value }))
+                              }
+                            />
+                          ) : null}
+                        </>
+                      ) : surveyInviteForm.channel === 'email' ? (
+                        <div className="form-grid__full">
+                          <label className="label">Group email list</label>
+                          <input
+                            className="input"
+                            type="email"
+                            list="delib-survey-invite-group-options"
+                            placeholder="group@googlegroups.com"
+                            value={getInviteAudienceGroupEmail(
+                              surveyInviteForm.inviteAudience,
+                              surveyInviteGroupsConfig,
+                            )}
+                            onChange={(event) =>
+                              setSurveyInviteAudienceGroupEmail(
+                                surveyInviteForm.inviteAudience,
+                                event.target.value,
+                              )
+                            }
+                          />
+                          <datalist id="delib-survey-invite-group-options">
+                            {[...new Set(Object.values(surveyInviteGroupsConfig).filter(Boolean))].map((groupEmail) => (
+                              <option key={groupEmail} value={groupEmail} />
+                            ))}
+                          </datalist>
+                        </div>
+                      ) : (
+                        <div className="form-grid__full muted">
+                          Audience group lists are used when channel is Email.
+                        </div>
                       )}
-                      onChange={(event) =>
-                        setSurveyInviteAudienceGroupEmail(
-                          surveyInviteForm.inviteAudience,
-                          event.target.value,
-                        )
-                      }
-                    />
-                  ) : null}
-                  <datalist id="delib-survey-invite-group-options">
-                    {[...new Set(Object.values(surveyInviteGroupsConfig).filter(Boolean))].map((groupEmail) => (
-                      <option key={groupEmail} value={groupEmail} />
-                    ))}
-                  </datalist>
-                </form>
-                <div className="share-link-strip share-link-actions">
+                    </form>
+                  </>
+                ) : (
+                  <p className="muted">Unable to build a link for this conversation.</p>
+                )}
+              </div>
+              {activeId && questionnaireLink ? (
+                <div className="intake-invite-combined__cta-row intake-invite-compact__actions">
                   <button
-                    className="icon-button icon-button--primary"
+                    className="icon-button icon-button--primary intake-invite-combined__cta-send"
                     type="submit"
                     form="delib-survey-invite-form"
                     title="Send invite"
@@ -3470,7 +3486,7 @@ ${link}`
                     <IconSend size={17} />
                   </button>
                   <button
-                    className="icon-button"
+                    className="icon-button intake-invite-combined__cta-copy"
                     type="button"
                     onClick={handleCopySurveyLink}
                     title="Copy link"
@@ -3479,7 +3495,7 @@ ${link}`
                     <IconCopy size={17} />
                   </button>
                   <a
-                    className="icon-button"
+                    className="icon-button intake-invite-combined__cta-open"
                     href={questionnaireLink || '#'}
                     target="_blank"
                     rel="noreferrer"
@@ -3489,10 +3505,8 @@ ${link}`
                     <IconExternalLink size={17} />
                   </a>
                 </div>
-              </>
-            ) : (
-              <p className="muted">Unable to build a link for this conversation.</p>
-            )}
+              ) : null}
+            </div>
           </div>
         </div>
       )}

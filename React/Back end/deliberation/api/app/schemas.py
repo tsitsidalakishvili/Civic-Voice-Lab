@@ -109,6 +109,8 @@ class StatementDiscussionCommentOut(BaseModel):
     insightful_count: int = 0
     sentiment_score: float = 0.0
     sentiment_label: str = "neutral"
+    sentiment_confidence: float = 0.0
+    sentiment_provider: str = "unavailable"
     consensus_impact: float = 0.0
     my_reaction: Optional[str] = None
 

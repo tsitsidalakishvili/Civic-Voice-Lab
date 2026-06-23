@@ -4,6 +4,19 @@ import { getJson, requestJson } from '../services/api'
 import { LanguageSelect, StatusMessage } from '../ui'
 import { parseLocalArray } from '../utils/deck'
 
+const sentimentWasAnalyzed = (provider) => {
+  const value = String(provider || '').toLowerCase()
+  return Boolean(value)
+    && value !== 'unavailable'
+    && value !== 'model-not-configured'
+    && value !== 'transformer-disabled-on-windows'
+    && !value.startsWith('transformer-load-failed')
+}
+
+const sentimentDisplayLabel = (item) => (
+  sentimentWasAnalyzed(item?.sentiment_provider) ? item?.sentiment_label || 'neutral' : 'not analyzed'
+)
+
 const QUESTIONNAIRE_DISCUSSION_COPY = {
   en: {
     identityRequired: 'Login is required to vote in this conversation.',
@@ -788,7 +801,7 @@ export function DeliberationQuestionnaire({
                           <strong>Insightful</strong> {item.insightful_count || 0}
                         </span>
                         <span>
-                          <strong>Sentiment</strong> {item.sentiment_label || 'neutral'}
+                          <strong>Sentiment</strong> {sentimentDisplayLabel(item)}
                         </span>
                         <span>
                           <strong>Impact</strong> {Number(item.consensus_impact || 0).toFixed(1)}

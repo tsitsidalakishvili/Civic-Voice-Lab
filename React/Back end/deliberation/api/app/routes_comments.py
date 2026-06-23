@@ -45,6 +45,8 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
         sentiment = score_sentiment(comment.get("text") or "")
         sentiment_score = sentiment.score
         sentiment_label = sentiment.label
+        comment["sentimentConfidence"] = sentiment.confidence
+        comment["sentimentProvider"] = sentiment.provider
     like_count = int(record.get("like_count") or 0)
     agree_count = int(record.get("agree_count") or 0)
     disagree_count = int(record.get("disagree_count") or 0)
@@ -63,6 +65,8 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
         "insightful_count": int(record.get("insightful_count") or 0),
         "sentiment_score": round(float(sentiment_score or 0), 3),
         "sentiment_label": sentiment_label or "neutral",
+        "sentiment_confidence": round(float(comment.get("sentimentConfidence") or 0), 3),
+        "sentiment_provider": comment.get("sentimentProvider") or "unavailable",
         "consensus_impact": round(consensus_impact, 3),
         "my_reaction": my_reaction,
     }
@@ -447,6 +451,9 @@ def create_statement_discussion_comment(
         authorHash: $author_hash,
         sentimentScore: $sentiment_score,
         sentimentLabel: $sentiment_label,
+        sentimentConfidence: $sentiment_confidence,
+        sentimentProvider: $sentiment_provider,
+        sentimentProcessedText: $sentiment_processed_text,
         createdAt: datetime(),
         updatedAt: datetime()
     })
@@ -466,6 +473,9 @@ def create_statement_discussion_comment(
                 "author_hash": author_hash,
                 "sentiment_score": sentiment.score,
                 "sentiment_label": sentiment.label,
+                "sentiment_confidence": sentiment.confidence,
+                "sentiment_provider": sentiment.provider,
+                "sentiment_processed_text": sentiment.processed_text,
             },
         )
     if not records:

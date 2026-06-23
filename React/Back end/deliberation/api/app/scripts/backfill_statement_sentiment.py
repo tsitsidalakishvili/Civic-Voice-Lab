@@ -44,6 +44,9 @@ def _apply_updates(session, rows: list[dict]) -> int:
         MATCH (sc:StatementComment {id: row.id})
         SET sc.sentimentScore = row.score,
             sc.sentimentLabel = row.label,
+            sc.sentimentConfidence = row.confidence,
+            sc.sentimentProvider = row.provider,
+            sc.sentimentProcessedText = row.processed_text,
             sc.sentimentUpdatedAt = datetime()
         RETURN count(sc) AS updated
         """,
@@ -56,6 +59,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--conversation-id", default=None)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--allow-unavailable", action="store_true")
     args = parser.parse_args()
 
     driver = get_driver()
@@ -66,6 +70,14 @@ def main() -> None:
         changed = []
         for comment in comments:
             sentiment = score_sentiment(comment.get("text") or "")
+            provider_unavailable = (
+                sentiment.provider == "unavailable"
+                or sentiment.provider.startswith("transformer-load-failed")
+                or sentiment.provider == "model-not-configured"
+                or sentiment.provider == "transformer-disabled-on-windows"
+            )
+            if provider_unavailable and not args.allow_unavailable:
+                continue
             row = {
                 "id": comment.get("id"),
                 "conversation_id": comment.get("conversation_id"),
@@ -78,7 +90,14 @@ def main() -> None:
                 row["old_label"] != row["label"]
                 or round(float(row["old_score"] or 0), 3) != row["score"]
             ):
-                updates.append({"id": row["id"], "score": row["score"], "label": row["label"]})
+                updates.append({
+                    "id": row["id"],
+                    "score": row["score"],
+                    "label": row["label"],
+                    "confidence": row["confidence"],
+                    "provider": row["provider"],
+                    "processed_text": row["processed_text"],
+                })
                 changed.append(row)
 
         updated = _apply_updates(session, updates) if args.apply else 0
