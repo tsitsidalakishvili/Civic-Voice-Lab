@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import QRCode from 'qrcode'
 import {
   getJson,
   requestForm,
@@ -21,6 +22,7 @@ import {
   IconFileText,
   IconMail,
   IconPlus,
+  IconQrcode,
   IconRefresh,
   IconSend,
   IconTrash,
@@ -222,6 +224,8 @@ export function CRMPage({
   })
   const [latestSupporterInviteLink, setLatestSupporterInviteLink] = useState('')
   const [latestSupporterInviteType, setLatestSupporterInviteType] = useState('Supporter')
+  const [supporterQrExpanded, setSupporterQrExpanded] = useState(false)
+  const [supporterQrDataUrl, setSupporterQrDataUrl] = useState('')
   const [overviewMapStats, setOverviewMapStats] = useState(null)
 
   const normalizeTab = (tabId) => {
@@ -1975,6 +1979,33 @@ export function CRMPage({
     latestSupporterInviteType || supporterInviteForm.supporterType || 'Supporter',
   )
   const fallbackOpenFormLink = buildSupporterInviteLink('', fallbackInviteType)
+  const supporterQrLink = latestSupporterInviteLink || fallbackOpenFormLink
+
+  useEffect(() => {
+    let cancelled = false
+    if (!supporterQrLink || !supporterQrExpanded) {
+      setSupporterQrDataUrl('')
+      return undefined
+    }
+    QRCode.toDataURL(supporterQrLink, {
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 280,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    })
+      .then((url) => {
+        if (!cancelled) setSupporterQrDataUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setSupporterQrDataUrl('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [supporterQrLink, supporterQrExpanded])
 
   return (
     <section className="module module--crm-radical">
@@ -2320,8 +2351,33 @@ export function CRMPage({
                       >
                         <IconBrandSlack size={17} />
                       </button>
+                      <button
+                        className={supporterQrExpanded ? 'icon-button icon-button--primary active' : 'icon-button'}
+                        type="button"
+                        title="QR code"
+                        aria-label="Show QR code"
+                        onClick={() => setSupporterQrExpanded((prev) => !prev)}
+                        disabled={!supporterQrLink}
+                      >
+                        <IconQrcode size={17} />
+                      </button>
                     </div>
                   </div>
+                  {supporterQrExpanded ? (
+                    <div className="share-qr-panel">
+                      <div className="share-qr-panel__code" aria-label="Signup QR code">
+                        {supporterQrDataUrl ? (
+                          <img src={supporterQrDataUrl} alt="QR code for the signup form link" />
+                        ) : (
+                          <span className="muted">Generating QR code...</span>
+                        )}
+                      </div>
+                      <div className="share-qr-panel__meta">
+                        <strong>Scan to open the signup form</strong>
+                        <p className="muted">Supporters can scan this code with their phone camera.</p>
+                      </div>
+                    </div>
+                  ) : null}
                   <form
                     id="crm-supporter-invite-form"
                     className="form-grid intake-invite-form-compact"
@@ -2445,6 +2501,16 @@ export function CRMPage({
                   >
                     {supporterInviteLoading ? '...' : <IconSend size={17} />}
                   </button>
+                  <a
+                    className="icon-button intake-invite-combined__cta-open"
+                    href={latestSupporterInviteLink || fallbackOpenFormLink || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open latest form"
+                    aria-label="Open latest form"
+                  >
+                    <IconExternalLink size={17} />
+                  </a>
 
                 </div>
               </div>
