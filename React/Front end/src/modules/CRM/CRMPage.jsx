@@ -4801,6 +4801,25 @@ function CRMCampaignsTab() {
     createdBy: '',
     status: '',
   })
+  const [campaignMessages, setCampaignMessages] = useState([])
+  const [campaignMessageStatus, setCampaignMessageStatus] = useState('')
+  const [campaignMessageError, setCampaignMessageError] = useState('')
+  const [generatedCampaignMessages, setGeneratedCampaignMessages] = useState([])
+  const [campaignMessageForm, setCampaignMessageForm] = useState({
+    channel: 'whatsapp',
+    language: 'ka',
+    tone: 'clear',
+    title: '',
+    body: '',
+    callToAction: '',
+    status: 'Draft',
+  })
+  const [campaignMessageGenerateForm, setCampaignMessageGenerateForm] = useState({
+    channel: 'whatsapp',
+    language: 'ka',
+    tone: 'clear',
+    instructions: '',
+  })
   const [campaignTasks, setCampaignTasks] = useState([])
   const [campaignTaskStatus, setCampaignTaskStatus] = useState('')
   const [campaignTaskError, setCampaignTaskError] = useState('')
@@ -4926,6 +4945,15 @@ function CRMCampaignsTab() {
       .catch(() => setCampaignUpdates([]))
   }
 
+  const loadCampaignMessages = (campaignId) => {
+    if (!campaignId) return
+    getJson(`/crm/campaigns/${campaignId}/messages`)
+      .then((payload) =>
+        setCampaignMessages(Array.isArray(payload) ? payload : []),
+      )
+      .catch(() => setCampaignMessages([]))
+  }
+
   const loadCampaignTasks = (campaignId) => {
     if (!campaignId) return
     getJson(`/crm/campaigns/${campaignId}/tasks`)
@@ -4959,6 +4987,8 @@ function CRMCampaignsTab() {
       setProofArtifacts([])
       setPartners([])
       setCampaignUpdates([])
+      setCampaignMessages([])
+      setGeneratedCampaignMessages([])
       setCampaignTasks([])
       setCampaignVolunteers([])
       return
@@ -4971,7 +5001,7 @@ function CRMCampaignsTab() {
     loadProof(selectedCampaignId)
     loadPartners(selectedCampaignId)
     loadCampaignUpdates(selectedCampaignId)
-    loadCampaignTasks(selectedCampaignId)
+    loadCampaignMessages(selectedCampaignId)
     loadCampaignVolunteers(selectedCampaignId)
   }, [selectedCampaignId])
 
@@ -5299,6 +5329,96 @@ function CRMCampaignsTab() {
     }
   }
 
+  const campaignMessagePayload = () => ({
+    channel: campaignMessageForm.channel,
+    language: campaignMessageForm.language,
+    tone: campaignMessageForm.tone.trim(),
+    title: campaignMessageForm.title.trim(),
+    body: campaignMessageForm.body.trim(),
+    callToAction: campaignMessageForm.callToAction.trim(),
+    status: campaignMessageForm.status,
+  })
+
+  const handleGenerateCampaignMessage = async () => {
+    if (!selectedCampaignId) return
+    setCampaignMessageError('')
+    setCampaignMessageStatus('Generating message...')
+    try {
+      const payload = await requestJson(
+        `/crm/campaigns/${selectedCampaignId}/messages/generate`,
+        {
+          method: 'POST',
+          payload: {
+            channel: campaignMessageGenerateForm.channel,
+            language: campaignMessageGenerateForm.language,
+            tone: campaignMessageGenerateForm.tone.trim(),
+            instructions: campaignMessageGenerateForm.instructions.trim(),
+          },
+        },
+      )
+      const messages = Array.isArray(payload?.messages) ? payload.messages : []
+      setGeneratedCampaignMessages(messages)
+      if (messages[0]) {
+        setCampaignMessageForm((prev) => ({
+          ...prev,
+          channel: messages[0].channel || prev.channel,
+          language: messages[0].language || prev.language,
+          tone: messages[0].tone || prev.tone,
+          title: messages[0].title || '',
+          body: messages[0].body || '',
+          callToAction: messages[0].callToAction || '',
+          status: messages[0].status || 'Draft',
+        }))
+      }
+      setCampaignMessageStatus('Message drafted.')
+    } catch (err) {
+      setCampaignMessageStatus('')
+      setCampaignMessageError(err.message || 'Unable to generate message.')
+    }
+  }
+
+  const handleCampaignMessageSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedCampaignId) return
+    if (!campaignMessageForm.body.trim()) {
+      setCampaignMessageError('Message body is required.')
+      return
+    }
+    setCampaignMessageError('')
+    setCampaignMessageStatus('')
+    try {
+      await requestJson(`/crm/campaigns/${selectedCampaignId}/messages`, {
+        method: 'POST',
+        payload: campaignMessagePayload(),
+      })
+      setCampaignMessageForm((prev) => ({
+        ...prev,
+        title: '',
+        body: '',
+        callToAction: '',
+        status: 'Draft',
+      }))
+      setGeneratedCampaignMessages([])
+      setCampaignMessageStatus('Message saved.')
+      loadCampaignMessages(selectedCampaignId)
+    } catch (err) {
+      setCampaignMessageError(err.message || 'Unable to save message.')
+    }
+  }
+
+  const handleCopyCampaignMessage = async (message) => {
+    const text = [message?.title, message?.body, message?.callToAction]
+      .filter(Boolean)
+      .join('\n\n')
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setCampaignMessageStatus('Message copied.')
+    } catch (err) {
+      setCampaignMessageError('Unable to copy message.')
+    }
+  }
+
   const handleCampaignTaskSubmit = async (event) => {
     event.preventDefault()
     if (!selectedCampaignId) return
@@ -5339,7 +5459,7 @@ function CRMCampaignsTab() {
     event.preventDefault()
     if (!selectedCampaignId) return
     if (!campaignVolunteerForm.name.trim()) {
-      setCampaignVolunteerError('Volunteer name is required.')
+      setCampaignVolunteerError('Name is required.')
       return
     }
     setCampaignVolunteerError('')
@@ -5362,7 +5482,7 @@ function CRMCampaignsTab() {
         role: '',
         notes: '',
       })
-      setCampaignVolunteerStatus('Volunteer added.')
+      setCampaignVolunteerStatus('Person added.')
       loadCampaignVolunteers(selectedCampaignId)
     } catch (err) {
       setCampaignVolunteerError(err.message || 'Unable to add volunteer.')
@@ -5640,12 +5760,13 @@ function CRMCampaignsTab() {
     'Paused',
   ]
   const campaignDetailTabs = [
-    { id: 'strategy', label: 'Strategy' },
-    { id: 'execution', label: 'Execution' },
-    { id: 'funding', label: 'Funding' },
-    { id: 'operations', label: 'Operations' },
+    { id: 'strategy', label: 'Brief' },
+    { id: 'messages', label: 'Messages' },
+    { id: 'people', label: 'Audience' },
+    { id: 'execution', label: 'Events & Links' },
     { id: 'updates', label: 'Updates' },
-    { id: 'people', label: 'People' },
+    { id: 'funding', label: 'Funding' },
+    { id: 'operations', label: 'Results' },
     { id: 'statements', label: 'Statements' },
     { id: 'insights', label: 'Insights' },
   ]
@@ -7044,6 +7165,208 @@ function CRMCampaignsTab() {
         </div>
       )}
 
+      {campaignSection === 'messages' && (
+        <div className="module-card module-card__wide">
+          <div className="card-header">
+            <div>
+              <h3>Campaign messages</h3>
+              <p className="muted">
+                Draft communication messages for email, WhatsApp, Slack, and field outreach.
+              </p>
+            </div>
+          </div>
+          {!selectedCampaignId && (
+            <p className="muted">Select a campaign to create messages.</p>
+          )}
+          {selectedCampaignId && (
+            <div className="module-grid">
+              <div className="module-card">
+                <h4>Message builder</h4>
+                {campaignMessageError ? (
+                  <div className="module-alert">{campaignMessageError}</div>
+                ) : null}
+                {campaignMessageStatus ? (
+                  <div className="module-alert">{campaignMessageStatus}</div>
+                ) : null}
+                <div className="form-grid">
+                  <select
+                    className="select"
+                    value={campaignMessageGenerateForm.channel}
+                    onChange={(event) =>
+                      setCampaignMessageGenerateForm((prev) => ({
+                        ...prev,
+                        channel: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">Email</option>
+                    <option value="slack">Slack</option>
+                    <option value="social">Social post</option>
+                    <option value="field">Field script</option>
+                  </select>
+                  <select
+                    className="select"
+                    value={campaignMessageGenerateForm.language}
+                    onChange={(event) =>
+                      setCampaignMessageGenerateForm((prev) => ({
+                        ...prev,
+                        language: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="ka">Georgian</option>
+                    <option value="en">English</option>
+                    <option value="bilingual">Georgian + English</option>
+                  </select>
+                  <input
+                    className="input"
+                    placeholder="Tone"
+                    value={campaignMessageGenerateForm.tone}
+                    onChange={(event) =>
+                      setCampaignMessageGenerateForm((prev) => ({
+                        ...prev,
+                        tone: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <textarea
+                  className="textarea"
+                  placeholder="Extra instructions for this message"
+                  value={campaignMessageGenerateForm.instructions}
+                  onChange={(event) =>
+                    setCampaignMessageGenerateForm((prev) => ({
+                      ...prev,
+                      instructions: event.target.value,
+                    }))
+                  }
+                />
+                <div className="button-row">
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={handleGenerateCampaignMessage}
+                  >
+                    <IconSend size={16} /> Draft message
+                  </button>
+                </div>
+                <form className="stack" onSubmit={handleCampaignMessageSubmit}>
+                  <div className="form-grid">
+                    <select
+                      className="select"
+                      value={campaignMessageForm.channel}
+                      onChange={(event) =>
+                        setCampaignMessageForm((prev) => ({
+                          ...prev,
+                          channel: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="email">Email</option>
+                      <option value="slack">Slack</option>
+                      <option value="social">Social post</option>
+                      <option value="field">Field script</option>
+                    </select>
+                    <select
+                      className="select"
+                      value={campaignMessageForm.status}
+                      onChange={(event) =>
+                        setCampaignMessageForm((prev) => ({
+                          ...prev,
+                          status: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="Draft">Draft</option>
+                      <option value="Ready">Ready</option>
+                      <option value="Sent">Sent</option>
+                      <option value="Archived">Archived</option>
+                    </select>
+                  </div>
+                  <input
+                    className="input"
+                    placeholder="Message title"
+                    value={campaignMessageForm.title}
+                    onChange={(event) =>
+                      setCampaignMessageForm((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <textarea
+                    className="textarea"
+                    placeholder="Message body"
+                    value={campaignMessageForm.body}
+                    onChange={(event) =>
+                      setCampaignMessageForm((prev) => ({
+                        ...prev,
+                        body: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Call to action"
+                    value={campaignMessageForm.callToAction}
+                    onChange={(event) =>
+                      setCampaignMessageForm((prev) => ({
+                        ...prev,
+                        callToAction: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="button-row">
+                    <button className="button" type="submit">
+                      Save message
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => handleCopyCampaignMessage(campaignMessageForm)}
+                    >
+                      <IconCopy size={16} /> Copy
+                    </button>
+                  </div>
+                </form>
+                {generatedCampaignMessages.length ? (
+                  <p className="muted">Generated draft loaded into the editor.</p>
+                ) : null}
+              </div>
+
+              <div className="module-card">
+                <h4>Saved messages</h4>
+                {campaignMessages.length === 0 ? (
+                  <p className="muted">No saved messages yet.</p>
+                ) : (
+                  <div className="stack">
+                    {campaignMessages.slice(0, 8).map((message) => (
+                      <div className="metric-row" key={message.messageId}>
+                        <span>
+                          <strong>{message.title || message.channel}</strong>
+                          <br />
+                          <span className="muted">{message.channel} / {message.status}</span>
+                        </span>
+                        <button
+                          className="icon-button"
+                          type="button"
+                          title="Copy message"
+                          onClick={() => handleCopyCampaignMessage(message)}
+                        >
+                          <IconCopy size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {campaignSection === 'updates' && (
         <div className="module-card module-card__wide">
           <div className="card-header">
@@ -7121,123 +7444,6 @@ function CRMCampaignsTab() {
                 )}
               </div>
 
-              {!CRM_TASKS_ENABLED ? (
-                <div className="module-card">
-                  <h4>Execution tasks</h4>
-                  <p className="muted">
-                    Task assignment is hidden for this release and will return once assignee accounts are introduced.
-                  </p>
-                </div>
-              ) : (
-              <div className="module-card">
-                <h4>Execution tasks</h4>
-                {campaignTaskError ? (
-                  <div className="module-alert">{campaignTaskError}</div>
-                ) : null}
-                {campaignTaskStatus ? (
-                  <div className="module-alert">{campaignTaskStatus}</div>
-                ) : null}
-                <form className="stack" onSubmit={handleCampaignTaskSubmit}>
-                  <input
-                    className="input"
-                    placeholder="Task title"
-                    value={campaignTaskForm.title}
-                    onChange={(event) =>
-                      setCampaignTaskForm((prev) => ({
-                        ...prev,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                  <textarea
-                    className="textarea"
-                    placeholder="Task description"
-                    value={campaignTaskForm.description}
-                    onChange={(event) =>
-                      setCampaignTaskForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                  />
-                  <div className="form-grid">
-                    <select
-                      className="select"
-                      value={campaignTaskForm.status}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          status: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="Open">Open</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Done">Done</option>
-                      <option value="Cancelled">Cancelled</option>
-                    </select>
-                    <input
-                      className="input"
-                      type="date"
-                      value={campaignTaskForm.dueDate}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          dueDate: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="form-grid">
-                    <input
-                      className="input"
-                      placeholder="Assignee email"
-                      value={campaignTaskForm.assigneeEmail}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          assigneeEmail: event.target.value,
-                        }))
-                      }
-                    />
-                    <select
-                      className="select"
-                      value={campaignTaskForm.milestoneId}
-                      onChange={(event) =>
-                        setCampaignTaskForm((prev) => ({
-                          ...prev,
-                          milestoneId: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Link to milestone</option>
-                      {milestones.map((milestone) => (
-                        <option
-                          key={`task-${milestone.milestoneId}`}
-                          value={milestone.milestoneId}
-                        >
-                          {milestone.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button className="button" type="submit">
-                    Create task
-                  </button>
-                </form>
-                {campaignTasks.length === 0 ? (
-                  <p className="muted">No tasks yet.</p>
-                ) : (
-                  <ul className="compact-list">
-                    {campaignTasks.slice(0, 5).map((task) => (
-                      <li key={task.taskId}>
-                        {task.title} â€” {task.status}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              )}
             </div>
           )}
         </div>
@@ -7247,8 +7453,8 @@ function CRMCampaignsTab() {
         <div className="module-card module-card__wide">
           <div className="card-header">
             <div>
-              <h3>People and planning</h3>
-              <p className="muted">Track volunteers and plan workdays.</p>
+              <h3>Audience</h3>
+              <p className="muted">Track campaign participants and field roles.</p>
             </div>
           </div>
           {!selectedCampaignId && (
@@ -7257,7 +7463,7 @@ function CRMCampaignsTab() {
           {selectedCampaignId && (
             <div className="module-grid">
               <div className="module-card">
-                <h4>Volunteer roster</h4>
+                <h4>Campaign people</h4>
                 {campaignVolunteerError ? (
                   <div className="module-alert">{campaignVolunteerError}</div>
                 ) : null}
@@ -7267,7 +7473,7 @@ function CRMCampaignsTab() {
                 <form className="stack" onSubmit={handleCampaignVolunteerSubmit}>
                   <input
                     className="input"
-                    placeholder="Volunteer name"
+                    placeholder="Name"
                     value={campaignVolunteerForm.name}
                     onChange={(event) =>
                       setCampaignVolunteerForm((prev) => ({
@@ -7383,18 +7589,9 @@ function CRMCampaignsTab() {
               <div>
                 <h3>Campaign final statements</h3>
                 <p className="muted">
-                  Final statements, sub statements, and actions linked to tasks.
+                  Final statements, sub statements, and communication actions for campaign follow-up.
                 </p>
               </div>
-            </div>
-            <div className="stack">
-              <input
-                className="input"
-                placeholder="Assignee email for tasks"
-                value={assigneeEmail}
-                onChange={(event) => setAssigneeEmail(event.target.value)}
-              />
-              {taskStatus ? <p className="muted">{taskStatus}</p> : null}
             </div>
             <div className="module-grid">
               {finalStatements.map((statement, idx) => (
@@ -7416,13 +7613,6 @@ function CRMCampaignsTab() {
                       <li key={`action-${idx}-${actionIdx}`}>{action}</li>
                     ))}
                   </ul>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => handleCreateTasks(statement)}
-                  >
-                    Create tasks
-                  </button>
                 </div>
               ))}
             </div>

@@ -1,4 +1,4 @@
-"""
+﻿"""
 CRM – campaign CRUD, contributions, milestones, expenses, proof,
 partners, volunteers, analysis, deliberation launch, admin campaign endpoints.
 """
@@ -327,6 +327,60 @@ class CampaignUpdateOut(BaseModel):
     created_by: Optional[str] = Field(alias="createdBy", default="")
     status: Optional[str] = ""
     created_at: Optional[str] = Field(alias="createdAt", default=None)
+
+
+class CampaignMessageCreate(BaseModel):
+    channel: Optional[str] = "whatsapp"
+    language: Optional[str] = "ka"
+    tone: Optional[str] = "clear"
+    title: Optional[str] = ""
+    body: str
+    callToAction: Optional[str] = ""
+    status: Optional[str] = "Draft"
+    segmentId: Optional[str] = ""
+    generatedByAi: Optional[bool] = False
+    promptContext: Optional[str] = ""
+
+
+class CampaignMessageUpdate(BaseModel):
+    channel: Optional[str] = None
+    language: Optional[str] = None
+    tone: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
+    callToAction: Optional[str] = None
+    status: Optional[str] = None
+    segmentId: Optional[str] = None
+    generatedByAi: Optional[bool] = None
+    promptContext: Optional[str] = None
+
+
+class CampaignMessageGenerateRequest(BaseModel):
+    channel: Optional[str] = "whatsapp"
+    language: Optional[str] = "ka"
+    tone: Optional[str] = "clear"
+    instructions: Optional[str] = ""
+
+
+class CampaignMessageOut(BaseModel):
+    message_id: str = Field(alias="messageId")
+    campaign_id: str = Field(alias="campaignId")
+    channel: str
+    language: str
+    tone: str
+    title: Optional[str] = ""
+    body: str
+    call_to_action: Optional[str] = Field(alias="callToAction", default="")
+    status: str
+    segment_id: Optional[str] = Field(alias="segmentId", default="")
+    generated_by_ai: bool = Field(alias="generatedByAi", default=False)
+    prompt_context: Optional[str] = Field(alias="promptContext", default="")
+    created_at: Optional[str] = Field(alias="createdAt", default=None)
+    updated_at: Optional[str] = Field(alias="updatedAt", default=None)
+
+
+class CampaignMessageSuggestionsOut(BaseModel):
+    messages: List[CampaignMessageCreate]
 
 
 class CampaignTaskCreate(BaseModel):
@@ -1580,6 +1634,264 @@ def list_campaign_updates(
     return df.to_dict(orient="records") if not df.empty else []
 
 
+
+# ---------------------------------------------------------------------------
+# Campaign communication messages
+# ---------------------------------------------------------------------------
+
+def _campaign_message_return(alias: str = "m") -> str:
+    return f"""
+      {alias}.messageId AS messageId,
+      {alias}.campaignId AS campaignId,
+      coalesce({alias}.channel, 'whatsapp') AS channel,
+      coalesce({alias}.language, 'ka') AS language,
+      coalesce({alias}.tone, 'clear') AS tone,
+      coalesce({alias}.title, '') AS title,
+      coalesce({alias}.body, '') AS body,
+      coalesce({alias}.callToAction, '') AS callToAction,
+      coalesce({alias}.status, 'Draft') AS status,
+      coalesce({alias}.segmentId, '') AS segmentId,
+      coalesce({alias}.generatedByAi, false) AS generatedByAi,
+      coalesce({alias}.promptContext, '') AS promptContext,
+      toString({alias}.createdAt) AS createdAt,
+      toString({alias}.updatedAt) AS updatedAt
+    """
+
+
+def _normalise_campaign_message_payload(payload: CampaignMessageCreate) -> dict:
+    channel = (_clean_text(payload.channel) or "whatsapp").lower()
+    if channel not in {"email", "whatsapp", "slack", "sms", "social", "field"}:
+        channel = "whatsapp"
+    language = (_clean_text(payload.language) or "ka").lower()
+    if language not in {"ka", "en", "bilingual"}:
+        language = "ka"
+    status = _clean_text(payload.status) or "Draft"
+    if status not in {"Draft", "Ready", "Sent", "Archived"}:
+        status = "Draft"
+    return {
+        "channel": channel,
+        "language": language,
+        "tone": _clean_text(payload.tone) or "clear",
+        "title": _clean_text(payload.title),
+        "body": _clean_text(payload.body),
+        "callToAction": _clean_text(payload.callToAction),
+        "status": status,
+        "segmentId": _clean_text(payload.segmentId),
+        "generatedByAi": bool(payload.generatedByAi),
+        "promptContext": _clean_text(payload.promptContext),
+    }
+
+
+@router.post(
+    "/campaigns/{campaign_id}/messages/generate",
+    response_model=CampaignMessageSuggestionsOut,
+)
+def generate_campaign_messages(campaign_id: str, payload: CampaignMessageGenerateRequest):
+    campaign = get_campaign(campaign_id)
+    channel = (_clean_text(payload.channel) or "whatsapp").lower()
+    language = (_clean_text(payload.language) or "ka").lower()
+    tone = _clean_text(payload.tone) or "clear"
+    instructions = _clean_text(payload.instructions)
+    name = _clean_text(campaign.get("name")) or "campaign"
+    topic = _clean_text(campaign.get("topic")) or name
+    objective = _clean_text(campaign.get("objective")) or _clean_text(campaign.get("problemDescription"))
+    target = _clean_text(campaign.get("targetGroup")) or "supporters"
+    city = _clean_text(campaign.get("locationCity"))
+    location = f" in {city}" if city else ""
+    cta_en = "Open the link, read the proposal, and share your view."
+    cta_ka = "გახსენით ბმული, გაეცანით ინიციატივას და გაგვიზიარეთ თქვენი აზრი."
+    default_objective_en = "to understand priorities and coordinate action"
+    default_objective_ka = "პრიორიტეტების გაგება და ერთობლივი მოქმედება"
+    if language == "en":
+        title = f"Join the conversation: {topic}"
+        body = (
+            f"We are preparing {name}{location} and want input from {target}. "
+            f"The goal is: {objective or default_objective_en}. "
+            f"{instructions + ' ' if instructions else ''}{cta_en}"
+        )
+        cta = cta_en
+    elif language == "bilingual":
+        title = f"{topic} / მონაწილეობა"
+        body = (
+            f"We are preparing {name}{location} and want input from {target}. "
+            f"Goal: {objective or default_objective_en}. {cta_en}\n\n"
+            f"ვამზადებთ კამპანიას: {name}. გვჭირდება საზოგადოების უკუკავშირი. "
+            f"მიზანია: {objective or default_objective_ka}. {cta_ka}"
+        )
+        cta = f"{cta_en} / {cta_ka}"
+    else:
+        title = f"ჩაერთეთ: {topic}"
+        body = (
+            f"ვამზადებთ კამპანიას: {name}. გვჭირდება {target}-ის უკუკავშირი. "
+            f"მიზანია: {objective or default_objective_ka}. "
+            f"{instructions + ' ' if instructions else ''}{cta_ka}"
+        )
+        cta = cta_ka
+    if channel == "email" and language != "ka":
+        title = f"Invitation: {topic}"
+    elif channel == "slack":
+        title = f"Campaign update: {topic}"
+    message = CampaignMessageCreate(
+        channel=channel,
+        language=language,
+        tone=tone,
+        title=title,
+        body=body,
+        callToAction=cta,
+        status="Draft",
+        generatedByAi=False,
+        promptContext=instructions,
+    )
+    return {"messages": [message]}
+
+
+@router.post(
+    "/campaigns/{campaign_id}/messages",
+    response_model=CampaignMessageOut,
+)
+def create_campaign_message(campaign_id: str, payload: CampaignMessageCreate):
+    campaign_id = _clean_text(campaign_id)
+    if not campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign ID is required")
+    values = _normalise_campaign_message_payload(payload)
+    if not values["body"]:
+        raise HTTPException(status_code=400, detail="Message body is required")
+    message_id = str(uuid4())
+    query = f"""
+    MATCH (c:Campaign {{campaignId: $campaignId}})
+    CREATE (m:CampaignMessage {{
+      messageId: $messageId,
+      campaignId: $campaignId,
+      channel: $channel,
+      language: $language,
+      tone: $tone,
+      title: $title,
+      body: $body,
+      callToAction: $callToAction,
+      status: $status,
+      segmentId: $segmentId,
+      generatedByAi: $generatedByAi,
+      promptContext: $promptContext,
+      createdAt: datetime(),
+      updatedAt: datetime()
+    }})
+    CREATE (c)-[:HAS_MESSAGE]->(m)
+    RETURN
+      {_campaign_message_return('m')}
+    """
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            query,
+            {"campaignId": campaign_id, "messageId": message_id, **values},
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return records[0].data()
+
+
+@router.get(
+    "/campaigns/{campaign_id}/messages",
+    response_model=List[CampaignMessageOut],
+)
+def list_campaign_messages(campaign_id: str, limit: int = Query(100, ge=1, le=500)):
+    campaign_id = _clean_text(campaign_id)
+    if not campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign ID is required")
+    df = _query_df(
+        f"""
+        MATCH (c:Campaign {{campaignId: $campaignId}})-[:HAS_MESSAGE]->(m:CampaignMessage)
+        RETURN
+          {_campaign_message_return('m')}
+        ORDER BY m.createdAt DESC
+        LIMIT $limit
+        """,
+        {"campaignId": campaign_id, "limit": int(limit)},
+    )
+    return df.to_dict(orient="records") if not df.empty else []
+
+
+@router.patch(
+    "/campaigns/{campaign_id}/messages/{message_id}",
+    response_model=CampaignMessageOut,
+)
+def update_campaign_message(campaign_id: str, message_id: str, payload: CampaignMessageUpdate):
+    campaign_id = _clean_text(campaign_id)
+    message_id = _clean_text(message_id)
+    if not campaign_id or not message_id:
+        raise HTTPException(status_code=400, detail="Campaign and message IDs are required")
+    existing_df = _query_df(
+        f"""
+        MATCH (c:Campaign {{campaignId: $campaignId}})-[:HAS_MESSAGE]->(m:CampaignMessage {{messageId: $messageId}})
+        RETURN
+          {_campaign_message_return('m')}
+        LIMIT 1
+        """,
+        {"campaignId": campaign_id, "messageId": message_id},
+    )
+    if existing_df.empty:
+        raise HTTPException(status_code=404, detail="Campaign message not found")
+    existing = existing_df.iloc[0].to_dict()
+    merged = CampaignMessageCreate(
+        channel=payload.channel if payload.channel is not None else existing.get("channel"),
+        language=payload.language if payload.language is not None else existing.get("language"),
+        tone=payload.tone if payload.tone is not None else existing.get("tone"),
+        title=payload.title if payload.title is not None else existing.get("title"),
+        body=payload.body if payload.body is not None else existing.get("body"),
+        callToAction=payload.callToAction if payload.callToAction is not None else existing.get("callToAction"),
+        status=payload.status if payload.status is not None else existing.get("status"),
+        segmentId=payload.segmentId if payload.segmentId is not None else existing.get("segmentId"),
+        generatedByAi=payload.generatedByAi if payload.generatedByAi is not None else existing.get("generatedByAi"),
+        promptContext=payload.promptContext if payload.promptContext is not None else existing.get("promptContext"),
+    )
+    values = _normalise_campaign_message_payload(merged)
+    if not values["body"]:
+        raise HTTPException(status_code=400, detail="Message body is required")
+    query = f"""
+    MATCH (c:Campaign {{campaignId: $campaignId}})-[:HAS_MESSAGE]->(m:CampaignMessage {{messageId: $messageId}})
+    SET m.channel = $channel,
+        m.language = $language,
+        m.tone = $tone,
+        m.title = $title,
+        m.body = $body,
+        m.callToAction = $callToAction,
+        m.status = $status,
+        m.segmentId = $segmentId,
+        m.generatedByAi = $generatedByAi,
+        m.promptContext = $promptContext,
+        m.updatedAt = datetime()
+    RETURN
+      {_campaign_message_return('m')}
+    """
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(session, query, {"campaignId": campaign_id, "messageId": message_id, **values})
+    if not records:
+        raise HTTPException(status_code=404, detail="Campaign message not found")
+    return records[0].data()
+
+
+@router.delete("/campaigns/{campaign_id}/messages/{message_id}")
+def delete_campaign_message(campaign_id: str, message_id: str):
+    campaign_id = _clean_text(campaign_id)
+    message_id = _clean_text(message_id)
+    if not campaign_id or not message_id:
+        raise HTTPException(status_code=400, detail="Campaign and message IDs are required")
+    query = """
+    MATCH (c:Campaign {campaignId: $campaignId})-[r:HAS_MESSAGE]->(m:CampaignMessage {messageId: $messageId})
+    DETACH DELETE m
+    RETURN count(r) AS deleted
+    """
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(session, query, {"campaignId": campaign_id, "messageId": message_id})
+    deleted = int(records[0].data().get("deleted", 0)) if records else 0
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Campaign message not found")
+    return {"deleted": True}
+
+
 # ---------------------------------------------------------------------------
 # Campaign tasks
 # ---------------------------------------------------------------------------
@@ -2270,3 +2582,6 @@ def admin_seed_demo_campaign():
     if not records:
         raise HTTPException(status_code=500, detail="Unable to seed demo campaign")
     return {"seeded": True, "campaignId": records[0].data().get("campaignId")}
+
+
+
