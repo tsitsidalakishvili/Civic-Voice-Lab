@@ -4,17 +4,19 @@ import { getJson, requestJson } from '../services/api'
 import { LanguageSelect, StatusMessage } from '../ui'
 import { parseLocalArray } from '../utils/deck'
 
-const sentimentWasAnalyzed = (provider) => {
-  const value = String(provider || '').toLowerCase()
-  return Boolean(value)
-    && value !== 'unavailable'
-    && value !== 'model-not-configured'
-    && value !== 'transformer-disabled-on-windows'
-    && !value.startsWith('transformer-load-failed')
+const sentimentWasAnalyzed = (item) => {
+  const provider = String(item?.sentiment_provider || '').toLowerCase()
+  const label = String(item?.sentiment_label || '').toLowerCase()
+  const score = Number(item?.sentiment_score || 0)
+  if (!provider) return label === 'positive' || label === 'negative' || score !== 0
+  return provider !== 'unavailable'
+    && provider !== 'model-not-configured'
+    && provider !== 'transformer-disabled-on-windows'
+    && !provider.startsWith('transformer-load-failed')
 }
 
 const sentimentDisplayLabel = (item) => (
-  sentimentWasAnalyzed(item?.sentiment_provider) ? item?.sentiment_label || 'neutral' : 'not analyzed'
+  sentimentWasAnalyzed(item) ? item?.sentiment_label || 'neutral' : 'not analyzed'
 )
 
 const QUESTIONNAIRE_DISCUSSION_COPY = {

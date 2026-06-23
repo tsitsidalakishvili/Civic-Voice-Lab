@@ -34,6 +34,33 @@ from .schemas import (
 router = APIRouter()
 
 
+@router.get("/sentiment/diagnostics")
+def sentiment_diagnostics(text: str = Query("?? ??????????", min_length=1)):
+    sentiment = score_sentiment(text)
+    return {
+        "text": text,
+        "score": sentiment.score,
+        "label": sentiment.label,
+        "confidence": sentiment.confidence,
+        "provider": sentiment.provider,
+        "processed_text": sentiment.processed_text,
+    }
+
+
+def _provider_for_existing_sentiment(comment: dict, sentiment_score, sentiment_label: str | None) -> str:
+    provider = str(comment.get("sentimentProvider") or "").strip()
+    if provider:
+        return provider
+    label = str(sentiment_label or "").strip().lower()
+    try:
+        score = float(sentiment_score or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    if label in {"positive", "negative"} or score != 0.0:
+        return "legacy-rule-based"
+    return "unavailable"
+
+
 def _serialize_statement_discussion_comment(record, my_participant_hash: Optional[str] = None):
     comment = _node_to_dict(record["sc"])
     my_reaction = record.get("my_reaction")
@@ -47,6 +74,7 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
         sentiment_label = sentiment.label
         comment["sentimentConfidence"] = sentiment.confidence
         comment["sentimentProvider"] = sentiment.provider
+    sentiment_provider = _provider_for_existing_sentiment(comment, sentiment_score, sentiment_label)
     like_count = int(record.get("like_count") or 0)
     agree_count = int(record.get("agree_count") or 0)
     disagree_count = int(record.get("disagree_count") or 0)
@@ -66,7 +94,7 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
         "sentiment_score": round(float(sentiment_score or 0), 3),
         "sentiment_label": sentiment_label or "neutral",
         "sentiment_confidence": round(float(comment.get("sentimentConfidence") or 0), 3),
-        "sentiment_provider": comment.get("sentimentProvider") or "unavailable",
+        "sentiment_provider": sentiment_provider,
         "consensus_impact": round(consensus_impact, 3),
         "my_reaction": my_reaction,
     }
