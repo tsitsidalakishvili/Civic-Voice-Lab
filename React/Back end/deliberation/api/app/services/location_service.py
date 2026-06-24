@@ -102,7 +102,7 @@ GEORGIA_GENERAL_LOCATION = {
     "city": "Georgia",
     "district": "Georgia",
     "area": "Georgia",
-    "micro_area": "Georgia",
+    "micro_area": "Georgia unspecified",
     "lat": 42.3154,
     "lng": 43.3569,
 }
@@ -581,9 +581,3 @@ def unmatched_people(people: Iterable[dict]) -> list[dict]:
             }
         )
     return sorted(rows, key=lambda row: (row["city"], row["fullName"]))
-
-
-
-
-
-

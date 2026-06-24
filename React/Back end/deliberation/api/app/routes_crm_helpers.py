@@ -680,7 +680,7 @@ def _load_supporter_summary_df() -> pd.DataFrame:
              count(DISTINCT sr) AS recruitedCount
         RETURN
           coalesce(p.personId, p.email, elementId(p)) AS personId,
-      p.email AS email,
+      coalesce(p.email, '') AS email,
           p.firstName AS firstName,
           p.lastName AS lastName,
           coalesce(p.gender, 'Unspecified') AS gender,
@@ -745,6 +745,15 @@ class SegmentFilter(BaseModel):
     nameContains: Optional[str] = None
     addressContains: Optional[str] = None
     minEffortHours: Optional[float] = None
+    gender: Optional[str] = None
+    minAge: Optional[int] = None
+    maxAge: Optional[int] = None
+    cityContains: Optional[str] = None
+    districtContains: Optional[str] = None
+    agreesWithManifesto: Optional[bool] = None
+    interestedInMembership: Optional[bool] = None
+    hasEmail: Optional[bool] = None
+    hasPhone: Optional[bool] = None
 
 
 def _decode_stored_filter_json(raw: Any) -> dict:
@@ -780,6 +789,14 @@ def _normalize_segment_filter_keys(d: dict) -> dict:
         "name_contains": "nameContains",
         "address_contains": "addressContains",
         "min_effort_hours": "minEffortHours",
+        "min_age": "minAge",
+        "max_age": "maxAge",
+        "city_contains": "cityContains",
+        "district_contains": "districtContains",
+        "agrees_with_manifesto": "agreesWithManifesto",
+        "interested_in_membership": "interestedInMembership",
+        "has_email": "hasEmail",
+        "has_phone": "hasPhone",
     }
     out: dict = {}
     for key, val in (d or {}).items():
@@ -844,6 +861,47 @@ def _segment_where_clause_and_params(filter_spec: SegmentFilter):
         clauses.append("effortHours >= $minEffortHours")
         params["minEffortHours"] = float(min_effort_val)
 
+    gender = (filter_spec.gender or "").strip()
+    if gender and gender != "All":
+        clauses.append("gender = $gender")
+        params["gender"] = gender
+
+    min_age = filter_spec.minAge
+    if min_age is not None and min_age >= 0:
+        clauses.append("age >= $minAge")
+        params["minAge"] = int(min_age)
+
+    max_age = filter_spec.maxAge
+    if max_age is not None and max_age >= 0:
+        clauses.append("age <= $maxAge")
+        params["maxAge"] = int(max_age)
+
+    city_contains = (filter_spec.cityContains or "").strip()
+    if city_contains:
+        clauses.append("toLower(city) CONTAINS toLower($cityContains)")
+        params["cityContains"] = city_contains
+
+    district_contains = (filter_spec.districtContains or "").strip()
+    if district_contains:
+        clauses.append("toLower(district) CONTAINS toLower($districtContains)")
+        params["districtContains"] = district_contains
+
+    if filter_spec.agreesWithManifesto is not None:
+        clauses.append("agreesWithManifesto = $agreesWithManifesto")
+        params["agreesWithManifesto"] = bool(filter_spec.agreesWithManifesto)
+
+    if filter_spec.interestedInMembership is not None:
+        clauses.append("interestedInMembership = $interestedInMembership")
+        params["interestedInMembership"] = bool(filter_spec.interestedInMembership)
+
+    if filter_spec.hasEmail is not None:
+        clauses.append("hasEmail = $hasEmail")
+        params["hasEmail"] = bool(filter_spec.hasEmail)
+
+    if filter_spec.hasPhone is not None:
+        clauses.append("hasPhone = $hasPhone")
+        params["hasPhone"] = bool(filter_spec.hasPhone)
+
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     return where, params
 
@@ -861,7 +919,21 @@ _SEGMENT_MATCH_PIPELINE = """
     OPTIONAL MATCH (p)-[:CAN_CONTRIBUTE_WITH]->(sk:Skill)
     WITH p, addr, fullName, group, tags, collect(DISTINCT sk.name) AS skills,
          coalesce(p.effortHours, 0.0) AS effortHours,
-         coalesce(p.address, addr.fullAddress, '') AS address
+         coalesce(p.address, addr.fullAddress, '') AS address,
+         coalesce(p.city, addr.city, '') AS city,
+         coalesce(p.district, addr.district, '') AS district,
+         CASE
+           WHEN p.gender IS NULL OR p.gender = '' THEN 'U'
+           WHEN toString(p.gender) IN ['1', '1.0'] OR toLower(toString(p.gender)) CONTAINS 'female' THEN 'F'
+           WHEN toString(p.gender) = 'nan' OR toString(p.gender) IN ['2', '2.0'] OR toLower(toString(p.gender)) CONTAINS 'male' THEN 'M'
+           WHEN toString(p.gender) IN ['3', '3.0'] OR toLower(toString(p.gender)) CONTAINS 'other' THEN 'O'
+           ELSE 'M'
+         END AS gender,
+         toInteger(p.age) AS age,
+         coalesce(p.agreesWithManifesto, false) AS agreesWithManifesto,
+         coalesce(p.interestedInMembership, false) AS interestedInMembership,
+         coalesce(p.email, '') <> '' AS hasEmail,
+         coalesce(p.phone, '') <> '' AS hasPhone
 """
 
 
@@ -873,9 +945,17 @@ def _build_segment_query(filter_spec: SegmentFilter, limit: int):
     {where}
     RETURN
       CASE WHEN fullName = '' THEN p.email ELSE fullName END AS fullName,
-      p.email AS email,
+      coalesce(p.email, '') AS email,
       group AS group,
       coalesce(p.timeAvailability, 'Unspecified') AS timeAvailability,
+      gender AS gender,
+      age AS age,
+      city AS city,
+      district AS district,
+      agreesWithManifesto AS agreesWithManifesto,
+      interestedInMembership AS interestedInMembership,
+      hasEmail AS hasEmail,
+      hasPhone AS hasPhone,
       address AS address,
       effortHours AS effortHours,
       tags,

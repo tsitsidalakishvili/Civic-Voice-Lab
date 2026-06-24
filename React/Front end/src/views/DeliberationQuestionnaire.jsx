@@ -28,6 +28,8 @@ const QUESTIONNAIRE_DISCUSSION_COPY = {
     identityRequired: 'Login is required to vote in this conversation.',
     importantFlag: 'This is important to me',
     commentsTitle: 'Comments on this statement',
+    seeComments: 'See comments',
+    hideComments: 'Hide comments',
     commentsLoading: 'Loading comments...',
     commentsEmpty: 'No comments yet for this statement.',
     yourReaction: 'Your reaction',
@@ -64,6 +66,7 @@ export function DeliberationQuestionnaire({
   const [error, setError] = useState('')
   const [comments, setComments] = useState([])
   const [statementDiscussionById, setStatementDiscussionById] = useState({})
+  const [statementDiscussionExpandedById, setStatementDiscussionExpandedById] = useState({})
   const [statementDiscussionDraftById, setStatementDiscussionDraftById] = useState({})
   const [statementDiscussionLoadingById, setStatementDiscussionLoadingById] = useState({})
   const [statementDiscussionSavingById, setStatementDiscussionSavingById] = useState({})
@@ -244,6 +247,7 @@ export function DeliberationQuestionnaire({
   useEffect(() => {
     if (!conversationId) return
     setStatementDiscussionById({})
+    setStatementDiscussionExpandedById({})
     setStatementDiscussionDraftById({})
     setStatementDiscussionLoadingById({})
     setStatementDiscussionSavingById({})
@@ -257,6 +261,9 @@ export function DeliberationQuestionnaire({
   const currentStatementDiscussion = currentCommentId
     ? statementDiscussionById[currentCommentId] || []
     : []
+  const currentStatementDiscussionExpanded = currentCommentId
+    ? Boolean(statementDiscussionExpandedById[currentCommentId])
+    : false
   const currentStatementDiscussionDraft = currentCommentId
     ? statementDiscussionDraftById[currentCommentId] || ''
     : ''
@@ -270,8 +277,13 @@ export function DeliberationQuestionnaire({
     ? statementDiscussionErrorById[currentCommentId] || ''
     : ''
   const discussionTexts = useMemo(
-    () => [currentText, ...currentStatementDiscussion.map((item) => item?.text || '')],
-    [currentStatementDiscussion, currentText],
+    () => [
+      currentText,
+      ...(currentStatementDiscussionExpanded
+        ? currentStatementDiscussion.map((item) => item?.text || '')
+        : []),
+    ],
+    [currentStatementDiscussion, currentStatementDiscussionExpanded, currentText],
   )
   const { translateText: translateDiscussionText } = useTextTranslations(
     discussionTexts,
@@ -384,6 +396,18 @@ export function DeliberationQuestionnaire({
     },
     [conversationId, requestHeaders],
   )
+
+  const handleToggleStatementDiscussion = async () => {
+    if (!currentCommentId) return
+    const nextExpanded = !currentStatementDiscussionExpanded
+    setStatementDiscussionExpandedById((prev) => ({
+      ...prev,
+      [currentCommentId]: nextExpanded,
+    }))
+    if (nextExpanded && !statementDiscussionById[currentCommentId]) {
+      await loadStatementDiscussion(currentCommentId)
+    }
+  }
 
   const handleSubmitStatementDiscussion = async () => {
     if (!conversationId || !currentCommentId) return
@@ -506,12 +530,6 @@ export function DeliberationQuestionnaire({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentCommentId, handleVote, pendingVote])
-
-  useEffect(() => {
-    if (!currentCommentId) return
-    if (statementDiscussionById[currentCommentId]) return
-    loadStatementDiscussion(currentCommentId)
-  }, [currentCommentId, loadStatementDiscussion, statementDiscussionById])
 
   const beginDrag = useCallback(
     (clientX, clientY, type, pointerId = null) => {
@@ -788,103 +806,113 @@ export function DeliberationQuestionnaire({
           </div>
           {currentCommentId ? (
             <div className="questionnaire-add">
-              <div className="card-divider">
+              <div className="discussion-drawer-header">
                 <h4>{discussionCopy.commentsTitle}</h4>
+                <button
+                  className="button-secondary button-secondary--small"
+                  type="button"
+                  onClick={handleToggleStatementDiscussion}
+                >
+                  {currentStatementDiscussionExpanded
+                    ? discussionCopy.hideComments
+                    : discussionCopy.seeComments}
+                  {currentStatementDiscussion.length > 0 ? ` (${currentStatementDiscussion.length})` : ''}
+                </button>
               </div>
-              {currentStatementDiscussionError ? (
-                <div className="module-alert">{currentStatementDiscussionError}</div>
-              ) : null}
-              {currentStatementDiscussionLoading ? (
-                <p className="muted">{discussionCopy.commentsLoading}</p>
-              ) : currentStatementDiscussion.length === 0 ? (
-                <p className="muted">{discussionCopy.commentsEmpty}</p>
-              ) : (
-                <div className="stack">
-                  {currentStatementDiscussion.map((item) => (
-                    <div className="module-card" key={item.id}>
-                      {renderDiscussionText(item.text)}
-                      <div className="module-footer">
-                        <span className="muted">{item.created_at || 'Live'}</span>
-                        <span>
-                          <strong>Like</strong> {item.like_count || 0}
-                        </span>
-                        <span>
-                          <strong>Agree</strong> {item.agree_count || 0}
-                        </span>
-                        <span>
-                          <strong>Disagree</strong> {item.disagree_count || 0}
-                        </span>
-                        <span>
-                          <strong>Insightful</strong> {item.insightful_count || 0}
-                        </span>
-                        <span>
-                          <strong>Sentiment</strong> {sentimentDisplayLabel(item)}
-                        </span>
-                        <span>
-                          <strong>Impact</strong> {Number(item.consensus_impact || 0).toFixed(1)}
-                        </span>
-                        {item.my_reaction ? (
-                          <span>
-                            <strong>{discussionCopy.yourReaction}</strong>{' '}
-                            {item.my_reaction === 'disagree' ? 'disagree' : item.my_reaction}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="filter-row">
-                        {[
-                          ['like', 'Like'],
-                          ['agree', 'Agree'],
-                          ['disagree', 'Disagree'],
-                          ['insightful', 'Insightful'],
-                        ].map(([reaction, label]) => (
-                          <button
-                            className={item.my_reaction === reaction ? 'button button-secondary--small' : 'button-secondary button-secondary--small'}
-                            type="button"
-                            key={reaction}
-                            onClick={() => handleReactToStatementDiscussionComment(item.id, reaction)}
-                            disabled={Boolean(statementDiscussionReactionBusyById[item.id])}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
+              {currentStatementDiscussionExpanded ? (
+                <div className="discussion-drawer-body">
+                  {currentStatementDiscussionError ? (
+                    <div className="module-alert">{currentStatementDiscussionError}</div>
+                  ) : null}
+                  {currentStatementDiscussionLoading ? (
+                    <p className="muted">{discussionCopy.commentsLoading}</p>
+                  ) : currentStatementDiscussion.length === 0 ? (
+                    <p className="muted">{discussionCopy.commentsEmpty}</p>
+                  ) : (
+                    <div className="stack">
+                      {currentStatementDiscussion.map((item) => (
+                        <div className="module-card statement-comment-card" key={item.id}>
+                          {renderDiscussionText(item.text)}
+                          <div className="module-footer statement-comment-meta">
+                            <span className="muted">{item.created_at || 'Live'}</span>
+                            <span>
+                              <strong>Agree</strong> {item.agree_count || 0}
+                            </span>
+                            <span>
+                              <strong>Disagree</strong> {item.disagree_count || 0}
+                            </span>
+                            <span>
+                              <strong>Insightful</strong> {item.insightful_count || 0}
+                            </span>
+                            <span>
+                              <strong>Sentiment</strong> {sentimentDisplayLabel(item)}
+                            </span>
+                            <span>
+                              <strong>Impact</strong> {Number(item.consensus_impact || 0).toFixed(1)}
+                            </span>
+                            {item.my_reaction && item.my_reaction !== 'like' ? (
+                              <span>
+                                <strong>{discussionCopy.yourReaction}</strong>{' '}
+                                {item.my_reaction === 'disagree' ? 'disagree' : item.my_reaction}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="statement-reaction-row">
+                            {[
+                              ['agree', 'Agree'],
+                              ['disagree', 'Disagree'],
+                              ['insightful', 'Insightful'],
+                            ].map(([reaction, label]) => (
+                              <button
+                                className={item.my_reaction === reaction ? 'button button-secondary--small' : 'button-secondary button-secondary--small'}
+                                type="button"
+                                key={reaction}
+                                onClick={() => handleReactToStatementDiscussionComment(item.id, reaction)}
+                                disabled={Boolean(statementDiscussionReactionBusyById[item.id])}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  <textarea
+                    className="textarea"
+                    value={currentStatementDiscussionDraft}
+                    onChange={(event) =>
+                      setStatementDiscussionDraftById((prev) => ({
+                        ...prev,
+                        [currentCommentId]: event.target.value,
+                      }))
+                    }
+                    placeholder={discussionCopy.addCommentPlaceholder}
+                  />
+                  <div className="statement-comment-actions">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => loadStatementDiscussion(currentCommentId)}
+                      disabled={currentStatementDiscussionLoading}
+                    >
+                      {currentStatementDiscussionLoading
+                        ? discussionCopy.refreshingComments
+                        : discussionCopy.refreshComments}
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={handleSubmitStatementDiscussion}
+                      disabled={currentStatementDiscussionSaving}
+                    >
+                      {currentStatementDiscussionSaving
+                        ? discussionCopy.postingComment
+                        : discussionCopy.postComment}
+                    </button>
+                  </div>
                 </div>
-              )}
-              <textarea
-                className="textarea"
-                value={currentStatementDiscussionDraft}
-                onChange={(event) =>
-                  setStatementDiscussionDraftById((prev) => ({
-                    ...prev,
-                    [currentCommentId]: event.target.value,
-                  }))
-                }
-                placeholder={discussionCopy.addCommentPlaceholder}
-              />
-              <div className="filter-row">
-                <button
-                  className="button-secondary"
-                  type="button"
-                  onClick={() => loadStatementDiscussion(currentCommentId)}
-                  disabled={currentStatementDiscussionLoading}
-                >
-                  {currentStatementDiscussionLoading
-                    ? discussionCopy.refreshingComments
-                    : discussionCopy.refreshComments}
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleSubmitStatementDiscussion}
-                  disabled={currentStatementDiscussionSaving}
-                >
-                  {currentStatementDiscussionSaving
-                    ? discussionCopy.postingComment
-                    : discussionCopy.postComment}
-                </button>
-              </div>
+              ) : null}
             </div>
           ) : null}
         </>

@@ -91,7 +91,7 @@ class StatementDiscussionCommentCreate(BaseModel):
 
 
 class StatementDiscussionReactionCreate(BaseModel):
-    reaction: str = Field(..., pattern="^(like|agree|disagree|insightful)$")
+    reaction: str = Field(..., pattern="^(agree|disagree|insightful)$")
     author_id: Optional[str] = None
 
 

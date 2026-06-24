@@ -49,12 +49,13 @@ function AppShell_() {
   const campaignPublic = params.get('campaign_public')
   const publicCampaignId = params.get('campaign_id')
   const reportShare = params.get('report_share') || params.get('report')
+  const pathName = window.location.pathname || '/'
   const supporterSignup = params.get('supporter_signup')
   const supporterInviteCode = params.get('invite_code') || ''
 
   const isPublicEvent = eventRegistration === '1' && eventId
   const isPublicCampaign = campaignPublic === '1'
-  const isSupporterSignup = supporterSignup === '1'
+  const isSupporterSignup = supporterSignup === '1' || pathName.replace(/\/$/, '') === '/supporter-signup'
   const isQuestionnaireView = ['mobile', 'participant', 'embed', 'admin'].includes(viewParam)
   const isQuestionnaire =
     (questionnaire && questionnaire.startsWith('deliberation')) ||

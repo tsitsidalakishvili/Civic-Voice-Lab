@@ -1,0 +1,15 @@
+{
+  "people": 160,
+  "supporters": 143,
+  "members": 17,
+  "locations": [
+    "Batumi",
+    "Georgia unspecified",
+    "Gori",
+    "Kutaisi",
+    "Rustavi",
+    "Tbilisi",
+    "Telavi"
+  ],
+  "output": "data\\demo\\generated\\demo_people.csv"
+}

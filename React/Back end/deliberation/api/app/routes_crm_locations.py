@@ -1,4 +1,4 @@
-﻿"""
+"""
 Privacy-conscious CRM neighborhood map endpoints.
 
 Freedom Square uses neighborhood-level mapping to understand supporter,
@@ -12,6 +12,7 @@ import pandas as pd
 from fastapi import APIRouter, Query
 
 from .routes_crm_helpers import _query_df
+from .services.crm_snapshot_cache import get_snapshot_token, read_snapshot_people
 from .services.location_service import (
     aggregate_people_by_neighborhood,
     people_for_map,
@@ -20,6 +21,24 @@ from .services.location_service import (
 )
 
 router = APIRouter()
+
+_LOCATION_RESPONSE_CACHE: dict[tuple, list[dict]] = {}
+
+
+def _cache_key(endpoint: str, filters: dict | None = None, extra: str = "") -> tuple:
+    filters = filters or {}
+    normalized_filters = tuple(sorted((key, str(value or "")) for key, value in filters.items()))
+    return (get_snapshot_token(), endpoint, extra, normalized_filters)
+
+
+def _cached_response(key: tuple, builder):
+    if key in _LOCATION_RESPONSE_CACHE:
+        return _LOCATION_RESPONSE_CACHE[key]
+    if len(_LOCATION_RESPONSE_CACHE) > 80:
+        _LOCATION_RESPONSE_CACHE.clear()
+    value = builder()
+    _LOCATION_RESPONSE_CACHE[key] = value
+    return value
 
 
 def _clean_value(value):
@@ -44,6 +63,9 @@ def _clean_records(df: pd.DataFrame) -> list[dict]:
 
 
 def _load_people_for_locations() -> list[dict]:
+    cached_people = read_snapshot_people(allow_expired=True)
+    if cached_people is not None:
+        return cached_people
     df = _query_df(
         """
         MATCH (p:Person)
@@ -128,19 +150,20 @@ def crm_map_neighborhoods(
     ageGroup: Optional[str] = Query(None),
     engagementStatus: Optional[str] = Query(None),
 ):
-    people = _load_people_for_locations()
-    return aggregate_people_by_neighborhood(
-        people,
-        _location_filters(
-            supporterType,
-            memberStatus,
-            campaignId,
-            tag,
-            skill,
-            gender,
-            ageGroup,
-            engagementStatus,
-        ),
+    filters = _location_filters(
+        supporterType,
+        memberStatus,
+        campaignId,
+        tag,
+        skill,
+        gender,
+        ageGroup,
+        engagementStatus,
+    )
+    key = _cache_key("neighborhoods", filters)
+    return _cached_response(
+        key,
+        lambda: aggregate_people_by_neighborhood(_load_people_for_locations(), filters),
     )
 
 
@@ -155,19 +178,20 @@ def crm_map_people(
     ageGroup: Optional[str] = Query(None),
     engagementStatus: Optional[str] = Query(None),
 ):
-    people = _load_people_for_locations()
-    return people_for_map(
-        people,
-        _location_filters(
-            supporterType,
-            memberStatus,
-            campaignId,
-            tag,
-            skill,
-            gender,
-            ageGroup,
-            engagementStatus,
-        ),
+    filters = _location_filters(
+        supporterType,
+        memberStatus,
+        campaignId,
+        tag,
+        skill,
+        gender,
+        ageGroup,
+        engagementStatus,
+    )
+    key = _cache_key("people", filters)
+    return _cached_response(
+        key,
+        lambda: people_for_map(_load_people_for_locations(), filters),
     )
 
 @router.get("/map/neighborhoods/{neighborhood_id}/people")
@@ -182,28 +206,24 @@ def crm_map_neighborhood_people(
     ageGroup: Optional[str] = Query(None),
     engagementStatus: Optional[str] = Query(None),
 ):
-    people = _load_people_for_locations()
-    return people_for_neighborhood(
-        people,
-        neighborhood_id,
-        _location_filters(
-            supporterType,
-            memberStatus,
-            campaignId,
-            tag,
-            skill,
-            gender,
-            ageGroup,
-            engagementStatus,
-        ),
+    filters = _location_filters(
+        supporterType,
+        memberStatus,
+        campaignId,
+        tag,
+        skill,
+        gender,
+        ageGroup,
+        engagementStatus,
+    )
+    key = _cache_key("neighborhood_people", filters, neighborhood_id)
+    return _cached_response(
+        key,
+        lambda: people_for_neighborhood(_load_people_for_locations(), neighborhood_id, filters),
     )
 
 
 @router.get("/locations/unmatched")
 def crm_unmatched_locations():
-    return unmatched_people(_load_people_for_locations())
-
-
-
-
-
+    key = _cache_key("unmatched")
+    return _cached_response(key, lambda: unmatched_people(_load_people_for_locations()))

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconMaximize, IconMinimize } from '@tabler/icons-react'
 import { CircleMarker, MapContainer, TileLayer, Tooltip as LeafletTooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -14,6 +14,15 @@ const GEORGIA_BOUNDS = [
   [41.0, 40.0],
   [43.8, 46.8],
 ]
+
+const NETWORK_MAP_CACHE_MS = 10 * 60 * 1000
+const networkMapStateCache = {
+  neighborhoodsByQuery: new Map(),
+  peopleByQuery: new Map(),
+  selectedPeopleByKey: new Map(),
+  unmatched: null,
+  filters: null,
+}
 
 const defaultFilters = {
   supporterType: '',
@@ -103,22 +112,34 @@ function NeighborhoodPeoplePanel({ neighborhood, people, loading, error, onClose
   )
 }
 
-export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
-  const [neighborhoods, setNeighborhoods] = useState([])
-  const [unmatched, setUnmatched] = useState([])
-  const [allPeople, setAllPeople] = useState([])
+export default function CRMNeighborhoodMap({ onStatsChange, refreshToken } = {}) {
+  const initialFilters = networkMapStateCache.filters || defaultFilters
+  const initialQuery = buildQuery(initialFilters)
+  const [neighborhoods, setNeighborhoods] = useState(() => networkMapStateCache.neighborhoodsByQuery.get(initialQuery) || [])
+  const [unmatched, setUnmatched] = useState(() => networkMapStateCache.unmatched || [])
+  const [allPeople, setAllPeople] = useState(() => networkMapStateCache.peopleByQuery.get(initialQuery) || [])
   const [selected, setSelected] = useState(null)
   const [selectedPeople, setSelectedPeople] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(() => !(networkMapStateCache.neighborhoodsByQuery.has(initialQuery) && networkMapStateCache.peopleByQuery.has(initialQuery)))
   const [peopleLoading, setPeopleLoading] = useState(false)
   const [error, setError] = useState('')
   const [peopleError, setPeopleError] = useState('')
-  const [filters, setFilters] = useState(defaultFilters)
+  const [filters, setFilters] = useState(initialFilters)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [mapExpanded, setMapExpanded] = useState(false)
+  const refreshTokenRef = useRef(refreshToken)
+
+  useEffect(() => {
+    if (refreshTokenRef.current === refreshToken) return
+    refreshTokenRef.current = refreshToken
+    networkMapStateCache.neighborhoodsByQuery.clear()
+    networkMapStateCache.peopleByQuery.clear()
+    networkMapStateCache.selectedPeopleByKey.clear()
+    networkMapStateCache.unmatched = null
+  }, [refreshToken])
 
   const query = useMemo(() => buildQuery(filters), [filters])
-  const [debouncedQuery, setDebouncedQuery] = useState(query)
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(query), 250)
@@ -126,40 +147,71 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
   }, [query])
 
   useEffect(() => {
-    getJson('/crm/locations/unmatched', { cacheMs: 60000 })
-      .then((payload) => setUnmatched(Array.isArray(payload) ? payload : []))
+    if (networkMapStateCache.unmatched) {
+      setUnmatched(networkMapStateCache.unmatched)
+    }
+    getJson('/crm/locations/unmatched', { cacheMs: NETWORK_MAP_CACHE_MS })
+      .then((payload) => {
+        const rows = Array.isArray(payload) ? payload : []
+        networkMapStateCache.unmatched = rows
+        setUnmatched(rows)
+      })
       .catch(() => setUnmatched([]))
   }, [])
 
   useEffect(() => {
-    setLoading(true)
+    const cachedNeighborhoods = networkMapStateCache.neighborhoodsByQuery.get(debouncedQuery)
+    const cachedPeople = networkMapStateCache.peopleByQuery.get(debouncedQuery)
+    if (cachedNeighborhoods && cachedPeople) {
+      setNeighborhoods(cachedNeighborhoods)
+      setAllPeople(cachedPeople)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError('')
     Promise.all([
-      getJson(`/crm/map/neighborhoods${debouncedQuery}`, { cacheMs: 30000 }),
-      getJson(`/crm/map/people${debouncedQuery}`, { cacheMs: 30000 }),
+      getJson(`/crm/map/neighborhoods${debouncedQuery}`, { cacheMs: NETWORK_MAP_CACHE_MS }),
+      getJson(`/crm/map/people${debouncedQuery}`, { cacheMs: NETWORK_MAP_CACHE_MS }),
     ])
       .then(([mapPayload, peoplePayload]) => {
-        setNeighborhoods(Array.isArray(mapPayload) ? mapPayload : [])
-        setAllPeople(Array.isArray(peoplePayload) ? peoplePayload : [])
+        const mapRows = Array.isArray(mapPayload) ? mapPayload : []
+        const peopleRows = Array.isArray(peoplePayload) ? peoplePayload : []
+        networkMapStateCache.neighborhoodsByQuery.set(debouncedQuery, mapRows)
+        networkMapStateCache.peopleByQuery.set(debouncedQuery, peopleRows)
+        networkMapStateCache.filters = filters
+        setNeighborhoods(mapRows)
+        setAllPeople(peopleRows)
       })
       .catch((err) => setError(err.message || 'Unable to load neighborhood map.'))
       .finally(() => setLoading(false))
-  }, [debouncedQuery])
+  }, [debouncedQuery, filters, refreshToken])
 
   useEffect(() => {
     if (!selected) {
       setSelectedPeople([])
       return
     }
-    setPeopleLoading(true)
+    const selectedKey = `${selected.id}::${debouncedQuery}`
+    const cachedSelectedPeople = networkMapStateCache.selectedPeopleByKey.get(selectedKey)
+    if (cachedSelectedPeople) {
+      setSelectedPeople(cachedSelectedPeople)
+      setPeopleLoading(false)
+    } else {
+      setPeopleLoading(true)
+    }
     setPeopleError('')
     getJson(`/crm/map/neighborhoods/${encodeURIComponent(selected.id)}/people${debouncedQuery}`, {
-      cacheMs: 30000,
+      cacheMs: NETWORK_MAP_CACHE_MS,
     })
-      .then((payload) => setSelectedPeople(Array.isArray(payload) ? payload : []))
+      .then((payload) => {
+        const rows = Array.isArray(payload) ? payload : []
+        networkMapStateCache.selectedPeopleByKey.set(selectedKey, rows)
+        setSelectedPeople(rows)
+      })
       .catch((err) => setPeopleError(err.message || 'Unable to load neighborhood people.'))
       .finally(() => setPeopleLoading(false))
-  }, [selected, debouncedQuery])
+  }, [selected, debouncedQuery, refreshToken])
 
   const hasGeorgiaScope = neighborhoods.some((row) => row.city && row.city !== 'Tbilisi')
   const mapCenter = hasGeorgiaScope ? GEORGIA_CENTER : TBILISI_CENTER
@@ -347,4 +399,3 @@ export default function CRMNeighborhoodMap({ onStatsChange } = {}) {
     </div>
   )
 }
-

@@ -43,6 +43,9 @@ import {
 import '../../styles/network-report.css'
 import CRMNeighborhoodMap from './components/map/CRMNeighborhoodMap'
 
+const NETWORK_CLIENT_CACHE_MS = 10 * 60 * 1000
+let cachedNetworkDashboard = null
+
 ChartJS.register(
   ArcElement,
   BarElement,
@@ -117,6 +120,23 @@ const formatSegmentFilterSummary = (spec) => {
   if (nameQ) lines.push(`Name contains: ${nameQ}`)
   const addrQ = String(s.addressContains ?? s.address_contains ?? '').trim()
   if (addrQ) lines.push(`Address contains: ${addrQ}`)
+  if (s.gender && s.gender !== 'All') lines.push(`Gender: ${s.gender}`)
+  const minAge = s.minAge ?? s.min_age
+  const maxAge = s.maxAge ?? s.max_age
+  if (minAge != null && minAge !== '') lines.push(`Min age: ${minAge}`)
+  if (maxAge != null && maxAge !== '') lines.push(`Max age: ${maxAge}`)
+  const cityQ = String(s.cityContains ?? s.city_contains ?? '').trim()
+  if (cityQ) lines.push(`City contains: ${cityQ}`)
+  const districtQ = String(s.districtContains ?? s.district_contains ?? '').trim()
+  if (districtQ) lines.push(`District contains: ${districtQ}`)
+  const manifesto = s.agreesWithManifesto ?? s.agrees_with_manifesto
+  if (manifesto != null) lines.push(`Manifesto: ${manifesto ? 'Yes' : 'No'}`)
+  const membership = s.interestedInMembership ?? s.interested_in_membership
+  if (membership != null) lines.push(`Membership interest: ${membership ? 'Yes' : 'No'}`)
+  const hasEmail = s.hasEmail ?? s.has_email
+  if (hasEmail != null) lines.push(`Has email: ${hasEmail ? 'Yes' : 'No'}`)
+  const hasPhone = s.hasPhone ?? s.has_phone
+  if (hasPhone != null) lines.push(`Has phone: ${hasPhone ? 'Yes' : 'No'}`)
   const me = s.minEffortHours ?? s.min_effort_hours
   if (me != null && Number(me) > 0) lines.push(`Min effort hours: ${me}`)
   if (!lines.length) return 'All people (no filters)'
@@ -295,6 +315,15 @@ export function CRMPage({
   const [segmentGroup, setSegmentGroup] = useState('All')
   const [segmentNameContains, setSegmentNameContains] = useState('')
   const [segmentAddressContains, setSegmentAddressContains] = useState('')
+  const [segmentGender, setSegmentGender] = useState('All')
+  const [segmentMinAge, setSegmentMinAge] = useState('')
+  const [segmentMaxAge, setSegmentMaxAge] = useState('')
+  const [segmentCityContains, setSegmentCityContains] = useState('')
+  const [segmentDistrictContains, setSegmentDistrictContains] = useState('')
+  const [segmentManifesto, setSegmentManifesto] = useState('All')
+  const [segmentMembershipInterest, setSegmentMembershipInterest] = useState('All')
+  const [segmentHasEmail, setSegmentHasEmail] = useState('All')
+  const [segmentHasPhone, setSegmentHasPhone] = useState('All')
   const [segmentTimeAvailability, setSegmentTimeAvailability] = useState('All')
   const [segmentTags, setSegmentTags] = useState([])
   const [segmentSkills, setSegmentSkills] = useState([])
@@ -465,7 +494,8 @@ export function CRMPage({
       ? 'Member'
       : 'Supporter'
 
-  const buildSupporterInviteLink = (inviteCode, supporterType) => {
+  const buildSupporterInviteLink = (inviteCode, supporterType, existingInviteUrl = '') => {
+    if (existingInviteUrl) return existingInviteUrl
     if (!supporterSignupBaseLink) return ''
     const url = new URL(supporterSignupBaseLink)
     if (inviteCode) {
@@ -480,7 +510,11 @@ export function CRMPage({
 
   const buildSupporterReminderMessage = (invite) => {
     const name = invite?.recipientName || 'there'
-    const link = buildSupporterInviteLink(invite?.inviteCode || '', invite?.supporterType || 'Supporter')
+    const link = buildSupporterInviteLink(
+      invite?.inviteCode || '',
+      invite?.supporterType || 'Supporter',
+      invite?.inviteUrl || '',
+    )
     return `Hi ${name}, just a reminder to complete your supporter/member registration:\n${link}`
   }
 
@@ -731,7 +765,7 @@ export function CRMPage({
       const inviteType = normalizeSupporterTypeLabel(
         payload?.supporterType || supporterInviteForm.supporterType,
       )
-      const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType)
+      const link = buildSupporterInviteLink(payload?.inviteCode || '', inviteType, payload?.inviteUrl || '')
       setLatestSupporterInviteLink(link)
       setLatestSupporterInviteType(inviteType)
       if (selectedChannel === 'email') {
@@ -1156,6 +1190,16 @@ export function CRMPage({
       skills,
       nameContains: segmentNameContains.trim() || null,
       addressContains: segmentAddressContains.trim() || null,
+      gender: segmentGender !== 'All' ? segmentGender : null,
+      minAge: segmentMinAge ? Number(segmentMinAge) : null,
+      maxAge: segmentMaxAge ? Number(segmentMaxAge) : null,
+      cityContains: segmentCityContains.trim() || null,
+      districtContains: segmentDistrictContains.trim() || null,
+      agreesWithManifesto: segmentManifesto !== 'All' ? segmentManifesto === 'Yes' : null,
+      interestedInMembership:
+        segmentMembershipInterest !== 'All' ? segmentMembershipInterest === 'Yes' : null,
+      hasEmail: segmentHasEmail !== 'All' ? segmentHasEmail === 'Yes' : null,
+      hasPhone: segmentHasPhone !== 'All' ? segmentHasPhone === 'Yes' : null,
       minEffortHours: segmentMinEffort ? Number(segmentMinEffort) : null,
     }
   }
@@ -3110,7 +3154,86 @@ export function CRMPage({
                       <option value="Full-time">Full-time</option>
                       <option value="Ad-hoc">Ad-hoc</option>
                     </select>
+                    <select
+                      className="select"
+                      value={segmentGender}
+                      onChange={(event) => setSegmentGender(event.target.value)}
+                    >
+                      <option value="All">Any gender</option>
+                      <option value="F">Female</option>
+                      <option value="M">Male</option>
+                      <option value="O">Other</option>
+                      <option value="U">Unspecified</option>
+                    </select>
                   </div>
+                      <div className="filter-row">
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={segmentMinAge}
+                          onChange={(event) => setSegmentMinAge(event.target.value)}
+                          placeholder="Min age"
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={segmentMaxAge}
+                          onChange={(event) => setSegmentMaxAge(event.target.value)}
+                          placeholder="Max age"
+                        />
+                        <input
+                          className="input"
+                          value={segmentCityContains}
+                          onChange={(event) => setSegmentCityContains(event.target.value)}
+                          placeholder="City contains"
+                        />
+                        <input
+                          className="input"
+                          value={segmentDistrictContains}
+                          onChange={(event) => setSegmentDistrictContains(event.target.value)}
+                          placeholder="District contains"
+                        />
+                      </div>
+                      <div className="filter-row">
+                        <select
+                          className="select"
+                          value={segmentManifesto}
+                          onChange={(event) => setSegmentManifesto(event.target.value)}
+                        >
+                          <option value="All">Any manifesto status</option>
+                          <option value="Yes">Agrees with manifesto</option>
+                          <option value="No">Does not agree</option>
+                        </select>
+                        <select
+                          className="select"
+                          value={segmentMembershipInterest}
+                          onChange={(event) => setSegmentMembershipInterest(event.target.value)}
+                        >
+                          <option value="All">Any membership interest</option>
+                          <option value="Yes">Interested in membership</option>
+                          <option value="No">Not interested</option>
+                        </select>
+                        <select
+                          className="select"
+                          value={segmentHasEmail}
+                          onChange={(event) => setSegmentHasEmail(event.target.value)}
+                        >
+                          <option value="All">Any email status</option>
+                          <option value="Yes">Has email</option>
+                          <option value="No">No email</option>
+                        </select>
+                        <select
+                          className="select"
+                          value={segmentHasPhone}
+                          onChange={(event) => setSegmentHasPhone(event.target.value)}
+                        >
+                          <option value="All">Any phone status</option>
+                          <option value="Yes">Has phone</option>
+                          <option value="No">No phone</option>
+                        </select>
+                      </div>
                       <div className="filter-row">
                         <input
                           className="input"
@@ -4056,13 +4179,14 @@ function CRMDataEntryTab() {
 }
 
 function CRMDashboardTab({ mapStats } = {}) {
-  const [dashboard, setDashboard] = useState(null)
+  const [dashboard, setDashboard] = useState(() => cachedNetworkDashboard)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let mounted = true
-    getJson('/crm/dashboard')
+    getJson('/crm/dashboard', { cacheMs: NETWORK_CLIENT_CACHE_MS })
       .then((payload) => {
+        cachedNetworkDashboard = payload
         if (!mounted) return
         setDashboard(payload)
       })
@@ -4100,12 +4224,41 @@ function CRMDashboardTab({ mapStats } = {}) {
     const groupTimeAvailability = (value) => {
       const text = String(value || '').trim().toLowerCase()
       if (!text || text === 'unspecified' || text === 'unknown') return 'Flexible/unspecified'
-      if (text.includes('full')) return 'Full-time'
-      if (text.includes('weekend')) return 'Weekends'
-      if (text.includes('evening')) return 'Evenings'
+      const hasAfterHours =
+        text.includes('\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd') ||
+        text.includes('\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10dd') ||
+        text.includes('after') ||
+        text.includes('evening') ||
+        text.includes('off hours') ||
+        text.includes('non-working')
+      const hasWorkingHours =
+        text.includes('\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd') ||
+        text.includes('working hour') ||
+        text.includes('business hour') ||
+        text.includes('daytime')
+      const hasWeekend =
+        text.includes('\u10e8\u10d0\u10d1\u10d0\u10d7') ||
+        text.includes('\u10d9\u10d5\u10d8\u10e0\u10d0\u10e1') ||
+        text.includes('weekend') ||
+        text.includes('saturday') ||
+        text.includes('sunday')
+      const hasFlexible =
+        text.includes('\u10d7\u10d0\u10d5\u10d8\u10e1\u10e3\u10e4\u10d0\u10da') ||
+        text.includes('\u10e8\u10d4\u10d7\u10d0\u10dc\u10ee\u10db') ||
+        text.includes('\u10e8\u10d4\u10e1\u10d0\u10eb\u10da\u10d4\u10d1') ||
+        text.includes('\u10e1\u10d0\u10ed\u10d8\u10e0\u10dd\u10d4\u10d1') ||
+        text.includes('\u10db\u10dd\u10d5\u10d0\u10ee\u10d4\u10e0\u10ee') ||
+        text.includes('flex') ||
+        text.includes('depends') ||
+        text.includes('as needed') ||
+        text.includes('by agreement')
+      if (hasAfterHours) return 'After hours'
+      if (hasWorkingHours) return 'Working hours'
+      if (hasWeekend) return 'Weekends'
+      if (hasFlexible) return 'Flexible/unspecified'
       return 'Flexible/unspecified'
     }
-    const timeOrder = ['Full-time', 'Evenings', 'Weekends', 'Flexible/unspecified']
+    const timeOrder = ['Working hours', 'After hours', 'Weekends', 'Flexible/unspecified']
     const byTime = countValues(rows.map((person) => groupTimeAvailability(person.timeAvailability)), 'group').sort(
       (a, b) => timeOrder.indexOf(a.group) - timeOrder.indexOf(b.group),
     )
@@ -4480,6 +4633,11 @@ function CRMDashboardTab({ mapStats } = {}) {
 
 function CRMOverviewTab({ mapStats, onMapStatsChange } = {}) {
   const reportRef = useRef(null)
+  const [cacheStatus, setCacheStatus] = useState(null)
+  const [cacheError, setCacheError] = useState('')
+  const [cacheRefreshing, setCacheRefreshing] = useState(false)
+  const [cacheProgress, setCacheProgress] = useState(0)
+  const [mapRefreshToken, setMapRefreshToken] = useState(0)
   const reportTimestamp = useMemo(
     () =>
       new Intl.DateTimeFormat(undefined, {
@@ -4488,6 +4646,58 @@ function CRMOverviewTab({ mapStats, onMapStatsChange } = {}) {
       }).format(new Date()),
     [],
   )
+
+  const formatCacheDate = (value) => {
+    if (!value) return 'Not fetched yet'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return 'Not available'
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date)
+  }
+
+  const loadCacheStatus = (forceRefresh = false) => {
+    setCacheError('')
+    return getJson('/crm/cache/crm/status', { cacheMs: 0, forceRefresh })
+      .then((payload) => {
+        setCacheStatus(payload || null)
+        return payload
+      })
+      .catch((err) => {
+        setCacheError(err.message || 'Unable to load cache status.')
+        return null
+      })
+  }
+
+  useEffect(() => {
+    loadCacheStatus(true)
+  }, [])
+
+  const handleRefreshCache = async () => {
+    setCacheRefreshing(true)
+    setCacheError('')
+    setCacheProgress(12)
+    const timers = [
+      window.setTimeout(() => setCacheProgress(35), 500),
+      window.setTimeout(() => setCacheProgress(62), 1500),
+      window.setTimeout(() => setCacheProgress(84), 3000),
+    ]
+    try {
+      const payload = await requestJson('/crm/cache/crm/refresh', { method: 'POST' })
+      setCacheStatus(payload || null)
+      setCacheProgress(100)
+      setMapRefreshToken(Date.now())
+    } catch (err) {
+      setCacheError(err.message || 'Unable to fetch latest CRM data.')
+    } finally {
+      timers.forEach((timer) => window.clearTimeout(timer))
+      window.setTimeout(() => {
+        setCacheRefreshing(false)
+        setCacheProgress(0)
+      }, 700)
+    }
+  }
 
   const handlePrintReport = () => {
     window.print()
@@ -4553,7 +4763,58 @@ function CRMOverviewTab({ mapStats, onMapStatsChange } = {}) {
           <p className="muted network-report__timestamp">Snapshot generated {reportTimestamp}</p>
         </div>
       </div>
-      <CRMMapTab onStatsChange={onMapStatsChange} />
+      <div className="module-card module-card__wide">
+        <div className="card-header">
+          <div>
+            <h3>CRM data snapshot</h3>
+            <p className="muted">
+              The map and coverage views use the latest local snapshot when available, which keeps the platform faster and reduces Aura reads.
+            </p>
+          </div>
+          <div className="pill">{cacheStatus?.status || 'missing'}</div>
+        </div>
+        {cacheError ? <div className="module-alert">{cacheError}</div> : null}
+        <div className="module-grid">
+          <div className="metric-row">
+            <span>Last fetched</span>
+            <strong>{formatCacheDate(cacheStatus?.lastFetchedAt)}</strong>
+          </div>
+          <div className="metric-row">
+            <span>People in snapshot</span>
+            <strong>{cacheStatus?.peopleCount ?? 0}</strong>
+          </div>
+          <div className="metric-row">
+            <span>Changes since fetch</span>
+            <strong>{cacheStatus?.changesSinceFetch ?? '?'}</strong>
+          </div>
+          <div className="metric-row">
+            <span>Expires</span>
+            <strong>{formatCacheDate(cacheStatus?.expiresAt)}</strong>
+          </div>
+        </div>
+        <p className="muted">
+          {cacheStatus?.exists
+            ? `Snapshot is deleted after ${cacheStatus.deleteHours || 72} hours. Refresh is recommended when the change count is high.`
+            : 'No snapshot yet. Until the first fetch, the app can still query Aura directly.'}
+        </p>
+        {cacheRefreshing ? (
+          <div className="stack">
+            <p className="muted">Fetching latest data from Aura. This might take some time.</p>
+            <div className="progress-bar" aria-label="CRM snapshot refresh progress">
+              <span style={{ width: `${cacheProgress}%` }} />
+            </div>
+          </div>
+        ) : null}
+        <div className="button-row">
+          <button className="button" type="button" onClick={handleRefreshCache} disabled={cacheRefreshing}>
+            <IconRefresh size={16} /> {cacheRefreshing ? 'Fetching...' : 'Fetch latest data'}
+          </button>
+          <button className="button-secondary" type="button" onClick={() => loadCacheStatus(true)} disabled={cacheRefreshing}>
+            Check status
+          </button>
+        </div>
+      </div>
+      <CRMMapTab onStatsChange={onMapStatsChange} refreshToken={mapRefreshToken} />
       <CRMDashboardTab mapStats={mapStats} />
     </div>
   )
@@ -8233,6 +8494,6 @@ function CRMEventsTab() {
   )
 }
 
-function CRMMapTab({ onStatsChange } = {}) {
-  return <CRMNeighborhoodMap onStatsChange={onStatsChange} />
+function CRMMapTab({ onStatsChange, refreshToken } = {}) {
+  return <CRMNeighborhoodMap onStatsChange={onStatsChange} refreshToken={refreshToken} />
 }

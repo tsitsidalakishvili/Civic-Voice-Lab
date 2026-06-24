@@ -114,6 +114,7 @@ export function PublicSupporterSignup({
     profession: '',
     socialMedia: '',
     formerPartyMember: '',
+    partyDetails: '',
     timeAvailability: '',
     interests: [],
     whatsappGroup: '',
@@ -121,6 +122,12 @@ export function PublicSupporterSignup({
     additionalComments: '',
     agreesWithManifesto: false,
   })
+  const isPartyMemberYesValue = (value) => {
+    const text = String(value || '').trim().toLowerCase()
+    if (!text) return false
+    return text !== 'no' && text !== '???' && text !== '?????????'
+  }
+  const isFormerPartyMemberYes = isPartyMemberYesValue(form.formerPartyMember)
   const [status, setStatus] = useState('')
   const [statusTone, setStatusTone] = useState('info')
   const [submitting, setSubmitting] = useState(false)
@@ -273,6 +280,7 @@ export function PublicSupporterSignup({
           profession: form.profession.trim(),
           socialMedia: form.socialMedia.trim(),
           formerPartyMember: form.formerPartyMember,
+          partyDetails: isFormerPartyMemberYes ? form.partyDetails.trim() : '',
           timeAvailability: form.timeAvailability,
           interests: form.interests,
           whatsappGroup: form.whatsappGroup,
@@ -305,6 +313,7 @@ export function PublicSupporterSignup({
         profession: '',
         socialMedia: '',
         formerPartyMember: '',
+        partyDetails: '',
         timeAvailability: '',
         interests: [],
         whatsappGroup: '',
@@ -433,7 +442,14 @@ export function PublicSupporterSignup({
               <Field id="supporter-former-party-member" label="ყოფილხართ თუ არა რომელიმე პოლიტიკური პარტიის წევრი? *" required>
                 <Select
                   value={form.formerPartyMember}
-                  onChange={(value) => setForm((prev) => ({ ...prev, formerPartyMember: value || '' }))}
+                  onChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      formerPartyMember: value || '',
+                      partyDetails:
+                        isPartyMemberYesValue(value) ? prev.partyDetails : '',
+                    }))
+                  }
                   data={[
                     { value: 'დიახ', label: 'დიახ' },
                     { value: 'არა', label: 'არა' },
@@ -441,6 +457,17 @@ export function PublicSupporterSignup({
                   required
                 />
               </Field>
+              {isFormerPartyMemberYes ? (
+                <Field
+                  id="supporter-party-details"
+                  label={'\u10d7\u10e3 \u10d3\u10d8\u10d0\u10ee, \u10d2\u10d7\u10ee\u10dd\u10d5\u10d7 \u10db\u10d8\u10e3\u10d7\u10d8\u10d7\u10dd\u10d7 \u10de\u10d0\u10e0\u10e2\u10d8\u10d0 / \u10de\u10d4\u10e0\u10d8\u10dd\u10d3\u10d8'}
+                >
+                  <TextInput
+                    value={form.partyDetails}
+                    onChange={(event) => setForm((prev) => ({ ...prev, partyDetails: event.target.value }))}
+                  />
+                </Field>
+              ) : null}
               <Field id="supporter-time-availability" label="რა დროს დაუთმობთ ჩვენს საქმიანობას ? *" required>
                 <Select
                   value={form.timeAvailability}

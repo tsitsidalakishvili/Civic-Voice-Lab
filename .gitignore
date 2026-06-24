@@ -26,3 +26,7 @@ crm_map_*.json
 React/Back end/regeocode_people_*.csv
 React/Front end/dist/
 React/Front end/node_modules/
+# Local runtime cache snapshots
+runtime/cache/
+React/Back end/runtime/cache/
+React/Back end/deliberation/runtime/cache/

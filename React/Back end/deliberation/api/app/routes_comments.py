@@ -78,7 +78,7 @@ def _serialize_statement_discussion_comment(record, my_participant_hash: Optiona
     like_count = int(record.get("like_count") or 0)
     agree_count = int(record.get("agree_count") or 0)
     disagree_count = int(record.get("disagree_count") or 0)
-    consensus_impact = like_count + agree_count - disagree_count + float(sentiment_score or 0)
+    consensus_impact = agree_count - disagree_count + float(sentiment_score or 0)
     return {
         "id": comment["id"],
         "statement_id": comment.get("statementId") or "",

@@ -5,6 +5,7 @@ geocoding triggers, segments, distinct-values, and furry-friend registry.
 import io
 import json
 import os
+from collections import Counter, defaultdict
 from typing import List, Optional
 from uuid import uuid4
 
@@ -39,6 +40,7 @@ from .routes_crm_helpers import (
     segment_filter_from_stored_value,
 )
 from .routes_crm_support import _send_smtp_email
+from .services.crm_snapshot_cache import read_snapshot_people
 
 router = APIRouter()
 
@@ -306,6 +308,7 @@ class SupporterSignupCreate(BaseModel):
     profession: str = Field(min_length=1)
     social_media: str = Field(alias="socialMedia", min_length=1)
     former_party_member: str = Field(alias="formerPartyMember", min_length=1)
+    party_details: Optional[str] = Field(alias="partyDetails", default="")
     time_availability: str = Field(alias="timeAvailability", min_length=1)
     interests: List[str] = Field(default_factory=list, min_length=1)
     whatsapp_group: str = Field(alias="whatsappGroup", min_length=1)
@@ -352,6 +355,7 @@ def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
         "profession": _clean_text(payload.profession),
         "socialMedia": _clean_text(payload.social_media),
         "formerPartyMember": _clean_text(payload.former_party_member),
+        "partyDetails": _clean_text(payload.party_details),
         "timeAvailability": _clean_text(payload.time_availability),
         "interests": [_clean_text(item) for item in (payload.interests or []) if _clean_text(item)],
         "whatsappGroup": _clean_text(payload.whatsapp_group),
@@ -365,10 +369,21 @@ def _supporter_signup_base_url():
     configured = str(os.getenv("SUPPORTER_SIGNUP_BASE_URL") or "").strip()
     if configured:
         return configured
+
     frontend_url = str(os.getenv("FRONTEND_PUBLIC_URL") or "").strip().rstrip("/")
-    if frontend_url:
-        return f"{frontend_url}/supporter-signup"
-    return "http://localhost:5174/supporter-signup"
+    if not frontend_url:
+        cors_origins = str(os.getenv("CORS_ORIGINS") or "").split(",")
+        frontend_url = next(
+            (
+                origin.strip().rstrip("/")
+                for origin in cors_origins
+                if origin.strip().startswith("http") and "localhost" not in origin.lower()
+            ),
+            "",
+        )
+    if not frontend_url:
+        frontend_url = "http://localhost:5173"
+    return f"{frontend_url}/?supporter_signup=1"
 
 
 def _build_supporter_invite_url(invite_code: str, supporter_type: str = "Supporter"):
@@ -720,7 +735,15 @@ def list_supporter_invites(limit: int = Query(100, ge=1, le=1000)):
             """,
             {"limit": int(limit)},
         )
-    return [row.data() for row in rows]
+    result = []
+    for row in rows:
+        data = row.data()
+        data["inviteUrl"] = _build_supporter_invite_url(
+            data.get("inviteCode") or "",
+            data.get("supporterType") or "Supporter",
+        )
+        result.append(data)
+    return result
 
 
 @router.post("/supporter-invites")
@@ -796,6 +819,7 @@ def create_supporter_invite(payload: SupporterInviteCreate):
     if not records:
         raise HTTPException(status_code=500, detail="Unable to create invite")
     result = records[0].data()
+    result["inviteUrl"] = _build_supporter_invite_url(invite_code, supporter_type)
     result["emailSent"] = invite_email_sent
     result["emailStatus"] = invite_email_status
     if invite_email_error:
@@ -891,6 +915,7 @@ def create_survey_invite(payload: SurveyInviteCreate):
     if not records:
         raise HTTPException(status_code=500, detail="Unable to create survey invite")
     result = records[0].data()
+    result["inviteUrl"] = _build_supporter_invite_url(invite_code, supporter_type)
     result["emailSent"] = invite_email_sent
     result["emailStatus"] = invite_email_status
     if invite_email_error:
@@ -1040,6 +1065,7 @@ def supporter_signup(payload: SupporterSignupCreate):
                 signup.profession = $profession,
                 signup.socialMedia = $socialMedia,
                 signup.formerPartyMember = $formerPartyMember,
+                signup.partyDetails = $partyDetails,
                 signup.timeAvailability = $timeAvailability,
                 signup.interests = $interests,
                 signup.whatsappGroup = $whatsappGroup,
@@ -1095,6 +1121,7 @@ def list_pending_supporter_signups(limit: int = Query(100, ge=1, le=1000)):
               coalesce(signup.timeAvailability, 'Unspecified') AS timeAvailability,
               coalesce(signup.address, '') AS address,
               coalesce(signup.about, '') AS about,
+              coalesce(signup.partyDetails, '') AS partyDetails,
               coalesce(signup.gender, '') AS gender,
               signup.age AS age,
               coalesce(signup.educationLevels, []) AS educationLevels,
@@ -1142,6 +1169,7 @@ def approve_pending_supporter_signup(email: str):
               signup.referralCount AS referralCount,
               signup.tasksCompleted AS tasksCompleted,
               coalesce(signup.about, '') AS about,
+              coalesce(signup.partyDetails, '') AS partyDetails,
               coalesce(signup.agreesWithManifesto, false) AS agreesWithManifesto,
               coalesce(signup.timeAvailability, 'Unspecified') AS timeAvailability,
               coalesce(signup.interestedInMembership, false) AS interestedInMembership,
@@ -1176,6 +1204,7 @@ def approve_pending_supporter_signup(email: str):
                 address=pending.get("address") or "",
                 timeAvailability=pending.get("timeAvailability") or "Unspecified",
                 about=pending.get("about") or "",
+                partyDetails=pending.get("partyDetails") or "",
                 agreesWithManifesto=bool(pending.get("agreesWithManifesto")),
                 interestedInMembership=bool(pending.get("interestedInMembership")),
                 facebookGroupMember=bool(pending.get("facebookGroupMember")),
@@ -1285,6 +1314,7 @@ def approve_pending_supporter_signup_by_id(signup_id: str):
                 address=pending.get("address") or "",
                 timeAvailability=pending.get("timeAvailability") or "Unspecified",
                 about=pending.get("about") or "",
+                partyDetails=pending.get("partyDetails") or "",
                 agreesWithManifesto=bool(pending.get("agreesWithManifesto")),
                 interestedInMembership=bool(pending.get("interestedInMembership")),
                 facebookGroupMember=bool(pending.get("facebookGroupMember")),
@@ -1353,6 +1383,7 @@ def decline_pending_supporter_signup(email: str):
               coalesce(signup.profession, '') AS profession,
               coalesce(signup.socialMedia, '') AS socialMedia,
               coalesce(signup.formerPartyMember, '') AS formerPartyMember,
+              coalesce(signup.partyDetails, '') AS partyDetails,
               coalesce(signup.timeAvailability, '') AS timeAvailability,
               coalesce(signup.interests, []) AS interests,
               coalesce(signup.whatsappGroup, '') AS whatsappGroup,
@@ -1405,6 +1436,7 @@ def decline_pending_supporter_signup_by_id(signup_id: str):
               coalesce(signup.profession, '') AS profession,
               coalesce(signup.socialMedia, '') AS socialMedia,
               coalesce(signup.formerPartyMember, '') AS formerPartyMember,
+              coalesce(signup.partyDetails, '') AS partyDetails,
               coalesce(signup.timeAvailability, '') AS timeAvailability,
               coalesce(signup.interests, []) AS interests,
               coalesce(signup.whatsappGroup, '') AS whatsappGroup,
@@ -2020,8 +2052,176 @@ async def import_people_file(
     return {"created": len(rows)}
 
 
+def _counter_records(values, key_name: str, limit: int | None = None) -> list[dict]:
+    counter = Counter()
+    for value in values:
+        label = str(value or "").strip() or "Unspecified"
+        counter[label] += 1
+    records = [{key_name: label, "count": count} for label, count in counter.most_common()]
+    return records[:limit] if limit else records
+
+
+def _dashboard_age_group(value) -> str:
+    try:
+        age = int(float(value))
+    except (TypeError, ValueError):
+        return "Unknown"
+    if age < 18:
+        return "Under 18"
+    if age <= 30:
+        return "18-30"
+    if age <= 45:
+        return "31-45"
+    if age <= 60:
+        return "46-60"
+    return "60+"
+
+
+def _dashboard_gender(value) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"1", "1.0", "f", "female"} or "female" in text:
+        return "F"
+    if text in {"3", "3.0", "o", "other"} or "other" in text:
+        return "O"
+    return "M"
+
+
+def _dashboard_bool_label(value, true_label="Yes", false_label="No") -> str:
+    if value is True:
+        return true_label
+    if value is False:
+        return false_label
+    text = str(value or "").strip().lower()
+    if text in {"true", "yes", "1", "agree", "agreed"}:
+        return true_label
+    if text in {"false", "no", "0", "disagree"}:
+        return false_label
+    return "Unspecified"
+
+
+def _dashboard_time_group(value) -> str:
+    text = str(value or "").strip().lower()
+    if not text or text in {"unspecified", "unknown"}:
+        return "Flexible/unspecified"
+    has_after_hours = (
+        "\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd" in text
+        or "\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10dd" in text
+        or "after" in text
+        or "evening" in text
+        or "off hours" in text
+        or "non-working" in text
+    )
+    has_working_hours = (
+        "\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd" in text
+        or "working hour" in text
+        or "business hour" in text
+        or "daytime" in text
+    )
+    has_weekend = (
+        "\u10e8\u10d0\u10d1\u10d0\u10d7" in text
+        or "\u10d9\u10d5\u10d8\u10e0\u10d0\u10e1" in text
+        or "weekend" in text
+        or "saturday" in text
+        or "sunday" in text
+    )
+    if has_after_hours:
+        return "After hours"
+    if has_working_hours:
+        return "Working hours"
+    if has_weekend:
+        return "Weekends"
+    return "Flexible/unspecified"
+
+
+def _dashboard_city(row: dict) -> str:
+    city = str(row.get("city") or "").strip()
+    if city:
+        return city
+    address = str(row.get("address") or "").lower()
+    city_rules = [
+        ("Tbilisi", ["???????", "tbilisi"]),
+        ("Batumi", ["??????", "batumi", "?????"]),
+        ("Kutaisi", ["???????", "kutaisi", "???????"]),
+        ("Telavi", ["??????", "telavi", "??????"]),
+        ("Gori", ["????", "gori"]),
+        ("Rustavi", ["???????", "rustavi"]),
+        ("Pankisi", ["???????", "pankisi"]),
+    ]
+    for label, terms in city_rules:
+        if any(term in address for term in terms):
+            return label
+    return "Unknown"
+
+
+def _fast_dashboard_from_snapshot(people: list[dict]) -> dict:
+    total_people = len(people)
+    group_counts_counter = Counter(str(row.get("group") or "Supporter").strip() or "Supporter" for row in people)
+    skills = []
+    regional_skill_counts = Counter()
+    for row in people:
+        city = _dashboard_city(row)
+        row_skills = row.get("skills") or []
+        if isinstance(row_skills, str):
+            row_skills = [item.strip() for item in row_skills.split(",") if item.strip()]
+        for skill in row_skills:
+            label = str(skill or "").strip()
+            if not label:
+                continue
+            skills.append(label)
+            regional_skill_counts[(city, label)] += 1
+
+    time_order = ["Working hours", "After hours", "Weekends", "Flexible/unspecified"]
+    time_counts = Counter(_dashboard_time_group(row.get("timeAvailability")) for row in people)
+    time_grouped = [{"group": label, "count": time_counts.get(label, 0)} for label in time_order]
+
+    age_order = ["Under 18", "18-30", "31-45", "46-60", "60+", "Unknown"]
+    age_counts = Counter(_dashboard_age_group(row.get("age")) for row in people)
+    age_groups = [{"group": label, "count": age_counts[label]} for label in age_order if age_counts[label]]
+
+    regional_skills = [
+        {"region": region, "skill": skill, "count": count}
+        for (region, skill), count in regional_skill_counts.most_common()
+    ]
+
+    return {
+        "metrics": {
+            "total_people": total_people,
+            "supporters": group_counts_counter.get("Supporter", 0),
+            "members": group_counts_counter.get("Member", 0),
+            "avg_effort": 0.0,
+        },
+        "charts": {
+            "groupCounts": [{"group": key, "count": count} for key, count in group_counts_counter.most_common()],
+            "genderCounts": _counter_records((_dashboard_gender(row.get("gender")) for row in people), "gender"),
+            "ageGroups": age_groups,
+            "professionCounts": _counter_records((row.get("profession") for row in people if row.get("profession")), "profession", 10),
+            "regionCounts": _counter_records((_dashboard_city(row) for row in people), "region"),
+            "regionGrouped": _counter_records((_dashboard_city(row) for row in people), "group"),
+            "regionDetail": _counter_records((_dashboard_city(row) for row in people), "region"),
+            "partyMembership": _counter_records(("Former Party Member" if row.get("wasPartyMember") else "No Party History" for row in people), "status"),
+            "involvementAreas": _counter_records(skills, "area", 10),
+            "membershipGrowth": [],
+            "engagementReady": [],
+            "manifesto": _counter_records((_dashboard_bool_label(row.get("agreesWithManifesto")) for row in people), "agrees"),
+            "membership": _counter_records((_dashboard_bool_label(row.get("interestedInMembership")) for row in people), "interested"),
+            "facebook": _counter_records((_dashboard_bool_label(row.get("facebookGroupMember")) for row in people), "facebook"),
+            "timeAvailability": _counter_records((row.get("timeAvailability") or "Unspecified" for row in people), "availability"),
+            "timeAvailabilityGrouped": time_grouped,
+            "involvement": _counter_records(skills, "area", 10),
+            "skills": _counter_records(skills, "skill", 10),
+            "regionalSkills": regional_skills,
+            "combinedExpertise": _counter_records(skills, "expertise", 15),
+            "taskFeed": [],
+        },
+    }
+
+
 @router.get("/dashboard", response_model=DashboardOut)
 def crm_dashboard():
+    cached_people = read_snapshot_people(allow_expired=True)
+    if cached_people is not None:
+        return _fast_dashboard_from_snapshot(cached_people)
+
     df = _load_supporter_summary_df()
     # Get accurate total from Neo4j if DataFrame is empty
     if df.empty:
@@ -2392,24 +2592,49 @@ def crm_dashboard():
         """
     ).to_dict(orient="records")
 
-    # Time availability grouped into Weekends vs Weekdays
+    # Time availability grouped into four CRM buckets
     time_availability_grouped = _query_df(
         """
         MATCH (p:Person)
         WHERE p.timeAvailability IS NOT NULL AND p.timeAvailability <> ''
         WITH p,
           CASE
-            WHEN toLower(p.timeAvailability) CONTAINS 'შაბათ' OR toLower(p.timeAvailability) CONTAINS 'კვირას' THEN 'Weekends'
-            WHEN toLower(p.timeAvailability) CONTAINS 'სამუშაო' OR toLower(p.timeAvailability) CONTAINS 'ორშაბათი' OR toLower(p.timeAvailability) CONTAINS 'სამშაბათს' OR toLower(p.timeAvailability) CONTAINS 'ხუთშაბათს' THEN 'Weekdays'
-            WHEN toLower(p.timeAvailability) CONTAINS 'კვირის' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ' OR toLower(p.timeAvailability) CONTAINS 'თავისუფალი' OR toLower(p.timeAvailability) CONTAINS 'ნებისმიერ დროს' THEN 'Flexible'
-            ELSE 'Other/Unspecified'
+            WHEN toLower(p.timeAvailability) CONTAINS '\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd'
+              OR toLower(p.timeAvailability) CONTAINS '\u10d0\u10e0\u10d0\u10e1\u10d0\u10db\u10e3\u10e8\u10dd'
+              OR toLower(p.timeAvailability) CONTAINS 'after'
+              OR toLower(p.timeAvailability) CONTAINS 'evening'
+              OR toLower(p.timeAvailability) CONTAINS 'off hours'
+              OR toLower(p.timeAvailability) CONTAINS 'non-working'
+              THEN 'After hours'
+            WHEN toLower(p.timeAvailability) CONTAINS '\u10e1\u10d0\u10db\u10e3\u10e8\u10d0\u10dd'
+              OR toLower(p.timeAvailability) CONTAINS 'working hour'
+              OR toLower(p.timeAvailability) CONTAINS 'business hour'
+              OR toLower(p.timeAvailability) CONTAINS 'daytime'
+              THEN 'Working hours'
+            WHEN toLower(p.timeAvailability) CONTAINS '\u10e8\u10d0\u10d1\u10d0\u10d7'
+              OR toLower(p.timeAvailability) CONTAINS '\u10d9\u10d5\u10d8\u10e0\u10d0\u10e1'
+              OR toLower(p.timeAvailability) CONTAINS 'weekend'
+              OR toLower(p.timeAvailability) CONTAINS 'saturday'
+              OR toLower(p.timeAvailability) CONTAINS 'sunday'
+              THEN 'Weekends'
+            WHEN toLower(p.timeAvailability) CONTAINS '\u10d7\u10d0\u10d5\u10d8\u10e1\u10e3\u10e4\u10d0\u10da'
+              OR toLower(p.timeAvailability) CONTAINS '\u10e8\u10d4\u10d7\u10d0\u10dc\u10ee\u10db'
+              OR toLower(p.timeAvailability) CONTAINS '\u10e8\u10d4\u10e1\u10d0\u10eb\u10da\u10d4\u10d1'
+              OR toLower(p.timeAvailability) CONTAINS '\u10e1\u10d0\u10ed\u10d8\u10e0\u10dd\u10d4\u10d1'
+              OR toLower(p.timeAvailability) CONTAINS '\u10db\u10dd\u10d5\u10d0\u10ee\u10d4\u10e0\u10ee'
+              OR toLower(p.timeAvailability) CONTAINS 'flex'
+              OR toLower(p.timeAvailability) CONTAINS 'depends'
+              OR toLower(p.timeAvailability) CONTAINS 'as needed'
+              OR toLower(p.timeAvailability) CONTAINS 'by agreement'
+              THEN 'Flexible/unspecified'
+            ELSE 'Flexible/unspecified'
           END AS timeGroup
         RETURN timeGroup AS group, count(*) AS count
         ORDER BY
           CASE timeGroup
-            WHEN 'Weekends' THEN 1
-            WHEN 'Weekdays' THEN 2
-            WHEN 'Flexible' THEN 3
+            WHEN 'Working hours' THEN 1
+            WHEN 'After hours' THEN 2
+            WHEN 'Weekends' THEN 3
             ELSE 4
           END
         """
