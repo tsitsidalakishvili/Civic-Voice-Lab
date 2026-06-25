@@ -2989,7 +2989,7 @@ export function CRMPage({
       )}
       {(activeTab === 'segments' || activeTab === 'outreach') && (
         <div className="stack crm-outreach-flow">
-          <div className="module-card module-card__wide module-card--outreach-flow-segment">
+          <div className="module-card module-card__wide module-card--outreach-flow-segment" data-tour="network-segment-builder">
             <div className="card-header">
               <div>
                 <h3>{activeTab === 'segments' ? 'Segments' : 'Audience'}</h3>
@@ -3120,7 +3120,7 @@ export function CRMPage({
             </div>
             ) : null}
             {activeTab === 'segments' && showNewSegmentForm ? (
-                <form className="stack" onSubmit={handleCreateSegment}>
+                <form className="stack" onSubmit={handleCreateSegment} data-tour="network-segment-form">
                   <input
                     className="input"
                     value={segmentName}
@@ -3440,7 +3440,7 @@ export function CRMPage({
           ) : null}
 
           {activeTab === 'outreach' ? (
-          <div id="campaign-share" className="module-card module-card__wide module-card--outreach-flow-distribute">
+          <div id="campaign-share" className="module-card module-card__wide module-card--outreach-flow-distribute" data-tour="campaign-send-link">
             <div className="card-header">
               <div>
                 <h3>Send registration link</h3>

@@ -135,7 +135,6 @@ export const buildModuleSections = (t) => ({
       { label: t('nav.deliberation.setup'), type: 'tab', value: 'setup', hint: t('nav.deliberation.setupHint') },
       { label: t('nav.deliberation.share'), type: 'tab', value: 'distribute', hint: t('nav.deliberation.shareHint') },
       { label: t('nav.deliberation.insights'), type: 'tab', value: 'insights', hint: t('nav.deliberation.insightsHint') },
-      { label: t('nav.deliberation.moderation'), type: 'tab', value: 'moderation', hint: t('nav.deliberation.moderationHint') },
     ],
   },
   'due-diligence': {

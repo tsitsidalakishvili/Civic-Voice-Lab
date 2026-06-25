@@ -2467,7 +2467,7 @@ ${link}`
 
       {activeTab === 'setup' && (
         <div className="stack">
-          <div className="module-card module-card__wide setup-mode-card share-step-card">
+          <div className="module-card module-card__wide setup-mode-card share-step-card" data-tour="survey-setup-mode">
             <div className="card-header">
               <div>
                 <h3>Set Up</h3>
@@ -2497,7 +2497,7 @@ ${link}`
           </div>
 
           {setupMode === 'new' ? (
-          <div className="module-card module-card__wide">
+          <div className="module-card module-card__wide" data-tour="survey-create-conversation">
             <div className="card-header"><div><h3>Create survey</h3><p className="muted">Topic, statements, and basic rules.</p></div><span className="pill">New</span></div>
             <div className="form-grid">
               <div className="form-grid__full">
@@ -2510,7 +2510,7 @@ ${link}`
                   }
                 />
               </div>
-              <div className="form-grid__full">
+              <div className="form-grid__full" data-tour="survey-statements">
                 <label className="label">Statements for voting cards</label>
                 <div className="stack" style={{ gap: 10 }}>
                   {(createForm.initialStatements || defaultCreateStatementRows()).map((line, index) => (
@@ -3151,7 +3151,7 @@ ${link}`
             )}
           </div>
 
-          <div className="module-card module-card__wide module-card--outreach-flow-segment share-step-card">
+          <div className="module-card module-card__wide module-card--outreach-flow-segment share-step-card" data-tour="survey-segment-builder">
             <div className="card-header">
               <div>
                 <h3>Audience</h3>
@@ -3210,7 +3210,7 @@ ${link}`
               </p>
             ) : null}
             {showShareSegmentForm ? (
-              <details className="dashboard-detail share-advanced" open>
+              <details className="dashboard-detail share-advanced" open data-tour="survey-segment-form">
                 <summary>Segment builder</summary>
                 <form className="stack" onSubmit={handleShareCreateSegment}>
                   <div className="form-grid">
@@ -3309,7 +3309,7 @@ ${link}`
             ) : null}
           </div>
 
-          <div className="module-card module-card__wide module-card--outreach-flow-distribute share-step-card">
+          <div className="module-card module-card__wide module-card--outreach-flow-distribute share-step-card" data-tour="survey-send-link">
             <div className="intake-invite-compact">
               <div className="intake-invite-compact__form">
                 <div className="intake-section-heading">
@@ -3387,6 +3387,7 @@ ${link}`
                       </div>
                     ) : null}
                     <form
+                      data-tour="survey-invite-form"
                       id="delib-survey-invite-form"
                       className="form-grid intake-invite-form-compact"
                       onSubmit={handleSubmitSurveyInvite}
@@ -3589,7 +3590,7 @@ ${link}`
               onOpenOverview={() => applyActiveTab('overview')}
             />
           ) : (
-            <div className="module-card module-card__wide insights-focus-card share-step-card">
+            <div className="module-card module-card__wide insights-focus-card share-step-card" data-tour="survey-results-analysis">
               <div className="card-header">
                 <div>
                   <h3>Insights</h3>

@@ -6,9 +6,16 @@ import {
   forceManyBody,
   forceSimulation,
 } from 'd3-force'
-import { IconChartDots, IconDatabase, IconGitBranch, IconLink } from '@tabler/icons-react'
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconChartDots,
+  IconDatabase,
+  IconGitBranch,
+  IconLink,
+} from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
-import { CivicStatGrid, InfoHint, StatusMessage } from '../../ui'
+import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
 const VIEWS = ['explorer', 'connectors']
 const DEFAULT_LIMIT = 80
@@ -296,6 +303,7 @@ export function DataHubPage({
   const [selectedEdge, setSelectedEdge] = useState(null)
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [selectedModuleId, setSelectedModuleId] = useState('crm')
+  const [graphFullscreen, setGraphFullscreen] = useState(false)
 
   const applyView = (viewId) => {
     if (!viewId) return
@@ -311,10 +319,6 @@ export function DataHubPage({
     }
   }, [activeTabOverride, activeView])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(DATAHUB_CONFIG_STORAGE_KEY, JSON.stringify(connectorDrafts))
-  }, [connectorDrafts])
 
   const loadGraph = useCallback(async () => {
     setLoading(true)
@@ -427,6 +431,15 @@ export function DataHubPage({
       setSelectedEdge(null)
     }
   }, [nodes, edges, selectedNode, selectedEdge])
+
+  useEffect(() => {
+    if (!graphFullscreen) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setGraphFullscreen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [graphFullscreen])
 
   const labelOptions = useMemo(() => {
     const set = new Set(labelCounts.map((item) => item.label))
@@ -701,7 +714,32 @@ export function DataHubPage({
                       </Field>
                     </div>
                   </FormSection>
-                  <div className="graph-frame">
+                  <div className={graphFullscreen ? 'graph-frame graph-frame--fullscreen' : 'graph-frame'}>
+                    <div className="graph-frame__toolbar">
+                      <div>
+                        <h4>Interactive graph</h4>
+                        <p className="muted">Drag nodes, select relationships, and inspect graph records.</p>
+                      </div>
+                      <div className="graph-frame__actions">
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={loadGraph}
+                          disabled={loading}
+                        >
+                          {loading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => setGraphFullscreen((prev) => !prev)}
+                          aria-pressed={graphFullscreen}
+                        >
+                          {graphFullscreen ? <IconArrowsMinimize size={17} /> : <IconArrowsMaximize size={17} />}
+                          {graphFullscreen ? 'Exit full screen' : 'Full screen'}
+                        </button>
+                      </div>
+                    </div>
                     <div className="graph-layout">
                       <DataHubGraph
                         nodes={nodes}

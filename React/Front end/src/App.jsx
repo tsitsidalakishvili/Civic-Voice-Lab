@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Accordion,
   ActionIcon,
@@ -27,6 +27,7 @@ import {
 import { AppProvider, useApp } from './context/AppContext'
 import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from './config/modules'
 import { FeedbackDrawer } from './components/FeedbackDrawer'
+import { PlatformWalkthrough } from './components/PlatformWalkthrough'
 import { PublicEventRegistration } from './views/PublicEventRegistration'
 import { PublicSupporterSignup } from './views/PublicSupporterSignup'
 import { DeliberationQuestionnaire } from './views/DeliberationQuestionnaire'
@@ -147,10 +148,24 @@ function AppShell_() {
   }, [activeModuleId, moduleTabs])
 
 
-  const handleModuleTabChange = (moduleId, tabValue) => {
+  const handleModuleTabChange = useCallback((moduleId, tabValue) => {
     if (!moduleId || !tabValue) return
     setModuleTabs((prev) => ({ ...prev, [moduleId]: tabValue }))
-  }
+  }, [])
+
+  const handleWalkthroughModuleChange = useCallback((moduleId) => {
+    if (!moduleId) return
+    setActiveModuleId(moduleId)
+  }, [])
+
+  const handleWalkthroughSectionChange = useCallback(
+    (moduleId, sectionValue) => {
+      const targetModuleId = moduleId || activeModuleId
+      if (targetModuleId && targetModuleId !== activeModuleId) setActiveModuleId(targetModuleId)
+      handleModuleTabChange(targetModuleId, sectionValue)
+    },
+    [activeModuleId, handleModuleTabChange],
+  )
 
   const scrollToAnchor = (anchorId) => {
     if (!anchorId) return
@@ -239,13 +254,13 @@ function AppShell_() {
       <Spotlight
         actions={spotlightActions}
         searchProps={{ placeholder: t('app.searchPlaceholder') }}
-        nothingFoundMessage={t('app.nothingFound')}
+        nothingFound={t('app.nothingFound')}
         highlightQuery
       />
       <AppShell.Header className="app-shell__topbar">
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap" className="topbar__current">
-            <Group gap="sm" className="brand" wrap="nowrap">
+            <Group gap="sm" className="brand" wrap="nowrap" data-tour="brand">
               <ThemeIcon size="lg" variant="light" color="civic">
                 <IconLayoutGrid size={18} />
               </ThemeIcon>
@@ -254,7 +269,7 @@ function AppShell_() {
                 <Text size="xs" c="dimmed" className="brand__subtitle">Civic Engagement Suite</Text>
               </div>
             </Group>
-            <div className="topbar__center">
+            <div className="topbar__center" data-tour="module-context">
               <Badge variant="light" color="civic">
                 {activeModule ? activeModule.label : t('app.moduleHub')}
               </Badge>
@@ -267,7 +282,7 @@ function AppShell_() {
           </Group>
           <Group gap="sm" wrap="nowrap" className="topbar__actions topbar__actions--right">
             <Tooltip label={t('app.searchModules')}>
-              <ActionIcon variant="light" size="lg" onClick={() => spotlight.open()}>
+              <ActionIcon variant="light" size="lg" onClick={() => spotlight.open()} data-tour="global-search">
                 <IconSearch size={18} />
               </ActionIcon>
             </Tooltip>
@@ -276,10 +291,17 @@ function AppShell_() {
                 <IconBulb size={18} />
               </ActionIcon>
             </Tooltip>
+            <PlatformWalkthrough
+              activeModule={activeModule}
+              activeModuleConfig={activeModuleConfig}
+              onOpenModuleHub={() => setActiveModuleId(null)}
+              onModuleChange={handleWalkthroughModuleChange}
+              onModuleSectionChange={handleWalkthroughSectionChange}
+            />
             <Menu position="bottom-end" withinPortal>
               <Menu.Target>
                 <Tooltip label={t('language.label')}>
-                  <ActionIcon variant="light" size="md">
+                  <ActionIcon variant="light" size="md" data-tour="language-menu">
                     <IconLanguage size={16} />
                   </ActionIcon>
                 </Tooltip>
@@ -298,7 +320,7 @@ function AppShell_() {
       <AppShell.Main>
         {!activeModule ? (
           <Stack gap="lg">
-            <div className="module-hub">
+            <div className="module-hub" data-tour="module-hub">
               <div className="module-hub__header">
                 <h1>{t('app.pickModule')}</h1>
                 <p className="muted">{t('app.pickModuleDesc')}</p>
@@ -311,6 +333,7 @@ function AppShell_() {
                     <Card
                       key={module.id}
                       className={`module-tile ${!isModuleReady ? 'module-tile--inactive' : ''}`}
+                      data-tour={`module-tile-${module.id}`}
                       onClick={isModuleReady ? () => setActiveModuleId(module.id) : undefined}
                       role="button"
                       aria-disabled={!isModuleReady}
@@ -357,7 +380,7 @@ function AppShell_() {
                 })}
               </div>
             </div>
-            <Accordion variant="separated" radius="md" className="about-accordion">
+            <Accordion variant="separated" radius="md" className="about-accordion" data-tour="about-platform">
               <Accordion.Item value="about">
                 <Accordion.Control>
                   <Stack gap={2} align="center">
@@ -367,7 +390,7 @@ function AppShell_() {
                 </Accordion.Control>
                 <Accordion.Panel>
                   <div className="platform-description">
-                    <h2>Freedom Square – Civic Engagement Suite</h2>
+                    <h2>Freedom Square â€“ Civic Engagement Suite</h2>
 
                     <h3>Executive Summary</h3>
                     <p>Freedom Square is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
@@ -430,7 +453,7 @@ function AppShell_() {
 
                     <div className="platform-description__principle">
                       <p><strong>Core Principle</strong></p>
-                      <p><strong>People should not only receive information—they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
+                      <p><strong>People should not only receive informationâ€”they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
                     </div>
                   </div>
                 </Accordion.Panel>
@@ -439,7 +462,7 @@ function AppShell_() {
           </Stack>
         ) : (
           <div className="module-view">
-            <aside className="module-view__sidebar">
+            <aside className="module-view__sidebar" data-tour="module-sidebar">
               <div className="module-view__card">
                 <span className="module-view__eyebrow">{t('app.activeModule')}</span>
                 <h3>{activeModuleConfig?.title || activeModule?.label}</h3>
@@ -456,7 +479,7 @@ function AppShell_() {
               {activeModuleConfig?.sections?.length ? (
                 <div className="module-view__card">
                   <span className="module-nav__title">{t('app.sections')}</span>
-                  <div className="module-view__sections">
+                  <div className="module-view__sections" data-tour="module-sections">
                     {activeModuleConfig.sections.map((section) => {
                       const isActive =
                         section.type === 'tab' && moduleTabs[activeModuleId] === section.value
@@ -465,6 +488,7 @@ function AppShell_() {
                           key={`${activeModuleId}-${section.value}`}
                           type="button"
                           className={`module-view__section ${isActive ? 'module-view__section--active' : ''}`}
+                          data-tour={`module-section-${section.value}`}
                           onClick={() => handleModuleNavigation(activeModuleId, section)}
                           aria-current={isActive ? 'page' : undefined}
                         >
@@ -477,9 +501,10 @@ function AppShell_() {
                 </div>
               ) : null}
             </aside>
-            <div className="module-panel">
+            <div className="module-panel" data-tour="module-content">
               <PageHeader
                 className="page-header--hero"
+                data-tour="module-header"
                 title={pageTitle}
                 description={pageDescription}
                 eyebrow={pageEyebrow}
@@ -508,6 +533,7 @@ function AppShell_() {
           color="civic"
           onClick={() => setFeedbackOpen((prev) => !prev)}
           aria-label={t('feedback.button')}
+          data-tour="feedback"
         >
           <IconMessage2 size={20} />
         </ActionIcon>
@@ -529,3 +555,4 @@ export default function App() {
     </AppProvider>
   )
 }
+

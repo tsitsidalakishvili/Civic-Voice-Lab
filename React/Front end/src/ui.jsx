@@ -13,9 +13,9 @@ import {
 } from '@mantine/core'
 import { IconInfoCircle } from '@tabler/icons-react'
 
-export function PageHeader({ title, description, eyebrow, actions, meta, children, className }) {
+export function PageHeader({ title, description, eyebrow, actions, meta, children, className, ...rest }) {
   return (
-    <header className={`page-header ${className || ''}`.trim()}>
+    <header className={`page-header ${className || ''}`.trim()} {...rest}>
       <div className="page-header__text">
         {eyebrow ? <span className="page-header__eyebrow">{eyebrow}</span> : null}
         <h1 className="page-header__title">{title}</h1>
