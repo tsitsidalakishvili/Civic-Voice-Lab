@@ -637,6 +637,7 @@ export function DueDiligencePage({
         },
       })
       setAnalysisResult(result)
+      let mediaScanWarning = false
       try {
         const mediaPayload = await requestJson('/due-diligence/media-monitor', {
           method: 'POST',
@@ -653,7 +654,13 @@ export function DueDiligencePage({
         setMediaResult(mediaPayload)
         setMediaSubject(subjectName.trim())
       } catch (mediaErr) {
-        setMediaError(mediaErr.message || 'Georgian media scan failed.')
+        mediaScanWarning = true
+        const message = String(mediaErr?.message || '')
+        if (message.toLowerCase().includes('not found')) {
+          setMediaError('Georgian media scan is not available on this deployment yet. Main DD sources completed; redeploy the backend/main branch to enable media storage.')
+        } else {
+          setMediaError(message || 'Georgian media scan failed.')
+        }
       }
       const warningsText = (result?.warnings || []).join(' ').toLowerCase()
       const hasWikipediaWarning = warningsText.includes('wikipedia request failed')
@@ -678,7 +685,7 @@ export function DueDiligencePage({
             return { ...step, status: hasOpenSanctionsWarning ? 'warning' : 'success' }
           }
           if (step.id === 'media') {
-            return { ...step, status: 'success' }
+            return { ...step, status: mediaScanWarning ? 'warning' : 'success' }
           }
           if (step.id === 'declarations') {
             if (!useDeclarations) return { ...step, status: 'skipped' }
