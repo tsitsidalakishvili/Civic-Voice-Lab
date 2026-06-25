@@ -6,12 +6,11 @@ import {
   IconSettings,
   IconShieldCheck,
   IconSpeakerphone,
-  IconTarget,
   IconUsers,
 } from '@tabler/icons-react'
 import {
   AdminPage,
-  AudienceDiscoveryPage,
+  CampaignsAudienceWorkspace,
   CRMPage,
   DataHubPage,
   DeliberationPage,
@@ -26,7 +25,6 @@ export const MODULE_ICON_MAP = {
   campaigns: IconSpeakerphone,
   deliberation: IconMessage2,
   'due-diligence': IconShieldCheck,
-  'audience-discovery': IconTarget,
   'data-hub': IconChartDots,
   admin: IconSettings,
 }
@@ -42,15 +40,11 @@ export const HUB_MODULE_IDS = [
   'campaigns',
   'deliberation',
   'due-diligence',
-  'audience-discovery',
   'data-hub',
 ]
 
 // All modules shown; Network and Survey/Consensus are active (others show "In Progress")
 export const buildModules = (t) => {
-  const CampaignsModule = (props) => (
-    <CRMPage {...props} initialTab="outreach" hideTabs />
-  )
   return [
     {
       id: 'how-it-works',
@@ -75,22 +69,15 @@ export const buildModules = (t) => {
     },
     {
       id: 'campaigns',
-      label: t('module.campaigns'),
-      description: t('module.campaigns.desc'),
-      Component: CampaignsModule,
+      label: 'Campaigns & Audience',
+      description: 'Discover audiences, plan campaigns, coordinate outreach, and track results.',
+      Component: CampaignsAudienceWorkspace,
     },
     {
       id: 'due-diligence',
       label: t('module.dueDiligence'),
       description: t('module.dueDiligence.desc'),
       Component: DueDiligencePage,
-    },
-    {
-      id: 'audience-discovery',
-      label: t('module.audienceDiscovery'),
-      description: t('module.audienceDiscovery.desc'),
-      status: 'In Progress',
-      Component: AudienceDiscoveryPage,
     },
     {
       id: 'data-hub',
@@ -124,15 +111,18 @@ export const buildModuleSections = (t) => ({
     ],
   },
   campaigns: {
-    title: t('module.campaigns'),
-    description: t('module.campaigns.desc'),
-    flowTitle: t('nav.campaigns.flowTitle'),
-    flowSummary: t('nav.campaigns.flowSummary'),
-    defaultTab: 'outreach',
+    title: 'Campaigns & Audience',
+    description: 'One workspace for audience intelligence, campaign planning, outreach, and results.',
+    flowTitle: 'Discover, plan, mobilize',
+    flowSummary: 'Use audience discovery to shape campaign strategy, then move directly into outreach and campaign execution.',
+    defaultTab: 'campaigns',
     sections: [
-      { label: t('nav.campaigns.events'), type: 'anchor', value: 'campaign-events', hint: t('nav.campaigns.eventsHint') },
-      { label: t('nav.campaigns.share'), type: 'anchor', value: 'campaign-share', hint: t('nav.campaigns.shareHint') },
-      { label: t('nav.campaigns.results'), type: 'anchor', value: 'campaign-results', hint: t('nav.campaigns.resultsHint') },
+      { label: 'Campaigns', type: 'tab', value: 'campaigns', hint: 'Plan, fund, execute, and monitor campaigns.' },
+      { label: 'Outreach', type: 'tab', value: 'outreach', hint: 'Invite people or saved segments into events and actions.' },
+      { label: 'Audience discovery', type: 'tab', value: 'audience-overview', hint: 'Run AI-assisted audience analysis from websites or documents.' },
+      { label: 'Segments', type: 'tab', value: 'audience-segments', hint: 'Review audience segments and choose targets for campaigns.' },
+      { label: 'Evidence', type: 'tab', value: 'audience-evidence', hint: 'Inspect source pages, clusters, and supporting evidence.' },
+      { label: 'Messaging', type: 'tab', value: 'audience-messaging', hint: 'Turn audience insights into campaign messages.' },
     ],
   },
   deliberation: {
@@ -159,19 +149,6 @@ export const buildModuleSections = (t) => ({
       { label: 'Case', type: 'tab', value: 'overview', hint: 'Create or edit the due diligence case.' },
       { label: 'Run DD', type: 'tab', value: 'checks', hint: 'Run Wikipedia, OpenSanctions, and configured Georgian media sources.' },
       { label: 'Report', type: 'tab', value: 'reports', hint: 'Review saved evidence, AI synthesis, and PDF reports.' },
-    ],
-  },
-  'audience-discovery': {
-    title: t('module.audienceDiscovery'),
-    description: t('module.audienceDiscovery.desc'),
-    flowTitle: t('nav.ad.flowTitle'),
-    flowSummary: t('nav.ad.flowSummary'),
-    defaultTab: 'overview',
-    sections: [
-      { label: t('nav.ad.overview'), type: 'tab', value: 'overview', hint: t('nav.ad.overviewHint') },
-      { label: t('nav.ad.segments'), type: 'tab', value: 'segments', hint: t('nav.ad.segmentsHint') },
-      { label: t('nav.ad.evidence'), type: 'tab', value: 'evidence', hint: t('nav.ad.evidenceHint') },
-      { label: t('nav.ad.messaging'), type: 'tab', value: 'messaging', hint: t('nav.ad.messagingHint') },
     ],
   },
   'data-hub': {

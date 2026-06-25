@@ -6,3 +6,4 @@ export { AudienceDiscoveryPage } from './AudienceDiscovery/AudienceDiscoveryPage
 export { AdminPage } from './Admin/AdminPage.jsx'
 export { PublicCampaignPage } from './Campaigns/PublicCampaignPage.jsx'
 export { DataHubPage } from './DataHub/DataHubPage.jsx'
+export { CampaignsAudienceWorkspace } from './Campaigns/CampaignsAudienceWorkspace.jsx'

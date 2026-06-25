@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Group,
-  SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
@@ -304,7 +303,7 @@ function AppShell_() {
                 <h1>{t('app.pickModule')}</h1>
                 <p className="muted">{t('app.pickModuleDesc')}</p>
               </div>
-              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" className="module-tiles">
+              <div className="module-tiles">
                 {hubModules.map((module) => {
                   const isModuleReady =
                     !module.status || module.status.toLowerCase() === 'ready'
@@ -356,7 +355,7 @@ function AppShell_() {
                     </Card>
                   )
                 })}
-              </SimpleGrid>
+              </div>
             </div>
             <Accordion variant="separated" radius="md" className="about-accordion">
               <Accordion.Item value="about">
