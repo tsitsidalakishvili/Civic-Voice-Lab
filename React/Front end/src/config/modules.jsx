@@ -83,7 +83,6 @@ export const buildModules = (t) => {
       id: 'due-diligence',
       label: t('module.dueDiligence'),
       description: t('module.dueDiligence.desc'),
-      status: 'In Progress',
       Component: DueDiligencePage,
     },
     {
@@ -157,12 +156,9 @@ export const buildModuleSections = (t) => ({
     flowSummary: t('nav.dd.flowSummary'),
     defaultTab: 'overview',
     sections: [
-      { label: t('nav.dd.overview'), type: 'tab', value: 'overview', hint: t('nav.dd.overviewHint') },
-      { label: t('nav.dd.checks'), type: 'tab', value: 'checks', hint: t('nav.dd.checksHint') },
-      { label: t('nav.dd.reports'), type: 'tab', value: 'reports', hint: t('nav.dd.reportsHint') },
-      { label: t('nav.dd.tasks'), type: 'tab', value: 'tasks', hint: t('nav.dd.tasksHint') },
-      { label: t('nav.dd.decision'), type: 'tab', value: 'decision', hint: t('nav.dd.decisionHint') },
-      { label: t('nav.dd.tools'), type: 'tab', value: 'advanced', hint: t('nav.dd.toolsHint') },
+      { label: 'Case', type: 'tab', value: 'overview', hint: 'Create or edit the due diligence case.' },
+      { label: 'Run DD', type: 'tab', value: 'checks', hint: 'Run Wikipedia, OpenSanctions, and configured Georgian media sources.' },
+      { label: 'Report', type: 'tab', value: 'reports', hint: 'Review saved evidence, AI synthesis, and PDF reports.' },
     ],
   },
   'audience-discovery': {
@@ -214,3 +210,4 @@ export const buildModuleSections = (t) => ({
 })
 
 export const MODULE_SECTIONS = buildModuleSections((k) => k)
+

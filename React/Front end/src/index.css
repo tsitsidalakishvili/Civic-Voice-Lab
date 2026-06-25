@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --text: #334155;
   --text-h: #0f172a;
   --muted: #64748b;
@@ -27,7 +27,7 @@
   --space-4: 24px;
   --space-5: 32px;
 
-  font-family: 'Inter', system-ui, 'Segoe UI', sans-serif;
+  font-family: 'Inter', Sylfaen, 'Segoe UI', Arial, system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   color: var(--text);
@@ -84,3 +84,5 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+

@@ -1,8 +1,8 @@
-import { createTheme, rem } from '@mantine/core'
+﻿import { createTheme, rem } from '@mantine/core'
 
 export const theme = createTheme({
-  fontFamily: 'Inter, system-ui, "Segoe UI", sans-serif',
-  headings: { fontFamily: 'Inter, system-ui, "Segoe UI", sans-serif' },
+  fontFamily: 'Inter, Sylfaen, "Segoe UI", Arial, system-ui, sans-serif',
+  headings: { fontFamily: 'Inter, Sylfaen, "Segoe UI", Arial, system-ui, sans-serif' },
   primaryColor: 'civic',
   primaryShade: { light: 6, dark: 4 },
   defaultRadius: 'md',
@@ -50,3 +50,5 @@ export const theme = createTheme({
     },
   },
 })
+
+

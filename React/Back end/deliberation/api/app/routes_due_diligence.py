@@ -1,12 +1,13 @@
-import html as html_lib
+﻿import html as html_lib
 import io
 import json
 import os
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
-from urllib.parse import quote
+from email.utils import parsedate_to_datetime
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -16,6 +17,8 @@ from pydantic import BaseModel, Field
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .db import get_active_database, get_driver
@@ -42,7 +45,9 @@ class DueDiligenceSummaryOut(BaseModel):
 
 
 class DueDiligenceCaseCreate(BaseModel):
-    subject: str = Field(min_length=1)
+    subject: Optional[str] = None
+    subject_georgian: Optional[str] = Field(default=None, alias="subjectGeorgian")
+    subject_english: Optional[str] = Field(default=None, alias="subjectEnglish")
     subject_type: str = Field(default="Person", alias="subjectType")
     status: Optional[str] = "Draft"
     owner: Optional[str] = ""
@@ -50,6 +55,8 @@ class DueDiligenceCaseCreate(BaseModel):
 
 class DueDiligenceCaseUpdate(BaseModel):
     subject: Optional[str] = None
+    subject_georgian: Optional[str] = Field(default=None, alias="subjectGeorgian")
+    subject_english: Optional[str] = Field(default=None, alias="subjectEnglish")
     subject_type: Optional[str] = Field(default=None, alias="subjectType")
     status: Optional[str] = None
     owner: Optional[str] = None
@@ -58,6 +65,8 @@ class DueDiligenceCaseUpdate(BaseModel):
 class DueDiligenceCaseOut(BaseModel):
     case_id: str = Field(alias="caseId")
     subject: str
+    subject_georgian: Optional[str] = Field(alias="subjectGeorgian", default="")
+    subject_english: Optional[str] = Field(alias="subjectEnglish", default="")
     subject_type: str = Field(alias="subjectType")
     status: str
     owner: Optional[str] = ""
@@ -112,9 +121,11 @@ class DueDiligenceAnalysisRequest(BaseModel):
     subject: str = Field(min_length=1)
     subject_type: str = Field(default="Person", alias="subjectType")
     case_id: Optional[str] = Field(default=None, alias="caseId")
-    use_wikidata: bool = Field(default=True, alias="useWikidata")
+    use_wikidata: bool = Field(default=False, alias="useWikidata")
+    use_wikipedia: bool = Field(default=True, alias="useWikipedia")
     use_opensanctions: bool = Field(default=True, alias="useOpenSanctions")
     use_news: bool = Field(default=True, alias="useNews")
+    use_declarations: bool = Field(default=True, alias="useDeclarations")
     max_news: int = Field(default=8, alias="maxNews", ge=1, le=20)
     demo: bool = Field(default=True)
 
@@ -142,6 +153,19 @@ class NewsResult(BaseModel):
     source: Optional[str] = ""
     published_at: Optional[str] = Field(default=None, alias="publishedAt")
     tone: Optional[float] = None
+
+
+class AssetDeclarationResult(BaseModel):
+    id: str
+    name: str
+    organization: Optional[str] = ""
+    position: Optional[str] = ""
+    birth_date: Optional[str] = Field(default="", alias="birthDate")
+    declaration_submit_date: Optional[str] = Field(default="", alias="declarationSubmitDate")
+    date_edited: Optional[str] = Field(default="", alias="dateEdited")
+    source_url: Optional[str] = Field(default="", alias="sourceUrl")
+    summary: Dict[str, Any] = {}
+    raw: Dict[str, Any] = {}
 
 
 class WikipediaResult(BaseModel):
@@ -196,8 +220,10 @@ class DueDiligenceAnalysisOut(BaseModel):
     subject_type: str = Field(alias="subjectType")
     case_id: Optional[str] = Field(default=None, alias="caseId")
     wikidata: List[WikidataResult]
+    wikipedia: List[WikipediaResult] = []
     opensanctions: List[OpenSanctionsResult]
     news: List[NewsResult]
+    declarations: List[AssetDeclarationResult] = []
     summary: Dict[str, object]
     warnings: List[str]
     report_id: Optional[str] = Field(default=None, alias="reportId")
@@ -222,6 +248,94 @@ class DueDiligenceReportOut(BaseModel):
     subject_type: str = Field(alias="subjectType")
     created_at: Optional[str] = Field(default=None, alias="createdAt")
     payload: Dict[str, object]
+
+
+class MediaSourceOut(BaseModel):
+    source_id: str = Field(alias="sourceId")
+    name: str
+    source_type: str = Field(alias="sourceType")
+    status: str
+    url: str
+    notes: str = ""
+    access_model: str = Field(alias="accessModel")
+
+
+class MediaMonitorRequest(BaseModel):
+    subject: str = Field(min_length=1)
+    subject_type: str = Field(default="Person", alias="subjectType")
+    case_id: Optional[str] = Field(default=None, alias="caseId")
+    topics: List[str] = []
+    source_ids: List[str] = Field(default_factory=lambda: ["netgazeti", "publika", "interpressnews"], alias="sourceIds")
+    max_results: int = Field(default=12, alias="maxResults", ge=1, le=50)
+    persist: bool = True
+
+
+class MediaQuoteOut(BaseModel):
+    text: str
+    speaker: Optional[str] = ""
+    topic: Optional[str] = ""
+
+
+class MediaMentionOut(BaseModel):
+    title: str
+    url: str
+    source: str
+    source_id: str = Field(alias="sourceId")
+    published_at: Optional[str] = Field(default=None, alias="publishedAt")
+    snippet: str = ""
+    matched_topics: List[str] = Field(default_factory=list, alias="matchedTopics")
+    quotes: List[MediaQuoteOut] = []
+    stored: bool = False
+
+
+class MediaMonitorOut(BaseModel):
+    subject: str
+    subject_type: str = Field(alias="subjectType")
+    sources: List[MediaSourceOut]
+    mentions: List[MediaMentionOut]
+    warnings: List[str]
+    stored_count: int = Field(alias="storedCount")
+
+
+class DueDiligenceAiReportRequest(BaseModel):
+    subject: str = Field(min_length=1)
+    subject_type: str = Field(default="Person", alias="subjectType")
+    topic: str = Field(default="General")
+    case_id: Optional[str] = Field(default=None, alias="caseId")
+    analysis: Optional[Dict[str, object]] = None
+    media: Optional[Dict[str, object]] = None
+
+
+class DueDiligenceAiReportOut(BaseModel):
+    subject: str
+    subject_type: str = Field(alias="subjectType")
+    topic: str
+    generated_at: str = Field(alias="generatedAt")
+    mode: str
+    report_title: Optional[str] = Field(default=None, alias="reportTitle")
+    classification: Optional[str] = None
+    report_metadata: Dict[str, object] = Field(default_factory=dict, alias="reportMetadata")
+    sections: List[Dict[str, object]] = Field(default_factory=list)
+    evidence_table: List[Dict[str, object]] = Field(default_factory=list, alias="evidenceTable")
+    limitations: List[str] = []
+    executive_summary: str = Field(alias="executiveSummary")
+    key_findings: List[str] = Field(alias="keyFindings")
+    topic_assessment: str = Field(alias="topicAssessment")
+    risk_assessment: str = Field(alias="riskAssessment")
+    evidence: List[Dict[str, str]]
+    recommended_actions: List[str] = Field(alias="recommendedActions")
+    caveats: List[str]
+    warnings: List[str]
+
+
+class MetaContentLibraryInfoOut(BaseModel):
+    status: str
+    fit_for_due_diligence: str = Field(alias="fitForDueDiligence")
+    access_steps: List[str] = Field(alias="accessSteps")
+    eligible_users: str = Field(alias="eligibleUsers")
+    integration_plan: List[str] = Field(alias="integrationPlan")
+    limitations: List[str]
+    source_url: str = Field(alias="sourceUrl")
 
 
 def _execute_read(session, query: str, params: Optional[dict] = None):
@@ -262,7 +376,7 @@ def _normalize_text(value: str) -> str:
     return str(value or "").lower().strip()
 
 
-CASE_STATUSES = {"Draft", "Active", "Review", "Decided", "Closed"}
+CASE_STATUSES = {"Draft", "Active", "Review", "Decided", "Closed", "Archived"}
 TASK_STATUSES = {"Open", "In Progress", "Blocked", "Done"}
 
 
@@ -307,6 +421,376 @@ def _default_local_media_feeds() -> List[str]:
     ]
 
 
+def _media_sources() -> Dict[str, Dict[str, str]]:
+    return {
+        "netgazeti": {
+            "sourceId": "netgazeti",
+            "name": "Netgazeti",
+            "sourceType": "online_media",
+            "status": "active",
+            "url": "https://netgazeti.ge/",
+            "accessModel": "public_web_rss_search",
+            "notes": "Uses Netgazeti public RSS and WordPress REST search; stores article metadata, excerpts, detected mentions, and quote snippets with source links.",
+        },
+        "publika": {
+            "sourceId": "publika",
+            "name": "Publika",
+            "sourceType": "online_media",
+            "status": "active",
+            "url": "https://publika.ge/",
+            "accessModel": "public_rss",
+            "notes": "Uses Publika public RSS feed for recent article metadata, excerpts, detected mentions, and quote snippets.",
+        },
+        "interpressnews": {
+            "sourceId": "interpressnews",
+            "name": "Interpressnews",
+            "sourceType": "online_media",
+            "status": "active",
+            "url": "https://www.interpressnews.ge/ka/",
+            "accessModel": "public_web_search",
+            "notes": "Uses public search pages when extractable; site markup may limit automated result extraction.",
+        },
+        "meta_content_library": {
+            "sourceId": "meta_content_library",
+            "name": "Meta Content Library/API",
+            "sourceType": "social_platform_research_tool",
+            "status": "access_required",
+            "url": "https://transparency.meta.com/researchtools/meta-content-library/",
+            "accessModel": "controlled_research_access",
+            "notes": "Useful for Facebook/Instagram/Threads public-content analysis after approved researcher access; not enabled as an open commercial API connector.",
+        },
+    }
+
+
+def _media_source_models(source_ids: Optional[List[str]] = None) -> List[MediaSourceOut]:
+    sources = _media_sources()
+    selected = source_ids or list(sources.keys())
+    return [MediaSourceOut(**sources[source_id]) for source_id in selected if source_id in sources]
+
+
+def _parse_rss_date(value: Optional[str]) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return parsedate_to_datetime(text).isoformat()
+    except (TypeError, ValueError):
+        return text
+
+
+def _match_topics(text: str, topics: List[str]) -> List[str]:
+    haystack = _normalize_text(text)
+    matches: List[str] = []
+    for topic in topics or []:
+        cleaned = str(topic or "").strip()
+        if cleaned and _normalize_text(cleaned) in haystack:
+            matches.append(cleaned)
+    return matches
+
+
+def _extract_media_quotes(text: str, topics: List[str], limit: int = 6) -> List[MediaQuoteOut]:
+    cleaned = re.sub(r"\s+", " ", _strip_html(text or ""))
+    quote_patterns = [r'Ã¢â‚¬Å¾([^Ã¢â‚¬Å“Ã¢â‚¬Â]{12,500})[Ã¢â‚¬Å“Ã¢â‚¬Â]', r'Ã¢â‚¬Å“([^Ã¢â‚¬Â]{12,500})Ã¢â‚¬Â', r'"([^"]{12,500})"']
+    quotes: List[MediaQuoteOut] = []
+    seen = set()
+    for pattern in quote_patterns:
+        for match in re.finditer(pattern, cleaned):
+            quote = match.group(1).strip()
+            key = quote.lower()
+            if not quote or key in seen:
+                continue
+            seen.add(key)
+            quote_topics = _match_topics(quote, topics)
+            quotes.append(
+                MediaQuoteOut(
+                    text=quote,
+                    speaker="",
+                    topic=quote_topics[0] if quote_topics else "",
+                )
+            )
+            if len(quotes) >= limit:
+                return quotes
+    return quotes
+
+
+def _fetch_rss_media_mentions(
+    *,
+    source_id: str,
+    source_name: str,
+    feed_url: str,
+    subject: str,
+    topics: List[str],
+    limit: int,
+) -> Tuple[List[MediaMentionOut], Optional[str]]:
+    headers = {"User-Agent": "FS-DueDiligence/1.0"}
+    try:
+        response = requests.get(feed_url, headers=headers, timeout=20)
+        response.raise_for_status()
+        response.encoding = "utf-8"
+        root = ET.fromstring(response.text)
+    except requests.RequestException as exc:
+        return [], f"{source_name} RSS request failed: {exc}"
+    except ET.ParseError as exc:
+        return [], f"{source_name} RSS parse failed: {exc}"
+
+    subject_key = _normalize_text(subject)
+    mentions: List[MediaMentionOut] = []
+    for item in root.findall(".//item"):
+        title = str(item.findtext("title") or "").strip()
+        link = str(item.findtext("link") or "").strip()
+        description = _strip_html(item.findtext("description") or "")
+        haystack = " ".join([title, description])
+        if subject_key and subject_key not in _normalize_text(haystack):
+            continue
+        if not title or not link:
+            continue
+        mentions.append(
+            MediaMentionOut(
+                title=title,
+                url=link,
+                source=source_name,
+                sourceId=source_id,
+                publishedAt=_parse_rss_date(item.findtext("pubDate")),
+                snippet=description[:600],
+                matchedTopics=_match_topics(haystack, topics),
+                quotes=_extract_media_quotes(haystack, topics),
+            )
+        )
+        if len(mentions) >= limit:
+            break
+    return mentions, None
+
+
+def _fetch_netgazeti_rss(subject: str, topics: List[str], limit: int) -> Tuple[List[MediaMentionOut], Optional[str]]:
+    return _fetch_rss_media_mentions(
+        source_id="netgazeti",
+        source_name="Netgazeti",
+        feed_url="https://netgazeti.ge/feed/",
+        subject=subject,
+        topics=topics,
+        limit=limit,
+    )
+
+
+def _fetch_publika_media_mentions(subject: str, topics: List[str], limit: int) -> Tuple[List[MediaMentionOut], List[str]]:
+    mentions, error = _fetch_rss_media_mentions(
+        source_id="publika",
+        source_name="Publika",
+        feed_url="https://publika.ge/feed/",
+        subject=subject,
+        topics=topics,
+        limit=limit,
+    )
+    return mentions, [error] if error else []
+
+
+def _fetch_interpressnews_media_mentions(subject: str, topics: List[str], limit: int) -> Tuple[List[MediaMentionOut], List[str]]:
+    warnings: List[str] = []
+    query = quote(subject)
+    urls = [
+        f"https://www.interpressnews.ge/ka/search?search={query}",
+        f"https://www.interpressnews.ge/ka/search?query={query}",
+    ]
+    headers = {"User-Agent": "FS-DueDiligence/1.0"}
+    mentions: List[MediaMentionOut] = []
+    seen = set()
+    for url in urls:
+        try:
+            response = requests.get(url, headers=headers, timeout=20)
+            response.raise_for_status()
+            response.encoding = "utf-8"
+            html = response.text
+        except requests.RequestException as exc:
+            warnings.append(f"Interpressnews search request failed: {exc}")
+            continue
+        for match in re.finditer(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, flags=re.I | re.S):
+            href = html_lib.unescape(match.group(1)).strip()
+            raw_title = _strip_html(match.group(2))
+            title = re.sub(r"\s+", " ", raw_title).strip()
+            if not href or not title or len(title) < 8:
+                continue
+            if "/ka/" not in href and "interpressnews.ge" not in href:
+                continue
+            haystack = title
+            if _normalize_text(subject) not in _normalize_text(haystack):
+                continue
+            if href.startswith("/"):
+                href = f"https://www.interpressnews.ge{href}"
+            key = href or title
+            if key in seen:
+                continue
+            seen.add(key)
+            mentions.append(
+                MediaMentionOut(
+                    title=title,
+                    url=href,
+                    source="Interpressnews",
+                    sourceId="interpressnews",
+                    publishedAt=None,
+                    snippet="",
+                    matchedTopics=_match_topics(haystack, topics),
+                    quotes=[],
+                )
+            )
+            if len(mentions) >= limit:
+                return mentions, warnings
+    if not mentions:
+        warnings.append("Interpressnews search returned no extractable matches for the subject.")
+    return mentions, warnings
+
+
+def _fetch_netgazeti_search(subject: str, topics: List[str], limit: int) -> Tuple[List[MediaMentionOut], Optional[str]]:
+    url = "https://netgazeti.ge/wp-json/wp/v2/posts"
+    params = {
+        "search": subject,
+        "per_page": max(1, min(limit, 20)),
+        "_fields": "date,link,title,excerpt",
+    }
+    headers = {"User-Agent": "FS-DueDiligence/1.0"}
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as exc:
+        return [], f"Netgazeti REST search failed: {exc}"
+    except ValueError as exc:
+        return [], f"Netgazeti REST search parse failed: {exc}"
+
+    mentions: List[MediaMentionOut] = []
+    for item in data if isinstance(data, list) else []:
+        title = _strip_html((item.get("title") or {}).get("rendered") or "")
+        link = str(item.get("link") or "").strip()
+        excerpt = _strip_html((item.get("excerpt") or {}).get("rendered") or "")
+        haystack = " ".join([title, excerpt])
+        if not title or not link:
+            continue
+        mentions.append(
+            MediaMentionOut(
+                title=title,
+                url=link,
+                source="Netgazeti",
+                sourceId="netgazeti",
+                publishedAt=str(item.get("date") or "").strip() or None,
+                snippet=excerpt[:600],
+                matchedTopics=_match_topics(haystack, topics),
+                quotes=_extract_media_quotes(haystack, topics),
+            )
+        )
+        if len(mentions) >= limit:
+            break
+    return mentions, None
+
+
+def _fetch_netgazeti_media_mentions(subject: str, topics: List[str], limit: int) -> Tuple[List[MediaMentionOut], List[str]]:
+    warnings: List[str] = []
+    rss_mentions, rss_error = _fetch_netgazeti_rss(subject, topics, limit)
+    search_mentions, search_error = _fetch_netgazeti_search(subject, topics, max(0, limit - len(rss_mentions)))
+    if rss_error and search_error and not (rss_mentions or search_mentions):
+        warnings.extend([rss_error, search_error])
+    seen = set()
+    deduped: List[MediaMentionOut] = []
+    for mention in [*rss_mentions, *search_mentions]:
+        key = str(mention.url or mention.title).strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(mention)
+        if len(deduped) >= limit:
+            break
+    return deduped, warnings
+
+
+def _store_media_mentions(
+    *,
+    subject: str,
+    subject_type: str,
+    case_id: Optional[str],
+    topics: List[str],
+    mentions: List[MediaMentionOut],
+) -> int:
+    if not mentions:
+        return 0
+    driver = get_driver()
+    rows = [mention.dict(by_alias=True) for mention in mentions]
+    query = """
+    MERGE (p:DueDiligenceProfile {nameKey: toLower($subject), subjectType: $subjectType})
+    ON CREATE SET p.profileId = randomUUID(), p.createdAt = datetime(), p.name = $subject
+    SET p.name = $subject, p.updatedAt = datetime()
+    WITH p
+    UNWIND $mentions AS row
+    WITH p, row,
+         CASE
+           WHEN size(coalesce(row.matchedTopics, [])) > 0 THEN row.matchedTopics
+           WHEN size($topics) > 0 THEN $topics
+           ELSE ['General']
+         END AS topicNames
+    MERGE (a:MediaArticle {url: row.url})
+    ON CREATE SET a.articleId = randomUUID(), a.createdAt = datetime()
+    SET a.title = row.title,
+        a.source = row.source,
+        a.sourceId = row.sourceId,
+        a.publishedAt = row.publishedAt,
+        a.snippet = row.snippet,
+        a.updatedAt = datetime()
+    MERGE (p)-[m:MENTIONED_IN]->(a)
+    SET m.updatedAt = datetime(),
+        m.topics = topicNames,
+        m.caseId = $caseId
+    WITH p, a, row, topicNames
+    UNWIND topicNames AS topicName
+    WITH p, a, row, trim(toString(topicName)) AS topicName
+    WHERE topicName <> ''
+    MERGE (t:Topic {nameKey: toLower(topicName)})
+    ON CREATE SET t.topicId = randomUUID(), t.createdAt = datetime(), t.name = topicName
+    SET t.name = topicName,
+        t.domain = 'due_diligence',
+        t.updatedAt = datetime()
+    MERGE (p)-[pt:RELATED_TO_TOPIC]->(t)
+    SET pt.subjectType = $subjectType,
+        pt.caseId = $caseId,
+        pt.updatedAt = datetime()
+    MERGE (a)-[at:ABOUT_TOPIC]->(t)
+    SET at.source = row.source,
+        at.caseId = $caseId,
+        at.updatedAt = datetime()
+    MERGE (t)-[tm:HAS_MEDIA]->(a)
+    SET tm.source = row.source,
+        tm.caseId = $caseId,
+        tm.updatedAt = datetime()
+    WITH p, a, row, collect(DISTINCT t) AS articleTopics
+    FOREACH (quoteRow IN coalesce(row.quotes, []) |
+      MERGE (q:MediaQuote {textKey: toLower(quoteRow.text), articleUrl: row.url})
+      ON CREATE SET q.quoteId = randomUUID(), q.createdAt = datetime()
+      SET q.text = quoteRow.text,
+          q.speaker = quoteRow.speaker,
+          q.topic = quoteRow.topic,
+          q.source = row.source,
+          q.updatedAt = datetime()
+      MERGE (a)-[:HAS_QUOTE]->(q)
+      MERGE (p)-[:HAS_MEDIA_QUOTE]->(q)
+      MERGE (q)-[:QUOTE_MENTIONS_PROFILE]->(p)
+      FOREACH (topicNode IN articleTopics |
+        MERGE (q)-[qt:QUOTE_ABOUT_TOPIC]->(topicNode)
+        SET qt.updatedAt = datetime()
+      )
+    )
+    WITH count(DISTINCT a) AS stored
+    OPTIONAL MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    FOREACH (_ IN CASE WHEN caseNode IS NULL THEN [] ELSE [1] END | SET caseNode.updatedAt = datetime())
+    RETURN stored
+    """
+    params = {
+        "subject": subject,
+        "subjectType": subject_type,
+        "caseId": case_id,
+        "topics": topics,
+        "mentions": rows,
+    }
+    with _db_session(driver) as session:
+        records = _execute_write(session, query, params)
+    row = records[0] if records else None
+    return int(row.get("stored") or 0) if row else 0
+
 def _wikidata_search(subject: str, limit: int = 5) -> Tuple[List[WikidataResult], Optional[str]]:
     url = "https://www.wikidata.org/w/api.php"
     params = {
@@ -339,34 +823,43 @@ def _wikidata_search(subject: str, limit: int = 5) -> Tuple[List[WikidataResult]
 
 
 def _wikipedia_search(query: str, limit: int = 4) -> Tuple[List[WikipediaResult], Optional[str]]:
-    url = "https://en.wikipedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "list": "search",
-        "srsearch": query,
-        "srlimit": limit,
-        "format": "json",
-    }
     headers = {"User-Agent": "FS-DueDiligence/1.0"}
-    try:
-        response = requests.get(url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException as exc:
-        return [], f"Wikipedia request failed: {exc}"
     results: List[WikipediaResult] = []
-    for item in data.get("query", {}).get("search", []) or []:
-        title = str(item.get("title") or "").strip()
-        if not title:
+    errors: List[str] = []
+    seen: set[str] = set()
+    for lang, host in [("ka", "ka.wikipedia.org"), ("en", "en.wikipedia.org")]:
+        url = f"https://{host}/w/api.php"
+        params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "srlimit": limit,
+            "format": "json",
+        }
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as exc:
+            errors.append(f"{lang}: {exc}")
             continue
-        snippet = _strip_html(item.get("snippet") or "")
-        results.append(
-            WikipediaResult(
-                title=title,
-                summary=snippet,
-                url=f"https://en.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}",
+        for item in data.get("query", {}).get("search", []) or []:
+            title = str(item.get("title") or "").strip()
+            if not title or title.lower() in seen:
+                continue
+            seen.add(title.lower())
+            snippet = _strip_html(item.get("snippet") or "")
+            results.append(
+                WikipediaResult(
+                    title=title,
+                    summary=snippet,
+                    url=f"https://{host}/wiki/{quote(title.replace(' ', '_'))}",
+                )
             )
-        )
+            if len(results) >= limit:
+                return results, None
+    if errors and not results:
+        return [], "Wikipedia request failed: " + "; ".join(errors)
     return results, None
 
 
@@ -404,6 +897,152 @@ def _opensanctions_search(
     return results, None
 
 
+def _as_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
+
+def _pick_records(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("items", "results", "data", "declarations", "Declarations"):
+        rows = payload.get(key)
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return [payload]
+
+
+def _money_totals(rows: List[Dict[str, Any]], amount_keys: Tuple[str, ...] = ("Amount",)) -> Dict[str, float]:
+    totals: Dict[str, float] = {}
+    for row in rows:
+        currency = str(row.get("Currency") or row.get("AmountCurrency") or row.get("IncomeCurrency") or "Unknown").strip() or "Unknown"
+        amount = None
+        for key in amount_keys:
+            if row.get(key) is not None:
+                amount = row.get(key)
+                break
+        try:
+            numeric = float(amount)
+        except (TypeError, ValueError):
+            continue
+        totals[currency] = round(totals.get(currency, 0.0) + numeric, 2)
+    return totals
+
+
+def _declaration_name(row: Dict[str, Any]) -> str:
+    first = str(row.get("FirstName") or "").strip()
+    last = str(row.get("LastName") or "").strip()
+    full = " ".join(part for part in [first, last] if part).strip()
+    return full or str(row.get("Name") or row.get("FullName") or "").strip()
+
+
+def _summarize_declaration(row: Dict[str, Any]) -> Dict[str, Any]:
+    bank_accounts = _as_list(row.get("BankAccounts"))
+    cashes = _as_list(row.get("Cashes"))
+    jobs = _as_list(row.get("Jobs"))
+    contracts = _as_list(row.get("Contracts"))
+    properties = _as_list(row.get("Properties"))
+    movable = _as_list(row.get("MovableProperties"))
+    securities = _as_list(row.get("Securities"))
+    gifts = _as_list(row.get("Gifts"))
+    inouts = _as_list(row.get("InOuts"))
+    family = _as_list(row.get("FamilyMembers"))
+    enterprises = _as_list(row.get("Enterprice")) + _as_list(row.get("Enterprise"))
+    linked_enterprises = _as_list(row.get("LinkedEnterprice")) + _as_list(row.get("LinkedEnterprise"))
+    income_rows = []
+    for contract in contracts:
+        if isinstance(contract, dict) and contract.get("Income") is not None:
+            income_rows.append({"Amount": contract.get("Income"), "Currency": contract.get("IncomeCurrency") or contract.get("Currency")})
+    return {
+        "counts": {
+            "familyMembers": len(family),
+            "properties": len(properties),
+            "movableProperties": len(movable),
+            "securities": len(securities),
+            "bankAccounts": len(bank_accounts),
+            "cashEntries": len(cashes),
+            "jobs": len(jobs),
+            "contracts": len(contracts),
+            "gifts": len(gifts),
+            "inOuts": len(inouts),
+            "enterprises": len(enterprises),
+            "linkedEnterprises": len(linked_enterprises),
+        },
+        "bankAccountTotals": _money_totals([row for row in bank_accounts if isinstance(row, dict)]),
+        "cashTotals": _money_totals([row for row in cashes if isinstance(row, dict)]),
+        "jobIncomeTotals": _money_totals([row for row in jobs if isinstance(row, dict)]),
+        "contractAmountTotals": _money_totals([row for row in contracts if isinstance(row, dict)]),
+        "contractIncomeTotals": _money_totals(income_rows),
+        "inOutTotals": _money_totals([row for row in inouts if isinstance(row, dict)]),
+        "giftTotals": _money_totals([row for row in gifts if isinstance(row, dict)]),
+    }
+
+
+def _declaration_source_url(row: Dict[str, Any]) -> str:
+    for key in ("Url", "URL", "SourceUrl", "sourceUrl"):
+        if row.get(key):
+            return str(row.get(key))
+    base = os.getenv("DECLARACIA_PUBLIC_URL", "https://declaration.gov.ge/").rstrip("/")
+    declaration_id = row.get("Id") or row.get("id")
+    return f"{base}/{declaration_id}" if declaration_id else base
+
+
+def _normalize_declaration(row: Dict[str, Any]) -> AssetDeclarationResult:
+    declaration_id = str(row.get("Id") or row.get("id") or row.get("DeclarationId") or _declaration_name(row) or "declaration")
+    return AssetDeclarationResult(
+        id=declaration_id,
+        name=_declaration_name(row) or "Unknown declarant",
+        organization=str(row.get("Organisation") or row.get("Organization") or "").strip(),
+        position=str(row.get("Position") or "").strip(),
+        birthDate=str(row.get("BirthDate") or "").strip(),
+        declarationSubmitDate=str(row.get("DeclarationSubmitDate") or "").strip(),
+        dateEdited=str(row.get("DateEdited") or "").strip(),
+        sourceUrl=_declaration_source_url(row),
+        summary=_summarize_declaration(row),
+        raw=row,
+    )
+
+
+def _declaration_query_params(subject: str) -> Dict[str, Any]:
+    parts = [part for part in subject.split() if part]
+    first_name = parts[0] if parts else ""
+    last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
+    return {
+        "Key": subject,
+        "Firstname": first_name,
+        "Lastname": last_name,
+        "OrganizationIds": [],
+        "PositionIds": [],
+        "YearSelectedValues": [],
+    }
+
+
+def _asset_declaration_search(subject: str) -> Tuple[List[AssetDeclarationResult], Optional[str]]:
+    endpoint = (
+        os.getenv("DECLARACIA_API_URL")
+        or os.getenv("DECLARATION_API_URL")
+        or "https://declaration.acb.gov.ge/Api/Declarations"
+    )
+    headers = {"User-Agent": "FS-DueDiligence/1.0", "Accept": "application/json"}
+    params = _declaration_query_params(subject)
+    try:
+        if "{query}" in endpoint:
+            url = endpoint.replace("{query}", quote(subject))
+            response = requests.get(url, headers=headers, timeout=20)
+        else:
+            response = requests.get(endpoint, params=params, headers=headers, timeout=20)
+        response.raise_for_status()
+        records = _pick_records(response.json())
+        return [_normalize_declaration(row) for row in records[:5]], None
+    except Exception as exc:
+        return [], f"Declaration request failed: {exc}"
+
+
 def _gdelt_news_search(
     subject: str, limit: int = 8
 ) -> Tuple[List[NewsResult], Optional[str]]:
@@ -415,6 +1054,9 @@ def _gdelt_news_search(
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        if getattr(response, "status_code", None) == 429:
+            return [], "GDELT is temporarily rate-limiting requests (429). Local media fallback was attempted."
         return [], f"GDELT news request failed: {exc}"
     articles = data.get("articles") or data.get("results") or []
     results = []
@@ -434,6 +1076,63 @@ def _gdelt_news_search(
             )
         )
     return results, None
+
+
+def _local_media_subject_terms(subject: str) -> List[str]:
+    cleaned = str(subject or "").strip()
+    terms = [cleaned] if cleaned else []
+    lower = cleaned.lower()
+    aliases = []
+    if "kobakhidze" in lower or "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â®ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â" in cleaned:
+        aliases.extend(["ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œ ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â®ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â", "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â®ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â"])
+    if "ivanishvili" in lower or "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œ" in cleaned:
+        aliases.extend(["ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œ", "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¹Ã…â€œ"])
+    if "kaladze" in lower or "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â" in cleaned:
+        aliases.extend(["ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â®ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â", "ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â¡Ãƒâ€ Ã¢â‚¬â„¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â"])
+    for alias in aliases:
+        if alias and alias not in terms:
+            terms.append(alias)
+    return terms
+
+
+def _local_media_news_search(subject: str, limit: int = 8) -> Tuple[List[NewsResult], List[str]]:
+    warnings: List[str] = []
+    results: List[NewsResult] = []
+    seen = set()
+    for term in _local_media_subject_terms(subject):
+        if len(results) >= limit:
+            break
+        mentions: List[MediaMentionOut] = []
+        for fetcher in (
+            _fetch_netgazeti_media_mentions,
+            _fetch_publika_media_mentions,
+            _fetch_interpressnews_media_mentions,
+        ):
+            if len(results) + len(mentions) >= limit:
+                break
+            source_mentions, term_warnings = fetcher(term, [], max(1, limit - len(results) - len(mentions)))
+            mentions.extend(source_mentions)
+            warnings.extend(term_warnings)
+        for mention in mentions:
+            if not mention.title or not mention.url or mention.url in seen:
+                continue
+            seen.add(mention.url)
+            results.append(
+                NewsResult(
+                    title=mention.title,
+                    url=mention.url,
+                    source=mention.source or "Netgazeti",
+                    publishedAt=mention.published_at,
+                    tone=None,
+                )
+            )
+            if len(results) >= limit:
+                break
+    if results:
+        warnings.append("Local media fallback used configured Georgian media sources for subject aliases/transliterations.")
+    else:
+        warnings.append("Local media fallback found no matches in configured Georgian media sources for the subject or known aliases.")
+    return results, warnings
 
 
 def _format_gdelt_datetime(value: datetime) -> str:
@@ -783,14 +1482,18 @@ def _demo_results(subject: str) -> Dict[str, List[Dict[str, object]]]:
 
 def _build_summary(
     wikidata: List[WikidataResult],
+    wikipedia: List[WikipediaResult],
     opensanctions: List[OpenSanctionsResult],
     news: List[NewsResult],
+    declarations: List[AssetDeclarationResult],
     warnings: List[str],
 ) -> Dict[str, object]:
     wikidata_hits = len(wikidata)
+    wikipedia_hits = len(wikipedia)
     opensanctions_hits = len(opensanctions)
     news_hits = len(news)
-    total_hits = wikidata_hits + opensanctions_hits + news_hits
+    declaration_hits = len(declarations)
+    total_hits = wikidata_hits + wikipedia_hits + opensanctions_hits + news_hits + declaration_hits
     topics = {
         topic
         for row in opensanctions
@@ -803,13 +1506,18 @@ def _build_summary(
 
     risk_score = 0
     rationale = []
+    if wikipedia_hits:
+        risk_score += 8
+        rationale.append("Found Wikipedia profile/context matches.")
     if wikidata_hits:
-        risk_score += 10
+        risk_score += 6
         rationale.append("Found Wikidata entity matches.")
     if news_hits:
         news_boost = min(35, 20 + news_hits * 2)
         risk_score += news_boost
         rationale.append("Recent news mentions detected.")
+    if declaration_hits:
+        rationale.append("Public asset declaration profile found; review assets, income, contracts, and related parties.")
     if opensanctions_hits:
         risk_score += 50
         rationale.append("OpenSanctions matches found.")
@@ -838,8 +1546,10 @@ def _build_summary(
         risk_level = "Low"
     return {
         "wikidata_hits": wikidata_hits,
+        "wikipedia_hits": wikipedia_hits,
         "opensanctions_hits": opensanctions_hits,
         "news_hits": news_hits,
+        "declaration_hits": declaration_hits,
         "total_hits": total_hits,
         "risk_level": risk_level,
         "risk_score": risk_score,
@@ -869,8 +1579,10 @@ def _store_dd_report(
         r.riskLevel = $riskLevel,
         r.totalHits = $totalHits,
         r.wikidataHits = $wikidataHits,
+        r.wikipediaHits = $wikipediaHits,
         r.opensanctionsHits = $opensanctionsHits,
         r.newsHits = $newsHits,
+        r.declarationHits = $declarationHits,
         r.sources = $sources,
         r.summaryJson = $summaryJson,
         r.payloadJson = $payloadJson
@@ -893,8 +1605,10 @@ def _store_dd_report(
         "riskLevel": summary.get("risk_level"),
         "totalHits": summary.get("total_hits"),
         "wikidataHits": summary.get("wikidata_hits"),
+        "wikipediaHits": summary.get("wikipedia_hits"),
         "opensanctionsHits": summary.get("opensanctions_hits"),
         "newsHits": summary.get("news_hits"),
+        "declarationHits": summary.get("declaration_hits"),
         "sources": sources,
         "summaryJson": json.dumps(summary),
         "payloadJson": json.dumps(payload),
@@ -908,41 +1622,71 @@ def _store_dd_report(
     return row.get("reportId"), row.get("createdAt")
 
 
+def _get_pdf_font_name() -> str:
+    candidates = [
+        ("FSGeorgianSylfaen", r"C:\Windows\Fonts\sylfaen.ttf"),
+        ("FSUnicodeArial", r"C:\Windows\Fonts\arial.ttf"),
+        ("FSUnicodeSegoe", r"C:\Windows\Fonts\SegUIVar.ttf"),
+    ]
+    for font_name, font_path in candidates:
+        if not os.path.exists(font_path):
+            continue
+        try:
+            if font_name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(font_name, font_path))
+            return font_name
+        except Exception:
+            continue
+    return "Helvetica"
+
+
+def _pdf_escape(value: object) -> str:
+    return html_lib.escape("" if value is None else str(value)).replace("\n", "<br/>")
+
+
+def _pdf_paragraph(value: object, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(_pdf_escape(value), style)
+
 def _build_report_pdf(report: Dict[str, object]) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=LETTER, title="Due Diligence Report")
     styles = getSampleStyleSheet()
-    title_style = styles["Title"]
-    header_style = ParagraphStyle("Header", parent=styles["Heading2"], spaceAfter=6)
-    body_style = styles["BodyText"]
+    pdf_font = _get_pdf_font_name()
+    title_style = ParagraphStyle("TitleUnicode", parent=styles["Title"], fontName=pdf_font)
+    header_style = ParagraphStyle("Header", parent=styles["Heading2"], fontName=pdf_font, spaceAfter=6)
+    body_style = ParagraphStyle("BodyUnicode", parent=styles["BodyText"], fontName=pdf_font)
     mono_style = ParagraphStyle(
-        "Mono", parent=styles["BodyText"], fontName="Courier", fontSize=9, leading=11
+        "Mono", parent=styles["BodyText"], fontName=pdf_font, fontSize=9, leading=11
     )
 
     summary = report.get("summary") or {}
     rationale = summary.get("risk_rationale") or []
     warnings = report.get("warnings") or []
     wikidata = report.get("wikidata") or []
+    wikipedia = report.get("wikipedia") or []
     opensanctions = report.get("opensanctions") or []
     news = report.get("news") or []
+    declarations = report.get("declarations") or []
     sources = ", ".join(report.get("sources") or [])
 
     story = [
         Paragraph("Due Diligence Report", title_style),
-        Paragraph(f"Subject: <b>{report.get('subject')}</b>", body_style),
-        Paragraph(f"Type: {report.get('subjectType')}", body_style),
-        Paragraph(f"Generated: {report.get('createdAt')}", body_style),
+        Paragraph(f"Subject: <b>{_pdf_escape(report.get('subject'))}</b>", body_style),
+        Paragraph(f"Type: {_pdf_escape(report.get('subjectType'))}", body_style),
+        Paragraph(f"Generated: {_pdf_escape(report.get('createdAt'))}", body_style),
         Spacer(1, 10),
     ]
 
     summary_table = Table(
         [
-            ["Risk level", summary.get("risk_level", "Unknown")],
-            ["Total hits", summary.get("total_hits", 0)],
-            ["Wikidata hits", summary.get("wikidata_hits", 0)],
-            ["OpenSanctions hits", summary.get("opensanctions_hits", 0)],
-            ["News hits", summary.get("news_hits", 0)],
-            ["Sources", sources or "—"],
+            ["Risk level", _pdf_paragraph(summary.get("risk_level", "Unknown"), body_style)],
+            ["Total hits", _pdf_paragraph(summary.get("total_hits", 0), body_style)],
+            ["Wikipedia hits", _pdf_paragraph(summary.get("wikipedia_hits", 0), body_style)],
+            ["Wikidata hits", _pdf_paragraph(summary.get("wikidata_hits", 0), body_style)],
+            ["OpenSanctions hits", _pdf_paragraph(summary.get("opensanctions_hits", 0), body_style)],
+            ["News hits", _pdf_paragraph(summary.get("news_hits", 0), body_style)],
+            ["Declaration hits", _pdf_paragraph(summary.get("declaration_hits", 0), body_style)],
+            ["Sources", _pdf_paragraph(sources or "-", body_style)],
         ],
         colWidths=[140, 360],
     )
@@ -952,7 +1696,7 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
                 ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
                 ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTNAME", (0, 0), (-1, -1), pdf_font),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
@@ -962,22 +1706,48 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
 
     if rationale:
         story.append(Paragraph("Risk rationale", header_style))
-        rationale_text = "<br/>".join([str(item) for item in rationale])
+        rationale_text = "<br/>".join([_pdf_escape(item) for item in rationale])
         story.append(Paragraph(rationale_text, body_style))
         story.append(Spacer(1, 12))
 
     if warnings:
         story.append(Paragraph("Warnings", header_style))
-        warning_text = "<br/>".join([str(w) for w in warnings])
+        warning_text = "<br/>".join([_pdf_escape(w) for w in warnings])
         story.append(Paragraph(warning_text, body_style))
         story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Wikipedia Findings", header_style))
+    if wikipedia:
+        rows = [["Title", "Summary", "URL"]]
+        for row in wikipedia:
+            rows.append([
+                _pdf_paragraph(row.get("title") or "", body_style),
+                _pdf_paragraph(row.get("summary") or "", body_style),
+                _pdf_paragraph(row.get("url") or "", body_style),
+            ])
+        table = Table(rows, colWidths=[140, 250, 110])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("FONTNAME", (0, 0), (-1, -1), pdf_font),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(table)
+    else:
+        story.append(Paragraph("No Wikipedia matches.", body_style))
+    story.append(Spacer(1, 12))
 
     story.append(Paragraph("Wikidata Findings", header_style))
     if wikidata:
         rows = [["Label", "Description", "URL"]]
         for row in wikidata:
             rows.append(
-                [row.get("label") or "", row.get("description") or "", row.get("url") or ""]
+                [
+                    _pdf_paragraph(row.get("label") or "", body_style),
+                    _pdf_paragraph(row.get("description") or "", body_style),
+                    _pdf_paragraph(row.get("url") or "", body_style),
+                ]
             )
         table = Table(rows, colWidths=[140, 250, 110])
         table.setStyle(
@@ -985,6 +1755,7 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]
@@ -1001,13 +1772,16 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         for row in opensanctions:
             rows.append(
                 [
-                    row.get("name") or "",
-                    row.get("schema") or "",
-                    ", ".join(row.get("datasets") or []),
-                    ", ".join(row.get("topics") or []),
-                    f"{row.get('score'):.2f}"
-                    if isinstance(row.get("score"), (int, float))
-                    else "",
+                    _pdf_paragraph(row.get("name") or "", body_style),
+                    _pdf_paragraph(row.get("schema") or "", body_style),
+                    _pdf_paragraph(", ".join(row.get("datasets") or []), body_style),
+                    _pdf_paragraph(", ".join(row.get("topics") or []), body_style),
+                    _pdf_paragraph(
+                        f"{row.get('score'):.2f}"
+                        if isinstance(row.get("score"), (int, float))
+                        else "",
+                        body_style,
+                    ),
                 ]
             )
         table = Table(rows, colWidths=[140, 70, 120, 120, 50])
@@ -1016,6 +1790,7 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]
@@ -1032,10 +1807,13 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         for row in news:
             rows.append(
                 [
-                    row.get("title") or "",
-                    row.get("source") or "",
-                    row.get("publishedAt") or "",
-                    f"{row.get('tone'):.2f}" if isinstance(row.get("tone"), (int, float)) else "",
+                    _pdf_paragraph(row.get("title") or "", body_style),
+                    _pdf_paragraph(row.get("source") or "", body_style),
+                    _pdf_paragraph(row.get("publishedAt") or "", body_style),
+                    _pdf_paragraph(
+                        f"{row.get('tone'):.2f}" if isinstance(row.get("tone"), (int, float)) else "",
+                        body_style,
+                    ),
                 ]
             )
         table = Table(rows, colWidths=[260, 120, 80, 50])
@@ -1044,6 +1822,7 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]
@@ -1054,16 +1833,56 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         story.append(Paragraph("No recent news found.", body_style))
 
     story.append(Spacer(1, 12))
+    story.append(Paragraph("Asset Declaration Findings", header_style))
+    if declarations:
+        rows = [["Name", "Organization", "Submitted", "Key counts"]]
+        for row in declarations:
+            counts = ((row.get("summary") or {}).get("counts") or {})
+            key_counts = ", ".join(
+                f"{label}: {counts.get(key, 0)}"
+                for label, key in [
+                    ("Properties", "properties"),
+                    ("Bank", "bankAccounts"),
+                    ("Jobs", "jobs"),
+                    ("Contracts", "contracts"),
+                    ("Family", "familyMembers"),
+                ]
+            )
+            rows.append(
+                [
+                    _pdf_paragraph(row.get("name") or "", body_style),
+                    _pdf_paragraph(row.get("organization") or "", body_style),
+                    _pdf_paragraph(row.get("declarationSubmitDate") or row.get("dateEdited") or "", body_style),
+                    _pdf_paragraph(key_counts, body_style),
+                ]
+            )
+        table = Table(rows, colWidths=[130, 170, 80, 130])
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        story.append(table)
+    else:
+        story.append(Paragraph("No asset declarations found.", body_style))
+
+    story.append(Spacer(1, 12))
     story.append(Paragraph("Raw Sources", header_style))
     story.append(
         Paragraph(
-            "This report summarizes public sources (Wikidata, OpenSanctions, GDELT). "
+            "This report summarizes public sources (Wikipedia, OpenSanctions, Georgian media, and asset declarations). "
             "Always validate matches with human review before decisions.",
             body_style,
         )
     )
     story.append(Spacer(1, 10))
-    story.append(Paragraph(json.dumps(report, indent=2), mono_style))
+    story.append(_pdf_paragraph(json.dumps(report, indent=2, ensure_ascii=False), mono_style))
 
     doc.build(story)
     return buffer.getvalue()
@@ -1196,6 +2015,405 @@ def watchlist_matches(
     return [item[1] for item in scored[: int(limit)]]
 
 
+@router.get("/media-sources", response_model=List[MediaSourceOut])
+def list_media_sources():
+    return _media_source_models()
+
+
+@router.get("/meta-content-library", response_model=MetaContentLibraryInfoOut)
+def meta_content_library_info():
+    return {
+        "status": "research_access_required",
+        "fitForDueDiligence": (
+            "Strong fit for public narrative, misinformation, amplification, and relationship evidence "
+            "once approved access is available. It should be treated as a controlled source, not a default public feed."
+        ),
+        "eligibleUsers": (
+            "Meta says applicants need affiliation with an academic institution or a non-profit/public-interest "
+            "research organization; applications are independently reviewed by CASD."
+        ),
+        "accessSteps": [
+            "Confirm the research program and organization eligibility.",
+            "Apply through Meta Research Tools Manager from a desktop/laptop.",
+            "If approved, use Meta Content Library for manual review and Content Library API for Python/R analysis in the approved secure environment.",
+            "Export only allowed evidence/aggregate findings and attach source links or approved references to due diligence profiles.",
+        ],
+        "integrationPlan": [
+            "Keep this app connector-gated until credentials/access are approved.",
+            "Model Meta results with the same Profile, MediaArticle, MediaMention, and Quote objects used for Netgazeti.",
+            "Add a visibility limitation warning whenever Meta access is unavailable or incomplete.",
+        ],
+        "limitations": [
+            "Not a simple open API for general commercial scraping.",
+            "API use happens inside approved secure computing environments.",
+            "Public content coverage varies by platform, account type, follower threshold, geography, and available fields.",
+        ],
+        "sourceUrl": "https://transparency.meta.com/researchtools/meta-content-library/",
+    }
+
+
+@router.post("/media-monitor", response_model=MediaMonitorOut)
+def media_monitor(payload: MediaMonitorRequest):
+    subject = payload.subject.strip()
+    if not subject:
+        raise HTTPException(status_code=400, detail="Subject is required")
+    subject_type = _normalize_subject_type(payload.subject_type)
+    topics = [str(item or "").strip() for item in payload.topics if str(item or "").strip()]
+    source_ids = payload.source_ids or ["netgazeti"]
+    warnings: List[str] = []
+    mentions: List[MediaMentionOut] = []
+    enabled_sources = _media_source_models(source_ids)
+    unknown_sources = [source_id for source_id in source_ids if source_id not in _media_sources()]
+    if unknown_sources:
+        warnings.append(f"Unknown media source ids ignored: {', '.join(unknown_sources)}")
+
+    media_fetchers = {
+        "netgazeti": _fetch_netgazeti_media_mentions,
+        "publika": _fetch_publika_media_mentions,
+        "interpressnews": _fetch_interpressnews_media_mentions,
+    }
+    for source_id, fetcher in media_fetchers.items():
+        if source_id not in source_ids:
+            continue
+        remaining = max(1, payload.max_results - len(mentions))
+        source_mentions, source_warnings = fetcher(subject, topics, remaining)
+        mentions.extend(source_mentions)
+        warnings.extend(source_warnings)
+
+    if "meta_content_library" in source_ids:
+        warnings.append(
+            "Meta Content Library/API requires approved research access; no live Meta query was run."
+        )
+
+    seen = set()
+    deduped: List[MediaMentionOut] = []
+    for mention in mentions:
+        key = str(mention.url or mention.title or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(mention)
+        if len(deduped) >= payload.max_results:
+            break
+    mentions = deduped
+
+    stored_count = 0
+    if payload.persist and mentions:
+        try:
+            stored_count = _store_media_mentions(
+                subject=subject,
+                subject_type=subject_type,
+                case_id=payload.case_id.strip() if payload.case_id else None,
+                topics=topics,
+                mentions=mentions,
+            )
+            for mention in mentions:
+                mention.stored = True
+        except Exception as exc:
+            warnings.append(f"Media evidence was fetched but could not be stored: {exc}")
+
+    if not mentions:
+        warnings.append("No mentions found in the currently available Georgian media sources.")
+    return {
+        "subject": subject,
+        "subjectType": subject_type,
+        "sources": enabled_sources,
+        "mentions": mentions,
+        "warnings": warnings,
+        "storedCount": stored_count,
+    }
+
+
+def _extract_json_payload(text: str) -> Dict[str, object]:
+    raw = str(text or "").strip()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except ValueError:
+        pass
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(raw[start : end + 1])
+        except ValueError:
+            return {}
+    return {}
+
+
+def _compact_dd_evidence(analysis: Optional[Dict[str, object]], media: Optional[Dict[str, object]]) -> Dict[str, object]:
+    analysis = analysis or {}
+    media = media or {}
+    wikidata = list(analysis.get("wikidata") or [])[:5]
+    wikipedia = list(analysis.get("wikipedia") or [])[:5]
+    opensanctions = list(analysis.get("opensanctions") or [])[:5]
+    news = list(analysis.get("news") or [])[:10]
+    declarations = list(analysis.get("declarations") or [])[:5]
+    mentions = list(media.get("mentions") or [])[:12]
+    evidence: List[Dict[str, str]] = []
+    for row in news:
+        evidence.append({
+            "source": str(row.get("source") or "News/Web"),
+            "title": str(row.get("title") or "Untitled"),
+            "url": str(row.get("url") or ""),
+            "date": str(row.get("publishedAt") or row.get("published_at") or ""),
+            "snippet": "",
+        })
+    for row in mentions:
+        evidence.append({
+            "source": str(row.get("source") or "Media"),
+            "title": str(row.get("title") or "Untitled"),
+            "url": str(row.get("url") or ""),
+            "date": str(row.get("publishedAt") or row.get("published_at") or ""),
+            "snippet": str(row.get("snippet") or "")[:500],
+        })
+    return {
+        "summary": analysis.get("summary") or {},
+        "warnings": list(analysis.get("warnings") or []) + list(media.get("warnings") or []),
+        "wikidata": wikidata,
+        "wikipedia": wikipedia,
+        "opensanctions": opensanctions,
+        "declarations": declarations,
+        "news": news,
+        "media_mentions": mentions,
+        "evidence": evidence[:18],
+    }
+
+
+def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dict[str, object], warnings: List[str]) -> Dict[str, object]:
+    summary = compact.get("summary") or {}
+    wikidata = compact.get("wikidata") or []
+    wikipedia = compact.get("wikipedia") or []
+    opensanctions = compact.get("opensanctions") or []
+    evidence = compact.get("evidence") or []
+    risk_level = str(summary.get("risk_level") or "Unknown")
+    total_hits = int(summary.get("total_hits") or len(evidence) or 0)
+    topic_l = topic.lower().strip()
+    topic_hits = []
+    for row in evidence:
+        haystack = " ".join([str(row.get("title") or ""), str(row.get("snippet") or "")]).lower()
+        if topic_l and topic_l != "general" and topic_l in haystack:
+            topic_hits.append(row)
+    if not topic_hits:
+        topic_hits = evidence[:5]
+    key_findings = [
+        f"{subject} has {total_hits} public-source hit(s) across the selected DD sources.",
+        f"Current automated risk level is {risk_level} based on watchlist, sanctions, Wikipedia, declarations, and media signals.",
+    ]
+    if wikipedia:
+        key_findings.append(f"Wikipedia returned {len(wikipedia)} profile/context match(es); verify the exact article before relying on it.")
+    if wikidata:
+        key_findings.append(f"Wikidata returned {len(wikidata)} identity/context match(es); verify the exact entity before relying on them.")
+    if opensanctions:
+        key_findings.append(f"OpenSanctions returned {len(opensanctions)} possible match(es); manual disambiguation is required.")
+    key_findings.append(f"For topic '{topic}', the report selected {len(topic_hits)} relevant media/news item(s) from the raw scan.")
+    executive = (
+        f"This due diligence report synthesizes raw public-source material for {subject} ({subject_type}) "
+        f"with focus on '{topic}'. The current signal is {risk_level}. Treat the output as an analyst brief: "
+        "it organizes evidence and highlights verification needs, but it does not replace human review."
+    )
+    topic_assessment = (
+        f"The loaded material contains {len(topic_hits)} item(s) useful for assessing the subject against the topic '{topic}'. "
+        "Prioritize direct article links, dates, and quotes when deciding whether the evidence supports a claim."
+    )
+    risk_assessment = (
+        f"Automated risk level: {risk_level}. Higher risk should be assigned only when source links confirm identity, relevance, "
+        "and adverse content. Ambiguous name matches should remain in review."
+    )
+    actions = [
+        "Open each cited source and confirm the subject identity.",
+        f"Tag evidence by topic '{topic}' and separate direct quotes from article summaries.",
+        "Manually review any OpenSanctions match before using it in a decision.",
+    ]
+    caveats = [
+        "This report only uses evidence currently loaded in the DD module.",
+        "Media search coverage is incomplete and can be affected by rate limits, transliteration, and source availability.",
+        "Public-source matches can be false positives for common names or organizations.",
+    ]
+    evidence_table = [
+        {
+            "id": f"E{idx + 1}",
+            "source": str(row.get("source") or "Evidence"),
+            "date": str(row.get("date") or ""),
+            "claim": str(row.get("title") or row.get("snippet") or ""),
+            "url": str(row.get("url") or ""),
+        }
+        for idx, row in enumerate(topic_hits[:8])
+    ]
+    sections = [
+        {"heading": "Executive Summary", "paragraphs": [executive]},
+        {"heading": f"Topic Assessment: {topic}", "paragraphs": [topic_assessment], "evidenceRefs": [row.get("id") for row in evidence_table]},
+        {"heading": "Risk Assessment", "paragraphs": [risk_assessment]},
+        {"heading": "Recommended Actions", "bullets": actions},
+        {"heading": "Limitations", "bullets": caveats},
+    ]
+    return {
+        "subject": subject,
+        "subjectType": subject_type,
+        "topic": topic,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "mode": "fallback-structured",
+        "reportTitle": f"Due Diligence Report: {subject}",
+        "classification": "Internal review",
+        "reportMetadata": {
+            "subject": subject,
+            "subjectType": subject_type,
+            "topic": topic,
+            "riskLevel": risk_level,
+            "totalHits": total_hits,
+        },
+        "sections": sections,
+        "evidenceTable": evidence_table,
+        "limitations": caveats,
+        "executiveSummary": executive,
+        "keyFindings": key_findings,
+        "topicAssessment": topic_assessment,
+        "riskAssessment": risk_assessment,
+        "evidence": topic_hits[:8],
+        "recommendedActions": actions,
+        "caveats": caveats,
+        "warnings": warnings,
+    }
+
+
+def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dict[str, object]) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
+    api_key = (
+        os.getenv("DD_LLM_API_KEY", "").strip()
+        or os.getenv("OPENAI_API_KEY", "").strip()
+        or os.getenv("LLM_API_KEY", "").strip()
+    )
+    api_url = (
+        os.getenv("DD_LLM_API_URL", "").strip()
+        or os.getenv("OPENAI_CHAT_COMPLETIONS_URL", "").strip()
+        or os.getenv("LLM_API_URL", "").strip()
+        or ("https://api.openai.com/v1/chat/completions" if api_key else "")
+    )
+    model = (
+        os.getenv("DD_LLM_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
+        or os.getenv("LLM_MODEL", "").strip()
+        or "gpt-4.1-mini"
+    )
+    if not api_key or not api_url:
+        return None, "LLM is not configured; generated a structured non-LLM report."
+    prompt = {
+        "task": "Draft a decision-ready due diligence report from the supplied evidence only.",
+        "outputContract": {
+            "format": "Return one valid JSON object only. No markdown, no prose outside JSON.",
+            "schema": {
+                "reportTitle": "Due Diligence Report: <subject>",
+                "classification": "Internal review",
+                "reportMetadata": {"subject": "string", "subjectType": "string", "topic": "string", "riskLevel": "string", "generatedFor": "string"},
+                "sections": [
+                    {"heading": "Executive Summary", "paragraphs": ["ready-to-render report paragraphs"], "bullets": [], "evidenceRefs": []},
+                    {"heading": "Profile and Source Coverage", "paragraphs": ["what sources returned and what did not"], "bullets": [], "evidenceRefs": []},
+                    {"heading": "Topic Assessment: <topic>", "paragraphs": ["topic-specific assessment"], "bullets": [], "evidenceRefs": ["E1"]},
+                    {"heading": "Risk Assessment", "paragraphs": ["risk interpretation with confidence limits"], "bullets": [], "evidenceRefs": []}
+                ],
+                "evidenceTable": [{"id": "E1", "source": "string", "date": "string", "claim": "short evidence claim", "url": "string"}],
+                "limitations": ["coverage gaps, ambiguity, rate limits, language/transliteration issues, or false-positive risks"],
+                "recommendedActions": ["specific verification or follow-up actions"],
+                "executiveSummary": "same content as Executive Summary, retained for compatibility",
+                "keyFindings": ["4-8 source-backed findings; retained for compatibility"],
+                "topicAssessment": "same content as topic section, retained for compatibility",
+                "riskAssessment": "same content as risk section, retained for compatibility",
+                "evidence": [{"source": "string", "title": "string", "url": "string", "date": "string", "snippet": "short evidence note"}],
+                "caveats": ["same content as limitations, retained for compatibility"],
+            },
+        },
+        "subject": subject,
+        "subjectType": subject_type,
+        "topic": topic,
+        "configuredSources": [
+            "Wikipedia for profile/background context",
+            "OpenSanctions for sanctions/PEP/watchlist signals",
+            "Georgian asset declarations from declaration.acb.gov.ge",
+            "Georgian media: Netgazeti, Publika, Interpressnews",
+        ],
+        "rawEvidence": compact,
+        "analysisRules": [
+            "Use only facts present in rawEvidence. Do not invent facts, quotes, dates, sanctions, assets, relationships, or allegations.",
+            "Treat OpenSanctions results as possible matches until identity is verified; never state a sanctions/PEP match as confirmed unless the supplied evidence clearly supports it.",
+            "Treat asset declarations as self-declared public records. Summarize what is declared, and recommend cross-checking against media, sanctions, and official sources.",
+            "Keep Georgian titles, organization names, and quotes in Georgian when present. You may explain their relevance in English.",
+            "Separate evidence from interpretation: every key finding should be traceable to Wikipedia, OpenSanctions, declarations, or a named media source.",
+            "If the selected topic is not directly supported by the evidence, say so clearly instead of stretching unrelated material.",
+            "Prefer cautious analyst language: possible, reported, declared, appears, requires verification. Avoid legal conclusions or defamatory phrasing.",
+            "Prioritize recent, source-linked evidence, but mention important older declaration or sanctions records when relevant.",
+            "If evidence is thin or sources returned zero results, make that a caveat and propose next verification steps.",
+        ],
+        "styleGuide": [
+            "Concise, professional, readable for a non-technical decision maker.",
+            "No generic filler. Each sentence should add a finding, limitation, or action.",
+            "Do not overstate automated risk scores; explain what drove the signal.",
+        ],
+    }
+    try:
+        response = requests.post(
+            api_url,
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are a careful due diligence analyst preparing neutral, source-grounded reports. You must return valid JSON only and must not invent unsupported facts."},
+                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                ],
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+            },
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=float(os.getenv("DD_LLM_TIMEOUT", "8")),
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = _extract_json_payload(content)
+        if not parsed:
+            return None, "LLM returned an empty or invalid JSON report; generated fallback report."
+        parsed["mode"] = f"ai:{model}"
+        return parsed, None
+    except Exception as exc:
+        return None, f"LLM report failed ({type(exc).__name__}); generated fallback report."
+
+@router.post("/ai-report", response_model=DueDiligenceAiReportOut)
+def generate_due_diligence_ai_report(payload: DueDiligenceAiReportRequest):
+    subject = payload.subject.strip()
+    if not subject:
+        raise HTTPException(status_code=400, detail="Subject is required")
+    subject_type = _normalize_subject_type(payload.subject_type)
+    topic = payload.topic.strip() or "General"
+    compact = _compact_dd_evidence(payload.analysis, payload.media)
+    warnings = [str(w) for w in (compact.get("warnings") or []) if str(w).strip()]
+    ai_report, ai_warning = _call_dd_ai_report(subject, subject_type, topic, compact)
+    if ai_warning:
+        warnings.append(ai_warning)
+    if not ai_report:
+        return _fallback_dd_ai_report(subject, subject_type, topic, compact, warnings)
+    fallback = _fallback_dd_ai_report(subject, subject_type, topic, compact, warnings)
+    return {
+        "subject": subject,
+        "subjectType": subject_type,
+        "topic": topic,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "mode": str(ai_report.get("mode") or "ai"),
+        "reportTitle": str(ai_report.get("reportTitle") or fallback.get("reportTitle") or f"Due Diligence Report: {subject}"),
+        "classification": str(ai_report.get("classification") or fallback.get("classification") or "Internal review"),
+        "reportMetadata": dict(ai_report.get("reportMetadata") or fallback.get("reportMetadata") or {}),
+        "sections": list(ai_report.get("sections") or fallback.get("sections") or [])[:8],
+        "evidenceTable": list(ai_report.get("evidenceTable") or fallback.get("evidenceTable") or [])[:12],
+        "limitations": [str(item) for item in (ai_report.get("limitations") or ai_report.get("caveats") or fallback.get("limitations") or fallback["caveats"])] [:8],
+        "executiveSummary": str(ai_report.get("executiveSummary") or fallback["executiveSummary"]),
+        "keyFindings": [str(item) for item in (ai_report.get("keyFindings") or fallback["keyFindings"])] [:8],
+        "topicAssessment": str(ai_report.get("topicAssessment") or fallback["topicAssessment"]),
+        "riskAssessment": str(ai_report.get("riskAssessment") or fallback["riskAssessment"]),
+        "evidence": list(ai_report.get("evidence") or fallback["evidence"])[:10],
+        "recommendedActions": [str(item) for item in (ai_report.get("recommendedActions") or fallback["recommendedActions"])] [:8],
+        "caveats": [str(item) for item in (ai_report.get("caveats") or fallback["caveats"])] [:8],
+        "warnings": warnings,
+    }
+
+
+
 @router.post("/analyze", response_model=DueDiligenceAnalysisOut)
 def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     subject = payload.subject.strip()
@@ -1204,12 +2422,21 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     case_id = payload.case_id.strip() if payload.case_id else None
     subject_type = _normalize_subject_type(payload.subject_type)
     warnings: List[str] = []
+    source_notes: List[str] = []
     wikidata_results: List[WikidataResult] = []
+    wikipedia_results: List[WikipediaResult] = []
     opensanctions_results: List[OpenSanctionsResult] = []
     news_results: List[NewsResult] = []
+    declaration_results: List[AssetDeclarationResult] = []
+    local_media_used = False
 
     if payload.use_wikidata:
         wikidata_results, error = _wikidata_search(subject)
+        if error:
+            warnings.append(error)
+
+    if payload.use_wikipedia:
+        wikipedia_results, error = _wikipedia_search(subject)
         if error:
             warnings.append(error)
 
@@ -1222,30 +2449,69 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         news_results, error = _gdelt_news_search(subject, payload.max_news)
         if error:
             warnings.append(error)
+        if not news_results:
+            local_news, local_warnings = _local_media_news_search(subject, payload.max_news)
+            if local_news:
+                news_results = local_news
+                local_media_used = True
+            warnings.extend(local_warnings)
 
-    if payload.demo and not (wikidata_results or opensanctions_results or news_results):
+    if payload.use_declarations:
+        declaration_results, error = _asset_declaration_search(subject)
+        if error:
+            warnings.append(error)
+
+    if payload.demo and (payload.use_wikidata or payload.use_wikipedia or payload.use_opensanctions or payload.use_news) and not (
+        wikidata_results or wikipedia_results or opensanctions_results or news_results or declaration_results
+    ):
         demo = _demo_results(subject)
-        wikidata_results = [WikidataResult(**row) for row in demo["wikidata"]]
-        opensanctions_results = [OpenSanctionsResult(**row) for row in demo["opensanctions"]]
-        news_results = [NewsResult(**row) for row in demo["news"]]
-        warnings.append("Demo data used for external sources.")
+        if payload.use_wikidata:
+            wikidata_results = [WikidataResult(**row) for row in demo["wikidata"]]
+        if payload.use_opensanctions:
+            opensanctions_results = [OpenSanctionsResult(**row) for row in demo["opensanctions"]]
+        if payload.use_news:
+            news_results = [NewsResult(**row) for row in demo["news"]]
+        warnings.append("Demo data used for selected external sources.")
 
-    summary = _build_summary(wikidata_results, opensanctions_results, news_results, warnings)
+    if local_media_used:
+        kept_warnings: List[str] = []
+        for warning in warnings:
+            if warning.startswith("GDELT is temporarily rate-limiting"):
+                source_notes.append("GDELT is temporarily rate-limited; Netgazeti was used instead.")
+            elif warning.startswith("Local media fallback used configured Georgian media sources"):
+                source_notes.append("Configured Georgian media sources matched the subject using local aliases/transliterations.")
+            else:
+                kept_warnings.append(warning)
+        warnings = kept_warnings
+
+    summary = _build_summary(wikidata_results, wikipedia_results, opensanctions_results, news_results, declaration_results, warnings)
+    if payload.use_news:
+        summary["news_source"] = "GDELT + Georgian media" if local_media_used else "GDELT"
+    if source_notes:
+        summary["source_notes"] = source_notes
     sources = []
     if payload.use_wikidata:
         sources.append("Wikidata")
+    if payload.use_wikipedia:
+        sources.append("Wikipedia")
     if payload.use_opensanctions:
         sources.append("OpenSanctions")
     if payload.use_news:
         sources.append("GDELT")
+        if local_media_used:
+            sources.extend(["Netgazeti", "Publika", "Interpressnews"])
+    if payload.use_declarations:
+        sources.append("Asset Declarations")
 
     payload_blob = {
         "subject": subject,
         "subjectType": subject_type,
         "caseId": case_id,
         "wikidata": [row.dict(by_alias=True) for row in wikidata_results],
+        "wikipedia": [row.dict(by_alias=True) for row in wikipedia_results],
         "opensanctions": [row.dict(by_alias=True) for row in opensanctions_results],
         "news": [row.dict(by_alias=True) for row in news_results],
+        "declarations": [row.dict(by_alias=True) for row in declaration_results],
         "summary": summary,
         "warnings": warnings,
         "sources": sources,
@@ -1264,8 +2530,10 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         "subjectType": subject_type,
         "caseId": case_id,
         "wikidata": wikidata_results,
+        "wikipedia": wikipedia_results,
         "opensanctions": opensanctions_results,
         "news": news_results,
+        "declarations": declaration_results,
         "summary": summary,
         "warnings": warnings,
         "reportId": report_id,
@@ -1351,6 +2619,14 @@ def debate_prep(payload: DebatePrepRequest):
     }
 
 
+
+def _case_display_subject(subject: Optional[str], subject_georgian: Optional[str], subject_english: Optional[str]) -> str:
+    current = str(subject or "").strip()
+    ka = str(subject_georgian or "").strip()
+    en = str(subject_english or "").strip()
+    return current or ka or en
+
+
 @router.get("/cases", response_model=List[DueDiligenceCaseOut])
 def list_due_diligence_cases(
     status: Optional[str] = Query(None),
@@ -1365,7 +2641,12 @@ def list_due_diligence_cases(
     query = """
     MATCH (c:DueDiligenceCase)
     WHERE ($status IS NULL OR c.status = $status)
-      AND ($subject IS NULL OR toLower(c.subject) CONTAINS toLower($subject))
+      AND (
+        $subject IS NULL
+        OR toLower(coalesce(c.subject, '')) CONTAINS toLower($subject)
+        OR toLower(coalesce(c.subjectGeorgian, '')) CONTAINS toLower($subject)
+        OR toLower(coalesce(c.subjectEnglish, '')) CONTAINS toLower($subject)
+      )
     OPTIONAL MATCH (c)-[:HAS_DD_REPORT]->(r:DueDiligenceReport)
     WITH c, r ORDER BY r.createdAt DESC
     WITH c, collect(r)[0] AS latest
@@ -1375,6 +2656,8 @@ def list_due_diligence_cases(
     RETURN
       c.caseId AS caseId,
       c.subject AS subject,
+      coalesce(c.subjectGeorgian, '') AS subjectGeorgian,
+      coalesce(c.subjectEnglish, '') AS subjectEnglish,
       c.subjectType AS subjectType,
       c.status AS status,
       coalesce(c.owner, '') AS owner,
@@ -1402,9 +2685,11 @@ def list_due_diligence_cases(
 
 @router.post("/cases", response_model=DueDiligenceCaseOut)
 def create_due_diligence_case(payload: DueDiligenceCaseCreate):
-    subject = payload.subject.strip()
+    subject_georgian = str(payload.subject_georgian or "").strip()
+    subject_english = str(payload.subject_english or "").strip()
+    subject = _case_display_subject(payload.subject, subject_georgian, subject_english)
     if not subject:
-        raise HTTPException(status_code=400, detail="Subject is required")
+        raise HTTPException(status_code=400, detail="At least one subject name is required")
     subject_type = _normalize_subject_type(payload.subject_type)
     status = _normalize_case_status(payload.status)
     owner = str(payload.owner or "").strip()
@@ -1413,6 +2698,8 @@ def create_due_diligence_case(payload: DueDiligenceCaseCreate):
     CREATE (c:DueDiligenceCase)
     SET c.caseId = randomUUID(),
         c.subject = $subject,
+        c.subjectGeorgian = $subjectGeorgian,
+        c.subjectEnglish = $subjectEnglish,
         c.subjectType = $subjectType,
         c.status = $status,
         c.owner = $owner,
@@ -1421,6 +2708,8 @@ def create_due_diligence_case(payload: DueDiligenceCaseCreate):
     RETURN
       c.caseId AS caseId,
       c.subject AS subject,
+      coalesce(c.subjectGeorgian, '') AS subjectGeorgian,
+      coalesce(c.subjectEnglish, '') AS subjectEnglish,
       c.subjectType AS subjectType,
       c.status AS status,
       coalesce(c.owner, '') AS owner,
@@ -1436,7 +2725,14 @@ def create_due_diligence_case(payload: DueDiligenceCaseCreate):
         records = _execute_write(
             session,
             query,
-            {"subject": subject, "subjectType": subject_type, "status": status, "owner": owner},
+            {
+                "subject": subject,
+                "subjectGeorgian": subject_georgian,
+                "subjectEnglish": subject_english,
+                "subjectType": subject_type,
+                "status": status,
+                "owner": owner,
+            },
         )
     if not records:
         raise HTTPException(status_code=500, detail="Case creation failed")
@@ -1455,6 +2751,8 @@ def get_due_diligence_case(case_id: str):
     RETURN
       c.caseId AS caseId,
       c.subject AS subject,
+      coalesce(c.subjectGeorgian, '') AS subjectGeorgian,
+      coalesce(c.subjectEnglish, '') AS subjectEnglish,
       c.subjectType AS subjectType,
       c.status AS status,
       coalesce(c.owner, '') AS owner,
@@ -1475,7 +2773,11 @@ def get_due_diligence_case(case_id: str):
 
 @router.patch("/cases/{case_id}", response_model=DueDiligenceCaseOut)
 def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
+    subject_georgian = str(payload.subject_georgian).strip() if payload.subject_georgian is not None else None
+    subject_english = str(payload.subject_english).strip() if payload.subject_english is not None else None
     subject = payload.subject.strip() if payload.subject else None
+    if subject is None and (subject_georgian is not None or subject_english is not None):
+        subject = _case_display_subject(None, subject_georgian, subject_english)
     subject_type = (
         _normalize_subject_type(payload.subject_type) if payload.subject_type else None
     )
@@ -1485,6 +2787,8 @@ def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
     query = """
     MATCH (c:DueDiligenceCase {caseId: $caseId})
     SET c.subject = coalesce($subject, c.subject),
+        c.subjectGeorgian = coalesce($subjectGeorgian, c.subjectGeorgian),
+        c.subjectEnglish = coalesce($subjectEnglish, c.subjectEnglish),
         c.subjectType = coalesce($subjectType, c.subjectType),
         c.status = coalesce($status, c.status),
         c.owner = coalesce($owner, c.owner),
@@ -1497,6 +2801,8 @@ def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
     RETURN
       c.caseId AS caseId,
       c.subject AS subject,
+      coalesce(c.subjectGeorgian, '') AS subjectGeorgian,
+      coalesce(c.subjectEnglish, '') AS subjectEnglish,
       c.subjectType AS subjectType,
       c.status AS status,
       coalesce(c.owner, '') AS owner,
@@ -1515,6 +2821,8 @@ def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
             {
                 "caseId": case_id,
                 "subject": subject,
+                "subjectGeorgian": subject_georgian,
+                "subjectEnglish": subject_english,
                 "subjectType": subject_type,
                 "status": status,
                 "owner": owner,
@@ -1523,6 +2831,30 @@ def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
     if not records:
         raise HTTPException(status_code=404, detail="Case not found")
     return records[0].data()
+
+
+@router.post("/cases/{case_id}/archive", response_model=DueDiligenceCaseOut)
+def archive_due_diligence_case(case_id: str):
+    return update_due_diligence_case(
+        case_id,
+        DueDiligenceCaseUpdate(status="Archived"),
+    )
+
+
+@router.delete("/cases/{case_id}")
+def delete_due_diligence_case(case_id: str):
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    DETACH DELETE c
+    RETURN count(c) AS deleted
+    """
+    with _db_session(driver) as session:
+        records = _execute_write(session, query, {"caseId": case_id})
+    deleted = int(records[0].get("deleted") or 0) if records else 0
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return {"deleted": True, "caseId": case_id}
 
 
 @router.get("/cases/{case_id}/tasks", response_model=List[DueDiligenceTaskOut])
@@ -1813,3 +3145,4 @@ def download_due_diligence_report_pdf(report_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+

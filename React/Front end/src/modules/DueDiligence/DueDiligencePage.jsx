@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Group, RingProgress, Text } from '@mantine/core'
 import { IconAlertTriangle, IconFileSearch, IconShieldCheck, IconUsers } from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
@@ -19,6 +19,15 @@ export function DueDiligencePage({
     if (!nextTab) return
     setActiveTab(nextTab)
     if (onTabChange) onTabChange(nextTab)
+  }
+  const getCaseDisplayName = (item) =>
+    item?.subjectGeorgian || item?.subjectEnglish || item?.subject || ''
+  const getCaseSecondaryName = (item) => {
+    const primary = getCaseDisplayName(item)
+    const secondary = [item?.subjectGeorgian, item?.subjectEnglish]
+      .filter(Boolean)
+      .find((value) => value !== primary)
+    return secondary || ''
   }
   const [summary, setSummary] = useState(null)
   const [crmSummary, setCrmSummary] = useState(null)
@@ -52,15 +61,19 @@ export function DueDiligencePage({
   const [casesError, setCasesError] = useState('')
   const [activeCaseId, setActiveCaseId] = useState('')
   const [activeCase, setActiveCase] = useState(null)
+  const [caseSubjectGeorgian, setCaseSubjectGeorgian] = useState('')
+  const [caseSubjectEnglish, setCaseSubjectEnglish] = useState('')
   const [caseSubject, setCaseSubject] = useState('')
   const [caseSubjectType, setCaseSubjectType] = useState('Person')
   const [newCaseOwner, setNewCaseOwner] = useState('')
-  const [newCaseStatus, setNewCaseStatus] = useState('Draft')
   const [caseOwner, setCaseOwner] = useState('')
+  const [subjectGeorgian, setSubjectGeorgian] = useState('')
+  const [subjectEnglish, setSubjectEnglish] = useState('')
   const [caseStatus, setCaseStatus] = useState('Draft')
   const [caseNotice, setCaseNotice] = useState('')
   const [caseCreating, setCaseCreating] = useState(false)
   const [caseSaving, setCaseSaving] = useState(false)
+  const [caseDeleting, setCaseDeleting] = useState(false)
   const [caseTasks, setCaseTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const [taskLabel, setTaskLabel] = useState('')
@@ -84,9 +97,26 @@ export function DueDiligencePage({
   const [debateUseWikipedia, setDebateUseWikipedia] = useState(true)
   const [debateUseGoogle, setDebateUseGoogle] = useState(true)
   const [debateUseLocalMedia, setDebateUseLocalMedia] = useState(true)
-  const [useWikidata, setUseWikidata] = useState(true)
+  const [mediaSources, setMediaSources] = useState([])
+  const [mediaSubject, setMediaSubject] = useState('')
+  const [mediaTopics, setMediaTopics] = useState('')
+  const [mediaMaxResults, setMediaMaxResults] = useState(12)
+  const [mediaUsePublika, setMediaUsePublika] = useState(true)
+  const [mediaUseInterpressnews, setMediaUseInterpressnews] = useState(true)
+  const [mediaUseMeta, setMediaUseMeta] = useState(false)
+  const [mediaLoading, setMediaLoading] = useState(false)
+  const [mediaError, setMediaError] = useState('')
+  const [mediaResult, setMediaResult] = useState(null)
+  const [aiReportTopic, setAiReportTopic] = useState('education')
+  const [aiReportLoading, setAiReportLoading] = useState(false)
+  const [aiReportError, setAiReportError] = useState('')
+  const [aiReport, setAiReport] = useState(null)
+  const [metaInfo, setMetaInfo] = useState(null)
+  const [useWikidata, setUseWikidata] = useState(false)
+  const [useWikipedia, setUseWikipedia] = useState(true)
   const [useOpenSanctions, setUseOpenSanctions] = useState(true)
   const [useNews, setUseNews] = useState(true)
+  const [useDeclarations, setUseDeclarations] = useState(true)
   const [useDemo, setUseDemo] = useState(true)
   const [ddAppUrl, setDdAppUrl] = useState(
     () => localStorage.getItem('ddAppUrl') || '',
@@ -206,6 +236,26 @@ export function DueDiligencePage({
     loadCases()
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+    Promise.all([
+      getJson('/due-diligence/media-sources'),
+      getJson('/due-diligence/meta-content-library'),
+    ])
+      .then(([sourcesPayload, metaPayload]) => {
+        if (!mounted) return
+        setMediaSources(Array.isArray(sourcesPayload) ? sourcesPayload : [])
+        setMetaInfo(metaPayload || null)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setMediaSources([])
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const loadCompetitors = () => {
     setError('')
     getJson('/due-diligence/competitors?limit=50')
@@ -261,13 +311,17 @@ export function DueDiligencePage({
       setActiveCaseId('')
       setActiveCase(null)
       setSubjectName('')
+      setSubjectGeorgian('')
+      setSubjectEnglish('')
       setSubjectType('Person')
       setCaseStatus('Draft')
       setCaseOwner('')
       return
     }
     setActiveCase(found)
-    setSubjectName(found.subject || '')
+    setSubjectName(getCaseDisplayName(found))
+    setSubjectGeorgian(found.subjectGeorgian || '')
+    setSubjectEnglish(found.subjectEnglish || '')
     setSubjectType(found.subjectType || 'Person')
     setStartMode('Analysis')
     setCaseStatus(found.status || 'Draft')
@@ -293,15 +347,19 @@ export function DueDiligencePage({
   const handleClearCase = () => {
     setActiveCaseId('')
     setActiveCase(null)
+    setSubjectGeorgian('')
+    setSubjectEnglish('')
     setCaseStatus('Draft')
     setCaseOwner('')
     setCaseNotice('Case selection cleared. You can start a new case.')
-    setCaseTasks([])
   }
 
   const handleCreateCase = async () => {
-    if (!caseSubject.trim()) {
-      setCaseNotice('Enter a subject to create a case.')
+    const subjectGeorgian = caseSubjectGeorgian.trim()
+    const subjectEnglish = caseSubjectEnglish.trim()
+    const subject = subjectGeorgian || subjectEnglish || caseSubject.trim()
+    if (!subject) {
+      setCaseNotice('Enter Georgian or English subject name to create a case.')
       return
     }
     setCaseCreating(true)
@@ -310,26 +368,30 @@ export function DueDiligencePage({
       const payload = await requestJson('/due-diligence/cases', {
         method: 'POST',
         payload: {
-          subject: caseSubject.trim(),
+          subject,
+          subjectGeorgian,
+          subjectEnglish,
           subjectType: caseSubjectType,
           owner: newCaseOwner.trim(),
-          status: newCaseStatus || 'Draft',
+          status: 'Draft',
         },
       })
       setCases((prev) => [payload, ...prev])
       setActiveCaseId(payload.caseId)
       setActiveCase(payload)
-      setSubjectName(payload.subject || '')
+      setSubjectName(getCaseDisplayName(payload))
+      setSubjectGeorgian(payload.subjectGeorgian || '')
+      setSubjectEnglish(payload.subjectEnglish || '')
       setSubjectType(payload.subjectType || 'Person')
       setStartMode('Analysis')
       setCaseStatus(payload.status || 'Draft')
       setCaseOwner(payload.owner || '')
+      setCaseSubjectGeorgian('')
+      setCaseSubjectEnglish('')
       setCaseSubject('')
       setCaseSubjectType('Person')
       setNewCaseOwner('')
-      setNewCaseStatus('Draft')
       setCaseNotice('Case created and selected.')
-      loadCaseTasks(payload.caseId)
     } catch (err) {
       setCaseNotice(err.message || 'Unable to create case.')
     } finally {
@@ -347,7 +409,9 @@ export function DueDiligencePage({
         payload: {
           status: caseStatus,
           owner: caseOwner.trim(),
-          subject: subjectName.trim(),
+          subject: subjectName.trim() || subjectGeorgian.trim() || subjectEnglish.trim(),
+          subjectGeorgian: subjectGeorgian.trim(),
+          subjectEnglish: subjectEnglish.trim(),
           subjectType,
         },
       })
@@ -355,7 +419,9 @@ export function DueDiligencePage({
         prev.map((item) => (item.caseId === activeCaseId ? payload : item)),
       )
       setActiveCase(payload)
-      setSubjectName(payload.subject || '')
+      setSubjectName(getCaseDisplayName(payload))
+      setSubjectGeorgian(payload.subjectGeorgian || '')
+      setSubjectEnglish(payload.subjectEnglish || '')
       setSubjectType(payload.subjectType || 'Person')
       setStartMode('Analysis')
       setCaseStatus(payload.status || 'Draft')
@@ -377,6 +443,7 @@ export function DueDiligencePage({
         method: 'POST',
         payload: {
           subject: subjectName.trim(),
+          subjectEnglish: subjectName.trim(),
           subjectType,
           status: 'Draft',
         },
@@ -384,11 +451,12 @@ export function DueDiligencePage({
       setCases((prev) => [payload, ...prev])
       setActiveCaseId(payload.caseId)
       setActiveCase(payload)
-      setSubjectName(payload.subject || '')
+      setSubjectName(getCaseDisplayName(payload))
+      setSubjectGeorgian(payload.subjectGeorgian || '')
+      setSubjectEnglish(payload.subjectEnglish || '')
       setSubjectType(payload.subjectType || 'Person')
       setCaseStatus(payload.status || 'Draft')
       setCaseOwner(payload.owner || '')
-      loadCaseTasks(payload.caseId)
       return payload.caseId
     } catch (err) {
       setCaseNotice(err.message || 'Unable to auto-create case.')
@@ -518,22 +586,28 @@ export function DueDiligencePage({
     setAnalysisProgress(5)
     const caseId = await ensureActiveCase()
     const enabled = []
-    if (useWikidata) enabled.push('Wikidata')
+    if (useWikipedia) enabled.push('Wikipedia')
     if (useOpenSanctions) enabled.push('OpenSanctions')
-    if (useNews) enabled.push('News/Web')
+    if (useDeclarations) enabled.push('Asset declarations')
+    enabled.push('Netgazeti', 'Publika', 'Interpressnews')
     const steps = [
       { id: 'validate', label: 'Validate subject', status: 'success' },
       {
-        id: 'wikidata',
-        label: 'Query Wikidata',
-        status: useWikidata ? 'running' : 'skipped',
+        id: 'wikipedia',
+        label: 'Query Wikipedia',
+        status: useWikipedia ? 'running' : 'skipped',
       },
       {
         id: 'opensanctions',
         label: 'Query OpenSanctions',
         status: useOpenSanctions ? 'running' : 'skipped',
       },
-      { id: 'news', label: 'Query News / Web', status: useNews ? 'running' : 'skipped' },
+      { id: 'media', label: 'Scan Georgian media', status: 'pending' },
+      {
+        id: 'declarations',
+        label: 'Query asset declarations',
+        status: useDeclarations ? 'running' : 'skipped',
+      },
       { id: 'store', label: 'Store report', status: 'pending' },
       { id: 'compile', label: 'Compile report', status: 'pending' },
     ]
@@ -554,14 +628,35 @@ export function DueDiligencePage({
           subjectType,
           caseId: caseId || undefined,
           useWikidata,
+          useWikipedia,
           useOpenSanctions,
-          useNews,
+          useNews: false,
+          useDeclarations,
           maxNews: 8,
           demo: useDemo,
         },
       })
       setAnalysisResult(result)
+      try {
+        const mediaPayload = await requestJson('/due-diligence/media-monitor', {
+          method: 'POST',
+          payload: {
+            subject: subjectName.trim(),
+            subjectType,
+            caseId: caseId || undefined,
+            topics: aiReportTopic.trim() ? [aiReportTopic.trim()] : [],
+            sourceIds: ['netgazeti', 'publika', 'interpressnews'],
+            maxResults: Number(mediaMaxResults) || 12,
+            persist: true,
+          },
+        })
+        setMediaResult(mediaPayload)
+        setMediaSubject(subjectName.trim())
+      } catch (mediaErr) {
+        setMediaError(mediaErr.message || 'Georgian media scan failed.')
+      }
       const warningsText = (result?.warnings || []).join(' ').toLowerCase()
+      const hasWikipediaWarning = warningsText.includes('wikipedia request failed')
       const hasWikidataWarning = warningsText.includes('wikidata request failed')
       const hasOpenSanctionsWarning =
         warningsText.includes('opensanctions') &&
@@ -569,19 +664,25 @@ export function DueDiligencePage({
           warningsText.includes('not configured') ||
           warningsText.includes('api key'))
       const hasNewsWarning = warningsText.includes('gdelt news request failed')
+      const hasDeclarationWarning =
+        warningsText.includes('declaration') &&
+        (warningsText.includes('failed') || warningsText.includes('not configured'))
       setAnalysisSteps((prev) =>
         prev.map((step) => {
-          if (step.id === 'wikidata') {
-            if (!useWikidata) return { ...step, status: 'skipped' }
-            return { ...step, status: hasWikidataWarning ? 'warning' : 'success' }
+          if (step.id === 'wikipedia') {
+            if (!useWikipedia) return { ...step, status: 'skipped' }
+            return { ...step, status: hasWikipediaWarning ? 'warning' : 'success' }
           }
           if (step.id === 'opensanctions') {
             if (!useOpenSanctions) return { ...step, status: 'skipped' }
             return { ...step, status: hasOpenSanctionsWarning ? 'warning' : 'success' }
           }
-          if (step.id === 'news') {
-            if (!useNews) return { ...step, status: 'skipped' }
-            return { ...step, status: hasNewsWarning ? 'warning' : 'success' }
+          if (step.id === 'media') {
+            return { ...step, status: 'success' }
+          }
+          if (step.id === 'declarations') {
+            if (!useDeclarations) return { ...step, status: 'skipped' }
+            return { ...step, status: hasDeclarationWarning ? 'warning' : 'success' }
           }
           if (step.id === 'store') {
             return { ...step, status: result?.reportId ? 'success' : 'warning' }
@@ -598,7 +699,7 @@ export function DueDiligencePage({
       }
       loadCases()
       setAnalysisNotice(
-        `Analysis complete for ${subjectName} (${subjectType}) using: ${
+        `Due diligence scan complete for ${subjectName} (${subjectType}) using: ${
           enabled.length ? enabled.join(', ') : 'no sources'
         }.`,
       )
@@ -715,7 +816,7 @@ export function DueDiligencePage({
   useEffect(() => {
     if (!cases.length) return
     if (!activeCaseId && subjectName.trim()) {
-      const match = cases.find((item) => item.subject === subjectName.trim())
+      const match = cases.find((item) => getCaseDisplayName(item) === subjectName.trim() || item.subject === subjectName.trim())
       if (match) {
         setActiveCaseId(match.caseId)
       }
@@ -725,19 +826,13 @@ export function DueDiligencePage({
     const found = cases.find((item) => item.caseId === activeCaseId)
     if (!found) return
     setActiveCase(found)
-    setSubjectName(found.subject || '')
+    setSubjectName(getCaseDisplayName(found))
+    setSubjectGeorgian(found.subjectGeorgian || '')
+    setSubjectEnglish(found.subjectEnglish || '')
     setSubjectType(found.subjectType || 'Person')
     setCaseStatus(found.status || 'Draft')
     setCaseOwner(found.owner || '')
   }, [cases, activeCaseId, subjectName])
-
-  useEffect(() => {
-    if (activeCaseId) {
-      loadCaseTasks(activeCaseId)
-    } else {
-      setCaseTasks([])
-    }
-  }, [activeCaseId])
 
   useEffect(() => {
     setInternalChecksRan(false)
@@ -750,6 +845,12 @@ export function DueDiligencePage({
       setDebateOpponent(subjectName)
     }
   }, [debateOpponent, subjectName])
+
+  useEffect(() => {
+    if (!mediaSubject && subjectName) {
+      setMediaSubject(subjectName)
+    }
+  }, [mediaSubject, subjectName])
 
   useEffect(() => {
     return () => {
@@ -774,12 +875,14 @@ export function DueDiligencePage({
       subject_type: subjectType || '',
       start_mode: startMode.replace(/\s+/g, '_').toLowerCase(),
       use_wikidata: useWikidata ? '1' : '0',
+      use_wikipedia: useWikipedia ? '1' : '0',
       use_opensanctions: useOpenSanctions ? '1' : '0',
+      use_declarations: useDeclarations ? '1' : '0',
       use_news: useNews ? '1' : '0',
     })
     const base = ddAppUrl.includes('?') ? `${ddAppUrl}&` : `${ddAppUrl}?`
     return `${base}${params.toString()}`
-  }, [ddAppUrl, subjectName, subjectType, startMode, useWikidata, useOpenSanctions, useNews])
+  }, [ddAppUrl, subjectName, subjectType, startMode, useWikidata, useWikipedia, useOpenSanctions, useNews, useDeclarations])
 
   const subjectStatus = subjectName.trim()
     ? internalChecksRan
@@ -787,7 +890,7 @@ export function DueDiligencePage({
         ? 'Known'
         : 'New'
       : 'Not checked'
-    : '—'
+    : 'â€”'
 
   const gmailUrl = useMemo(() => {
     const subjectLine = encodeURIComponent(
@@ -833,9 +936,9 @@ export function DueDiligencePage({
     const evidenceCards = mentions.slice(0, 6).map((row, idx) => ({
       id: row.url || row.title || `mention-${idx}`,
       title: row.title || 'Public mention',
-      source: row.source || '—',
-      date: row.publishedAt || '—',
-      snippet: row.snippet || '—',
+      source: row.source || 'â€”',
+      date: row.publishedAt || 'â€”',
+      snippet: row.snippet || 'â€”',
       url: row.url || '',
       phase: idx < 2 ? 'Opening' : idx < 4 ? 'Cross-exam' : 'Closing',
     }))
@@ -875,6 +978,76 @@ export function DueDiligencePage({
     }
   }
 
+  const handleRunMediaMonitor = async () => {
+    const subject = mediaSubject.trim() || subjectName.trim()
+    if (!subject) {
+      setMediaError('Enter a person or organization to scan.')
+      return
+    }
+    setMediaError('')
+    setMediaResult(null)
+    setMediaLoading(true)
+    const topics = mediaTopics
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const sourceIds = ['netgazeti']
+    if (mediaUsePublika) sourceIds.push('publika')
+    if (mediaUseInterpressnews) sourceIds.push('interpressnews')
+    if (mediaUseMeta) sourceIds.push('meta_content_library')
+    try {
+      const result = await requestJson('/due-diligence/media-monitor', {
+        method: 'POST',
+        payload: {
+          subject,
+          subjectType,
+          caseId: activeCaseId || undefined,
+          topics,
+          sourceIds,
+          maxResults: Number(mediaMaxResults) || 12,
+          persist: true,
+        },
+      })
+      setMediaResult(result)
+    } catch (err) {
+      setMediaError(err.message || 'Media scan failed.')
+    } finally {
+      setMediaLoading(false)
+    }
+  }
+  const handleGenerateAiReport = async () => {
+    const subject = subjectName.trim() || mediaSubject.trim()
+    if (!subject) {
+      setAiReportError('Enter or select a subject first.')
+      return
+    }
+    if (!analysisResult && !mediaResult) {
+      setAiReportError('Run external analysis or media scan before generating the AI report.')
+      return
+    }
+    setAiReportError('')
+    setAiReport(null)
+    setAiReportLoading(true)
+    try {
+      const result = await requestJson('/due-diligence/ai-report', {
+        method: 'POST',
+        payload: {
+          subject,
+          subjectType,
+          caseId: activeCaseId || undefined,
+          topic: aiReportTopic.trim() || 'General',
+          analysis: analysisResult || undefined,
+          media: mediaResult || undefined,
+        },
+      })
+      setAiReport(result)
+    } catch (err) {
+      setAiReportError(err.message || 'Unable to generate AI report.')
+    } finally {
+      setAiReportLoading(false)
+    }
+  }
+
   const handleRunDebatePrep = async () => {
     if (!debateOpponent.trim() || !debateTopic.trim()) {
       setDebateError('Set an opponent and topic first.')
@@ -902,6 +1075,43 @@ export function DueDiligencePage({
       setDebateError(err.message || 'Debate prep failed.')
     } finally {
       setDebateLoading(false)
+    }
+  }
+
+  const handleArchiveCase = async () => {
+    if (!activeCaseId || caseDeleting) return
+    setCaseDeleting(true)
+    setCaseNotice('')
+    try {
+      const payload = await requestJson(`/due-diligence/cases/${activeCaseId}/archive`, {
+        method: 'POST',
+      })
+      setCases((prev) => prev.map((item) => (item.caseId === activeCaseId ? payload : item)))
+      setActiveCase(payload)
+      setCaseStatus(payload.status || 'Archived')
+      setCaseNotice('Case archived.')
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to archive case.')
+    } finally {
+      setCaseDeleting(false)
+    }
+  }
+
+  const handleDeleteCase = async () => {
+    if (!activeCaseId || caseDeleting) return
+    const ok = window.confirm('Delete this DD case? Reports and media evidence remain, but the case record will be removed.')
+    if (!ok) return
+    setCaseDeleting(true)
+    setCaseNotice('')
+    try {
+      await requestJson(`/due-diligence/cases/${activeCaseId}`, { method: 'DELETE' })
+      setCases((prev) => prev.filter((item) => item.caseId !== activeCaseId))
+      handleClearCase()
+      setCaseNotice('Case deleted.')
+    } catch (err) {
+      setCaseNotice(err.message || 'Unable to delete case.')
+    } finally {
+      setCaseDeleting(false)
     }
   }
 
@@ -1021,14 +1231,14 @@ export function DueDiligencePage({
     }
   }
 
-  const caseStatusOptions = ['Draft', 'Active', 'Review', 'Decided', 'Closed']
+  const caseStatusOptions = ['Draft', 'Active', 'Review', 'Decided', 'Closed', 'Archived']
   const taskStatusOptions = ['Open', 'In Progress', 'Blocked', 'Done']
 
   const duePulseStats = useMemo(
     () => [
       {
         label: 'Watchlist',
-        value: summary?.competitors ?? '—',
+        value: summary?.competitors ?? 'â€”',
         icon: <IconShieldCheck size={18} />,
         badge: 'Tracked',
       },
@@ -1064,9 +1274,15 @@ export function DueDiligencePage({
             <div className="filter-row">
               <input
                 className="input"
-                placeholder="Subject name"
-                value={caseSubject}
-                onChange={(event) => setCaseSubject(event.target.value)}
+                placeholder="Georgian name"
+                value={caseSubjectGeorgian}
+                onChange={(event) => setCaseSubjectGeorgian(event.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="English name"
+                value={caseSubjectEnglish}
+                onChange={(event) => setCaseSubjectEnglish(event.target.value)}
               />
               <select
                 className="select"
@@ -1082,24 +1298,13 @@ export function DueDiligencePage({
                 value={newCaseOwner}
                 onChange={(event) => setNewCaseOwner(event.target.value)}
               />
-              <select
-                className="select"
-                value={newCaseStatus}
-                onChange={(event) => setNewCaseStatus(event.target.value)}
-              >
-                {caseStatusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
               <button
                 className="button"
                 type="button"
                 onClick={handleCreateCase}
                 disabled={caseCreating}
               >
-                {caseCreating ? 'Creating…' : 'Create case'}
+                {caseCreating ? 'Creating...' : 'Create case'}
               </button>
             </div>
             {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
@@ -1124,7 +1329,7 @@ export function DueDiligencePage({
                 <span>Updated</span>
               </div>
               {casesLoading ? (
-                <div className="table-row empty">Loading cases…</div>
+                <div className="table-row empty">Loading casesâ€¦</div>
               ) : cases.length === 0 ? (
                 <div className="table-row empty">No cases yet.</div>
               ) : (
@@ -1137,10 +1342,15 @@ export function DueDiligencePage({
                     key={row.caseId}
                     onClick={() => handleSelectCase(row.caseId)}
                   >
-                    <span>{row.subject || '—'}</span>
+                    <span>
+                      {getCaseDisplayName(row) || 'â€”'}
+                      {getCaseSecondaryName(row) ? (
+                        <small className="muted">{getCaseSecondaryName(row)}</small>
+                      ) : null}
+                    </span>
                     <span>{row.status || 'Draft'}</span>
-                    <span>{row.lastRiskLevel || '—'}</span>
-                    <span>{row.updatedAt || row.createdAt || '—'}</span>
+                    <span>{row.lastRiskLevel || 'â€”'}</span>
+                    <span>{row.updatedAt || row.createdAt || 'â€”'}</span>
                   </button>
                 ))
               )}
@@ -1148,7 +1358,7 @@ export function DueDiligencePage({
             <div className="module-footer">
               <span>
                 {activeCaseId
-                  ? `Active case: ${activeCase?.subject || '—'}`
+                  ? `Active case: ${getCaseDisplayName(activeCase) || 'â€”'}`
                   : 'No case selected.'}
               </span>
               <button
@@ -1184,15 +1394,15 @@ export function DueDiligencePage({
               <div className="module-header__meta">
                 <div className="module-header__metric">
                   <span>Watchlist</span>
-                  <strong>{summary?.competitors ?? '—'}</strong>
+                  <strong>{summary?.competitors ?? 'â€”'}</strong>
                 </div>
                 <div className="module-header__metric">
                   <span>Network People</span>
-                  <strong>{crmSummary?.total_people ?? '—'}</strong>
+                  <strong>{crmSummary?.total_people ?? 'â€”'}</strong>
                 </div>
                 <div className="module-header__metric">
                   <span>Supporters</span>
-                  <strong>{crmSummary?.supporters ?? '—'}</strong>
+                  <strong>{crmSummary?.supporters ?? 'â€”'}</strong>
                 </div>
               </div>
             </div>
@@ -1207,12 +1417,9 @@ export function DueDiligencePage({
           {showTabs ? (
             <div className="subtabs">
               {[
-                { id: 'overview', label: 'Overview' },
-                { id: 'checks', label: 'Checks' },
-                { id: 'reports', label: 'Reports' },
-                { id: 'tasks', label: 'Tasks' },
-                { id: 'decision', label: 'Decision' },
-                { id: 'advanced', label: 'Tools' },
+                { id: 'overview', label: 'Case' },
+                { id: 'checks', label: 'Run DD' },
+                { id: 'reports', label: 'Report' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1228,7 +1435,7 @@ export function DueDiligencePage({
 
           {activeCaseId ? (
             <div className="module-alert module-alert--success">
-              Active case: {activeCase?.subject || '—'} · {caseStatus}
+              Active case: {getCaseDisplayName(activeCase) || 'â€”'} Â· {caseStatus}
             </div>
           ) : (
             <div className="module-alert">
@@ -1264,8 +1471,8 @@ export function DueDiligencePage({
                 <div className="module-card">
                   <div className="card-header">
                     <div>
-                      <h3>Case overview</h3>
-                      <p className="muted">Key details and ownership.</p>
+                      <h3>Profile</h3>
+                      <p className="muted">Profile identity, case status, and latest DD signal.</p>
                     </div>
                   </div>
                   <div className="metric-row">
@@ -1273,9 +1480,17 @@ export function DueDiligencePage({
                     <strong>{activeCaseId}</strong>
                   </div>
                   <div className="metric-row">
-                    <span>Subject</span>
+                    <span>Georgian name</span>
+                    <strong>{subjectGeorgian || 'â€”'}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>English name</span>
+                    <strong>{subjectEnglish || 'â€”'}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Search/display name</span>
                     <strong>
-                      {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
+                      {subjectName.trim() ? `${subjectName} (${subjectType})` : 'â€”'}
                     </strong>
                   </div>
                   <div className="metric-row">
@@ -1284,20 +1499,38 @@ export function DueDiligencePage({
                   </div>
                   <div className="metric-row">
                     <span>Owner</span>
-                    <strong>{caseOwner || '—'}</strong>
+                    <strong>{caseOwner || 'â€”'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>Last risk</span>
-                    <strong>{activeCase?.lastRiskLevel || '—'}</strong>
+                    <strong>{activeCase?.lastRiskLevel || 'â€”'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>Last report</span>
-                    <strong>{activeCase?.lastReportAt || '—'}</strong>
+                    <strong>{activeCase?.lastReportAt || 'â€”'}</strong>
                   </div>
                   <div className="filter-row">
                     <input
                       className="input"
-                      placeholder="Subject name"
+                      placeholder="Georgian name"
+                      value={subjectGeorgian}
+                      onChange={(event) => {
+                        setSubjectGeorgian(event.target.value)
+                        if (!subjectEnglish.trim()) setSubjectName(event.target.value)
+                      }}
+                    />
+                    <input
+                      className="input"
+                      placeholder="English name"
+                      value={subjectEnglish}
+                      onChange={(event) => {
+                        setSubjectEnglish(event.target.value)
+                        if (!subjectGeorgian.trim()) setSubjectName(event.target.value)
+                      }}
+                    />
+                    <input
+                      className="input"
+                      placeholder="Display/search name"
                       value={subjectName}
                       onChange={(event) => setSubjectName(event.target.value)}
                     />
@@ -1332,7 +1565,23 @@ export function DueDiligencePage({
                       onClick={handleUpdateCase}
                       disabled={caseSaving}
                     >
-                      {caseSaving ? 'Saving…' : 'Update case'}
+                      {caseSaving ? 'Savingâ€¦' : 'Update case'}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleArchiveCase}
+                      disabled={caseDeleting || caseStatus === 'Archived'}
+                    >
+                      Archive
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleDeleteCase}
+                      disabled={caseDeleting}
+                    >
+                      Delete
                     </button>
                   </div>
                   {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
@@ -1348,7 +1597,7 @@ export function DueDiligencePage({
                   <div>
                     <h3>Checks</h3>
                     <p className="muted">
-                      Run internal checks, then pull external sources for the case.
+                      Confirm the subject, scan internal records, then run public-source checks.
                     </p>
                   </div>
                 </div>
@@ -1359,8 +1608,8 @@ export function DueDiligencePage({
                 ) : null}
                 <InfoBox
                   title="Quick steps"
-                  summary="1) Enter a subject  2) Run internal checks  3) Run external analysis"
-                  hint="Internal checks scan Network + watchlist (ranked server-side). External analysis pulls Wikidata, OpenSanctions, and News/Web."
+                  summary="1) Confirm subject  2) Check internal records  3) Run public-source analysis"
+                  hint="Internal checks scan Network + watchlist. Public-source analysis pulls Wikidata, OpenSanctions, GDELT, and Netgazeti fallback where available."
                 />
                 <div className="filter-row">
                   <input
@@ -1392,7 +1641,7 @@ export function DueDiligencePage({
                         onClick={handleSaveSubjectToCase}
                         disabled={caseSaving}
                       >
-                        {caseSaving ? 'Saving…' : 'Save subject to case'}
+                        {caseSaving ? 'Savingâ€¦' : 'Save subject to case'}
                       </button>
                       <button
                         className="button-secondary"
@@ -1409,7 +1658,7 @@ export function DueDiligencePage({
                 <p className="muted">
                   Current subject:{' '}
                   <strong>
-                    {subjectName.trim() ? `${subjectName} (${subjectType})` : '—'}
+                    {subjectName.trim() ? `${subjectName} (${subjectType})` : 'â€”'}
                   </strong>
                 </p>
               </div>
@@ -1442,7 +1691,7 @@ export function DueDiligencePage({
                           <div className="table-row" key={`${row.email || 'match'}-${idx}`}>
                             <span>{row.fullName || row.email}</span>
                             <span>{row.email}</span>
-                            <span>{row.group || '—'}</span>
+                            <span>{row.group || 'â€”'}</span>
                             <span>{row.timeAvailability || 'Unspecified'}</span>
                           </div>
                         ))
@@ -1471,7 +1720,7 @@ export function DueDiligencePage({
                           <div className="table-row" key={row.competitorId || row.name}>
                             <span>{row.name}</span>
                             <span>{row.competitorType}</span>
-                            <span>{row.notes || '—'}</span>
+                            <span>{row.notes || 'â€”'}</span>
                           </div>
                         ))
                       )}
@@ -1483,60 +1732,34 @@ export function DueDiligencePage({
               <div className="module-card module-card__wide">
                 <div className="card-header">
                   <div>
-                    <h3>External analysis</h3>
-                    <p className="muted">Select sources and run the external check.</p>
+                    <h3>Run due diligence</h3>
+                    <p className="muted">
+                      One scan checks the configured sources and stores evidence on this case.
+                    </p>
                   </div>
+                  <div className="pill">Configured</div>
                 </div>
                 <div className="filter-row">
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useWikidata}
-                      onChange={(event) => setUseWikidata(event.target.checked)}
-                    />
-                    Wikidata
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useOpenSanctions}
-                      onChange={(event) => setUseOpenSanctions(event.target.checked)}
-                    />
-                    OpenSanctions
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={useNews}
-                      onChange={(event) => setUseNews(event.target.checked)}
-                    />
-                    News / Web
-                  </label>
-                  <button className="button" type="button" onClick={handleRunAnalysis}>
-                    {analysisLoading ? 'Running…' : 'Run external analysis'}
+                  {['Wikipedia', 'OpenSanctions', 'Netgazeti', 'Publika', 'Interpressnews', 'Asset declarations'].map((source) => (
+                    <span className="pill" key={source}>{source}</span>
+                  ))}
+                </div>
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    placeholder="Topic, e.g. education"
+                    value={aiReportTopic}
+                    onChange={(event) => setAiReportTopic(event.target.value)}
+                  />
+                  <button className="button" type="button" onClick={handleRunAnalysis} disabled={analysisLoading || mediaLoading}>
+                    {analysisLoading || mediaLoading ? 'Running...' : 'Run DD scan'}
                   </button>
                 </div>
-                <details className="dashboard-detail">
-                  <summary>Advanced options</summary>
-                  <div className="dashboard-detail__body">
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={useDemo}
-                        onChange={(event) => setUseDemo(event.target.checked)}
-                      />
-                      Use demo data if sources are unavailable
-                    </label>
-                  </div>
-                </details>
                 {analysisError ? <div className="module-alert">{analysisError}</div> : null}
+                {mediaError ? <div className="module-alert">{mediaError}</div> : null}
                 {analysisNotice ? <p className="muted">{analysisNotice}</p> : null}
                 {analysisProgress > 0 ? (
                   <div className="questionnaire-progress">
-                    <p className="muted" style={{ marginBottom: 8 }}>
-                      Estimated progress — the run completes when the server responds (not live
-                      streaming).
-                    </p>
                     <div className="questionnaire-progress__track">
                       <div
                         className="questionnaire-progress__bar"
@@ -1567,17 +1790,215 @@ export function DueDiligencePage({
                     showSourceDetails={false}
                   />
                 ) : null}
+                {mediaResult ? (
+                  <div className="module-alert module-alert--success">
+                    Georgian media: {mediaResult.mentions?.length ?? 0} mentions fetched, {mediaResult.storedCount ?? 0} stored.
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
 
+          {activeTab === 'media' && (
+            <div className="stack">
+              <div className="module-card module-card__wide section-intro">
+                <div className="card-header">
+                  <div>
+                    <h3>Media database</h3>
+                    <p className="muted">
+                      Build profile evidence from media mentions, quotes, topics, and source relationships.
+                    </p>
+                  </div>
+                  <div className="pill">Netgazeti first</div>
+                </div>
+                <InfoBox
+                  title="Connector model"
+                  summary="Netgazeti, Publika, and Interpressnews run as Georgian media sources. Meta Content Library is tracked as an access-required source."
+                  hint="Fetched evidence is stored against the selected due diligence profile and case when a case is active."
+                />
+              </div>
+
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Sources</h3>
+                    <p className="muted">Available connectors for profile media intelligence.</p>
+                  </div>
+                </div>
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Source</span>
+                    <span>Status</span>
+                    <span>Access</span>
+                    <span>Notes</span>
+                  </div>
+                  {mediaSources.length === 0 ? (
+                    <div className="table-row empty">No media sources loaded.</div>
+                  ) : (
+                    mediaSources.map((source) => (
+                      <div className="table-row" key={source.sourceId}>
+                        <span>{source.name}</span>
+                        <span>{source.status}</span>
+                        <span>{source.accessModel}</span>
+                        <span>{source.notes}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Run media scan</h3>
+                    <p className="muted">Search Georgian online media and store profile-linked evidence.</p>
+                  </div>
+                </div>
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    placeholder="Person or organization"
+                    value={mediaSubject}
+                    onChange={(event) => setMediaSubject(event.target.value)}
+                  />
+                  <input
+                    className="input"
+                    placeholder="Topics, comma-separated"
+                    value={mediaTopics}
+                    onChange={(event) => setMediaTopics(event.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={mediaMaxResults}
+                    onChange={(event) => setMediaMaxResults(event.target.value)}
+                  />
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={handleRunMediaMonitor}
+                    disabled={mediaLoading}
+                  >
+                    {mediaLoading ? 'Scanningâ€¦' : 'Scan media'}
+                  </button>
+                </div>
+                <div className="filter-row">
+                  <label className="checkbox">
+                    <input type="checkbox" checked readOnly />
+                    Netgazeti
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={mediaUsePublika}
+                      onChange={(event) => setMediaUsePublika(event.target.checked)}
+                    />
+                    Publika
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={mediaUseInterpressnews}
+                      onChange={(event) => setMediaUseInterpressnews(event.target.checked)}
+                    />
+                    Interpressnews
+                  </label>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={mediaUseMeta}
+                      onChange={(event) => setMediaUseMeta(event.target.checked)}
+                    />
+                    Include Meta access check
+                  </label>
+                </div>
+                {mediaError ? <div className="module-alert">{mediaError}</div> : null}
+                {mediaResult?.warnings?.length ? (
+                  <div className="module-alert">
+                    {mediaResult.warnings.map((warning, idx) => (
+                      <div key={`${warning}-${idx}`}>{warning}</div>
+                    ))}
+                  </div>
+                ) : null}
+                {mediaResult ? (
+                  <div className="module-alert module-alert--success">
+                    {mediaResult.mentions?.length ?? 0} mentions fetched Â·{' '}
+                    {mediaResult.storedCount ?? 0} stored
+                  </div>
+                ) : null}
+              </div>
+
+              {metaInfo ? (
+                <details className="dashboard-detail">
+                  <summary>Meta Content Library research path</summary>
+                  <div className="dashboard-detail__body">
+                    <p className="muted">{metaInfo.fitForDueDiligence}</p>
+                    <p className="muted">{metaInfo.eligibleUsers}</p>
+                    <div className="table">
+                      <div className="table-row table-head">
+                        <span>Access step</span>
+                      </div>
+                      {(metaInfo.accessSteps || []).map((step) => (
+                        <div className="table-row" key={step}>
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <a href={metaInfo.sourceUrl} target="_blank" rel="noreferrer">
+                      Meta documentation
+                    </a>
+                  </div>
+                </details>
+              ) : null}
+
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>Mentions and quotes</h3>
+                    <p className="muted">Evidence stays linked to the original article URL.</p>
+                  </div>
+                </div>
+                <div className="table">
+                  <div className="table-row table-head">
+                    <span>Article</span>
+                    <span>Source</span>
+                    <span>Topics</span>
+                    <span>Quotes</span>
+                  </div>
+                  {!mediaResult?.mentions?.length ? (
+                    <div className="table-row empty">No media mentions loaded yet.</div>
+                  ) : (
+                    mediaResult.mentions.map((mention) => (
+                      <div className="table-row" key={mention.url}>
+                        <span>
+                          <a href={mention.url} target="_blank" rel="noreferrer">
+                            {mention.title}
+                          </a>
+                          <small className="muted">{mention.publishedAt || ''}</small>
+                        </span>
+                        <span>{mention.source}</span>
+                        <span>{mention.matchedTopics?.join(', ') || 'â€”'}</span>
+                        <span>
+                          {mention.quotes?.length
+                            ? mention.quotes.map((quote) => `â€œ${quote.text}â€`).join(' / ')
+                            : 'â€”'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {activeTab === 'reports' && (
             <div className="stack">
               <div className="module-card module-card__wide section-intro">
                 <div className="card-header">
                   <div>
                     <h3>Reports</h3>
-                    <p className="muted">Review history and download PDFs.</p>
+                    <p className="muted">Open saved reports, inspect source evidence, and download PDFs.</p>
                   </div>
                 </div>
                 {!activeCaseId && !subjectName.trim() ? (
@@ -1606,6 +2027,151 @@ export function DueDiligencePage({
                   </span>
                 </div>
               ) : null}
+
+              <div className="module-card module-card__wide">
+                <div className="card-header">
+                  <div>
+                    <h3>AI synthesized report</h3>
+                    <p className="muted">
+                      Combine Wikidata, OpenSanctions, news, and media scan evidence into a topic-based analyst brief.
+                    </p>
+                  </div>
+                  <div className="pill">AI layer</div>
+                </div>
+                <div className="filter-row">
+                  <input
+                    className="input"
+                    placeholder="Topic, e.g. education"
+                    value={aiReportTopic}
+                    onChange={(event) => setAiReportTopic(event.target.value)}
+                  />
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={handleGenerateAiReport}
+                    disabled={aiReportLoading || (!analysisResult && !mediaResult)}
+                  >
+                    {aiReportLoading ? 'Generating...' : 'Generate AI report'}
+                  </button>
+                </div>
+                {!analysisResult && !mediaResult ? (
+                  <p className="muted">Run external analysis or scan media first, then generate the synthesized report.</p>
+                ) : null}
+                {aiReportError ? <div className="module-alert">{aiReportError}</div> : null}
+                {aiReport ? (
+                  <div className="stack">
+                    <div className="module-alert module-alert--success">
+                      {aiReport.mode?.startsWith?.('ai:') ? 'AI-generated' : 'Structured'} report for{' '}
+                      <strong>{aiReport.subject}</strong> on <strong>{aiReport.topic}</strong>
+                    </div>
+                    {aiReport.warnings?.length ? (
+                      <div className="module-alert">
+                        {aiReport.warnings.map((warning, idx) => (
+                          <div key={`${warning}-${idx}`}>{warning}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {aiReport.sections?.length ? (
+                      <div className="stack">
+                        <div>
+                          <h3>{aiReport.reportTitle || `Due Diligence Report: ${aiReport.subject}`}</h3>
+                          <p className="muted">
+                            {[aiReport.classification, aiReport.topic].filter(Boolean).join(' - ')}
+                          </p>
+                        </div>
+                        {aiReport.sections.map((section, idx) => (
+                          <section className="module-card" key={`${section.heading || 'section'}-${idx}`}>
+                            <h4>{section.heading || `Section ${idx + 1}`}</h4>
+                            {(section.paragraphs || []).map((paragraph, pIdx) => (
+                              <p key={`${section.heading || idx}-p-${pIdx}`}>{paragraph}</p>
+                            ))}
+                            {section.bullets?.length ? (
+                              <ul className="compact-list">
+                                {section.bullets.map((item, bIdx) => (
+                                  <li key={`${section.heading || idx}-b-${bIdx}`}>{item}</li>
+                                ))}
+                              </ul>
+                            ) : null}
+                            {section.evidenceRefs?.length ? (
+                              <p className="muted">Evidence: {section.evidenceRefs.join(', ')}</p>
+                            ) : null}
+                          </section>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <h4>Executive summary</h4>
+                          <p>{aiReport.executiveSummary}</p>
+                        </div>
+                        <div className="module-grid">
+                          <div className="module-card">
+                            <h4>Key findings</h4>
+                            <ul className="compact-list">
+                              {(aiReport.keyFindings || []).map((item, idx) => (
+                                <li key={`${item}-${idx}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="module-card">
+                            <h4>Risk assessment</h4>
+                            <p>{aiReport.riskAssessment}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <h4>Topic assessment</h4>
+                          <p>{aiReport.topicAssessment}</p>
+                        </div>
+                      </>
+                    )}
+                    <div className="table">
+                      <div className="table-row table-head">
+                        <span>ID / Evidence</span>
+                        <span>Source</span>
+                        <span>Date</span>
+                      </div>
+                      {((aiReport.evidenceTable?.length ? aiReport.evidenceTable : aiReport.evidence) || []).length === 0 ? (
+                        <div className="table-row empty">No evidence selected for this topic.</div>
+                      ) : (
+                        (aiReport.evidenceTable?.length ? aiReport.evidenceTable : aiReport.evidence).map((row, idx) => (
+                          <div className="table-row" key={`${row.id || row.url || row.title || row.claim}-${idx}`}>
+                            <span>
+                              {row.url ? (
+                                <a href={row.url} target="_blank" rel="noreferrer">
+                                  {row.id ? `${row.id}: ` : ''}{row.claim || row.title || 'Source'}
+                                </a>
+                              ) : (
+                                `${row.id ? `${row.id}: ` : ''}${row.claim || row.title || 'Source'}`
+                              )}
+                              {row.snippet ? <small className="muted">{row.snippet}</small> : null}
+                            </span>
+                            <span>{row.source || '-'}</span>
+                            <span>{row.date || '-'}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="module-grid">
+                      <div className="module-card">
+                        <h4>Recommended actions</h4>
+                        <ul className="compact-list">
+                          {(aiReport.recommendedActions || []).map((item, idx) => (
+                            <li key={`${item}-${idx}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="module-card">
+                        <h4>Limitations</h4>
+                        <ul className="compact-list">
+                          {((aiReport.limitations?.length ? aiReport.limitations : aiReport.caveats) || []).map((item, idx) => (
+                            <li key={`${item}-${idx}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               {analysisResult ? (
                 <div className="module-card module-card__wide">
@@ -1641,16 +2207,16 @@ export function DueDiligencePage({
                         <span>PDF</span>
                       </div>
                       {historyLoading ? (
-                        <div className="table-row empty">Loading report history…</div>
+                        <div className="table-row empty">Loading report historyâ€¦</div>
                       ) : reportHistory.length === 0 ? (
                         <div className="table-row empty">No prior reports for this case or subject.</div>
                       ) : (
                         reportHistory.map((row) => (
                           <div className="table-row" key={row.reportId}>
-                            <span>{row.createdAt || '—'}</span>
-                            <span>{row.riskLevel || '—'}</span>
+                            <span>{row.createdAt || 'â€”'}</span>
+                            <span>{row.riskLevel || 'â€”'}</span>
                             <span>{row.totalHits ?? 0}</span>
-                            <span>{(row.sources || []).join(', ') || '—'}</span>
+                            <span>{(row.sources || []).join(', ') || 'â€”'}</span>
                             <span>
                               <button
                                 type="button"
@@ -1658,7 +2224,7 @@ export function DueDiligencePage({
                                 onClick={() => handleOpenReportFromHistory(row.reportId)}
                                 disabled={archivedReportLoading}
                               >
-                                {archivedReportLoading ? 'Loading…' : 'Open'}
+                                {archivedReportLoading ? 'Loadingâ€¦' : 'Open'}
                               </button>
                             </span>
                             <span>
@@ -1680,91 +2246,10 @@ export function DueDiligencePage({
             </div>
           )}
 
-          {activeTab === 'tasks' && (
-            <div className="module-card">
-              <h3>Tasks</h3>
-              <p className="muted">Track actions before final decision.</p>
-              {!activeCaseId ? (
-                <div className="module-alert">Select a case to manage tasks.</div>
-              ) : null}
-              <div className="filter-row">
-                <input
-                  className="input"
-                  placeholder="Task title"
-                  value={taskLabel}
-                  onChange={(event) => setTaskLabel(event.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Assignee"
-                  value={taskAssignee}
-                  onChange={(event) => setTaskAssignee(event.target.value)}
-                />
-                <input
-                  className="input"
-                  type="date"
-                  value={taskDueDate}
-                  onChange={(event) => setTaskDueDate(event.target.value)}
-                />
-                <button
-                  className="button"
-                  type="button"
-                  onClick={handleCreateTask}
-                  disabled={taskSaving}
-                >
-                  {taskSaving ? 'Adding…' : 'Add task'}
-                </button>
-              </div>
-              {taskError ? <div className="module-alert">{taskError}</div> : null}
-              <div className="table">
-                <div className="table-row table-head table-row--tasks">
-                  <span>Task</span>
-                  <span>Status</span>
-                  <span>Assignee</span>
-                  <span>Due</span>
-                  <span>Action</span>
-                </div>
-                {tasksLoading ? (
-                  <div className="table-row table-row--tasks empty">Loading tasks…</div>
-                ) : caseTasks.length === 0 ? (
-                  <div className="table-row table-row--tasks empty">No tasks yet.</div>
-                ) : (
-                  caseTasks.map((task) => (
-                    <div className="table-row table-row--tasks" key={task.taskId}>
-                      <span>{task.label}</span>
-                      <select
-                        className="select"
-                        value={task.status || 'Open'}
-                        onChange={(event) =>
-                          handleUpdateTaskStatus(task.taskId, event.target.value)
-                        }
-                      >
-                        {taskStatusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                      <span>{task.assignee || '—'}</span>
-                      <span>{task.dueDate || '—'}</span>
-                      <button
-                        className="button-secondary"
-                        type="button"
-                        onClick={() => handleUpdateTaskStatus(task.taskId, 'Done')}
-                      >
-                        Mark done
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
           {activeTab === 'decision' && (
             <div className="module-card">
               <h3>Decision</h3>
-              <p className="muted">Record the final due diligence outcome.</p>
+              <p className="muted">Record the case outcome after reviewing profile, media, and report evidence.</p>
               {!activeCaseId ? (
                 <div className="module-alert">Select a case to record a decision.</div>
               ) : null}
@@ -1791,7 +2276,7 @@ export function DueDiligencePage({
                   onClick={handleCreateDecision}
                   disabled={decisionSaving}
                 >
-                  {decisionSaving ? 'Saving…' : 'Save decision'}
+                  {decisionSaving ? 'Savingâ€¦' : 'Save decision'}
                 </button>
               </div>
               {decisionError ? <div className="module-alert">{decisionError}</div> : null}
@@ -1811,15 +2296,15 @@ export function DueDiligencePage({
                       <h3>Network context</h3>
                       <div className="metric-row">
                         <span>People</span>
-                        <strong>{crmSummary?.total_people ?? '—'}</strong>
+                        <strong>{crmSummary?.total_people ?? 'â€”'}</strong>
                       </div>
                       <div className="metric-row">
                         <span>Supporters</span>
-                        <strong>{crmSummary?.supporters ?? '—'}</strong>
+                        <strong>{crmSummary?.supporters ?? 'â€”'}</strong>
                       </div>
                       <div className="metric-row">
                         <span>Members</span>
-                        <strong>{crmSummary?.members ?? '—'}</strong>
+                        <strong>{crmSummary?.members ?? 'â€”'}</strong>
                       </div>
                     </div>
                     <div className="module-card">
@@ -1889,7 +2374,7 @@ export function DueDiligencePage({
                       onChange={(event) => setNotes(event.target.value)}
                     />
                     <button className="button" type="submit">
-                      {saving ? 'Saving…' : 'Add'}
+                      {saving ? 'Savingâ€¦' : 'Add'}
                     </button>
                   </form>
 
@@ -1927,7 +2412,7 @@ export function DueDiligencePage({
                       <div className="table-row" key={item.competitorId}>
                         <span>{item.name}</span>
                         <span>{item.competitorType}</span>
-                        <span>{item.notes || '—'}</span>
+                        <span>{item.notes || 'â€”'}</span>
                         <div className="table-actions">
                           <button
                             className="button-secondary"
@@ -1990,7 +2475,7 @@ export function DueDiligencePage({
                         type="button"
                         onClick={handleRunDebatePrep}
                       >
-                        {debateLoading ? 'Running…' : 'Run debate prep'}
+                        {debateLoading ? 'Runningâ€¦' : 'Run debate prep'}
                       </button>
                     </div>
                     <div className="filter-row">
@@ -2024,15 +2509,15 @@ export function DueDiligencePage({
                           checked={debateUseDemo}
                           onChange={(event) => setDebateUseDemo(event.target.checked)}
                         />
-                        Use demo data if sources are unavailable
+                        Use demo data for Wikidata/OpenSanctions/News only
                       </label>
                     </div>
                     {debateError ? <div className="module-alert">{debateError}</div> : null}
                     {debateResult ? (
                       <div className="stack">
                         <div className="module-alert module-alert--success">
-                          {debateResult.mentions?.length ?? 0} mentions ·{' '}
-                          {debateResult.startDate} → {debateResult.endDate}
+                          {debateResult.mentions?.length ?? 0} mentions Â·{' '}
+                          {debateResult.startDate} â†’ {debateResult.endDate}
                         </div>
                         <p className="muted">
                           Query: <strong>{debateResult.query}</strong>
@@ -2123,7 +2608,7 @@ export function DueDiligencePage({
                                       <span className="pill">{card.phase}</span>
                                     </div>
                                     <p className="muted">
-                                      {card.source} · {card.date}
+                                      {card.source} Â· {card.date}
                                     </p>
                                     <p>{card.snippet}</p>
                                     {card.url ? (
@@ -2152,15 +2637,15 @@ export function DueDiligencePage({
                           ) : (
                             debateResult.wikipedia.map((row) => (
                               <div className="table-row" key={row.url || row.title}>
-                                <span>{row.title || '—'}</span>
-                                <span>{row.summary || '—'}</span>
+                                <span>{row.title || 'â€”'}</span>
+                                <span>{row.summary || 'â€”'}</span>
                                 <span>
                                   {row.url ? (
                                     <a href={row.url} target="_blank" rel="noreferrer">
                                       View
                                     </a>
                                   ) : (
-                                    '—'
+                                    'â€”'
                                   )}
                                 </span>
                               </div>
@@ -2185,7 +2670,7 @@ export function DueDiligencePage({
                                 <span>{theme.name}</span>
                                 <span>{theme.count}</span>
                                 <span>
-                                  {(theme.examples || []).slice(0, 2).join(' · ') || '—'}
+                                  {(theme.examples || []).slice(0, 2).join(' Â· ') || 'â€”'}
                                 </span>
                               </div>
                             ))
@@ -2210,15 +2695,15 @@ export function DueDiligencePage({
                                 <span>
                                   {row.url ? (
                                     <a href={row.url} target="_blank" rel="noreferrer">
-                                      {row.title || '—'}
+                                      {row.title || 'â€”'}
                                     </a>
                                   ) : (
-                                    row.title || '—'
+                                    row.title || 'â€”'
                                   )}
                                 </span>
-                                <span>{row.source || '—'}</span>
-                                <span>{row.snippet || '—'}</span>
-                                <span>{row.publishedAt || '—'}</span>
+                                <span>{row.source || 'â€”'}</span>
+                                <span>{row.snippet || 'â€”'}</span>
+                                <span>{row.publishedAt || 'â€”'}</span>
                               </div>
                             ))
                           )}
@@ -2307,3 +2792,9 @@ export function DueDiligencePage({
     </section>
   )
 }
+
+
+
+
+
+
