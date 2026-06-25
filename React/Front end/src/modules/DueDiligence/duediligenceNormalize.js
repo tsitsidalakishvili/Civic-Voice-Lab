@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Map GET /due-diligence/reports/:id into the same shape as POST /analyze for UI reuse.
  */
 export function normalizeStoredReportToAnalysisResult(apiReport) {
@@ -13,9 +13,12 @@ export function normalizeStoredReportToAnalysisResult(apiReport) {
     opensanctions: Array.isArray(p.opensanctions) ? p.opensanctions : [],
     news: Array.isArray(p.news) ? p.news : [],
     declarations: Array.isArray(p.declarations) ? p.declarations : [],
+    media: p.media && typeof p.media === 'object' ? p.media : null,
     summary: p.summary && typeof p.summary === 'object' ? p.summary : {},
     warnings: Array.isArray(p.warnings) ? p.warnings : [],
     reportId: apiReport.reportId,
     storedAt: apiReport.createdAt || p.createdAt || null,
   }
 }
+
+
