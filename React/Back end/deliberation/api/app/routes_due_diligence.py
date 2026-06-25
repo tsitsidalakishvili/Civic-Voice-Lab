@@ -1624,12 +1624,20 @@ def _store_dd_report(
 
 def _get_pdf_font_name() -> str:
     candidates = [
+        (os.environ.get("DD_PDF_FONT_NAME") or "DDReportFont", os.environ.get("DD_PDF_FONT_PATH") or ""),
         ("FSGeorgianSylfaen", r"C:\Windows\Fonts\sylfaen.ttf"),
         ("FSUnicodeArial", r"C:\Windows\Fonts\arial.ttf"),
         ("FSUnicodeSegoe", r"C:\Windows\Fonts\SegUIVar.ttf"),
+        ("FSDejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        ("FSDejaVuSansCondensed", "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf"),
+        ("FSNotoSansGeorgian", "/usr/share/fonts/truetype/noto/NotoSansGeorgian-Regular.ttf"),
+        ("FSNotoSans", "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+        ("FSNotoSansGeorgianOpenType", "/usr/share/fonts/opentype/noto/NotoSansGeorgian-Regular.ttf"),
+        ("FSFreeSans", "/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+        ("FSLocalNotoSansGeorgian", "/usr/local/share/fonts/NotoSansGeorgian-Regular.ttf"),
     ]
     for font_name, font_path in candidates:
-        if not os.path.exists(font_path):
+        if not font_path or not os.path.exists(font_path):
             continue
         try:
             if font_name not in pdfmetrics.getRegisteredFontNames():
@@ -1638,7 +1646,6 @@ def _get_pdf_font_name() -> str:
         except Exception:
             continue
     return "Helvetica"
-
 
 def _pdf_escape(value: object) -> str:
     return html_lib.escape("" if value is None else str(value)).replace("\n", "<br/>")
@@ -3145,4 +3152,5 @@ def download_due_diligence_report_pdf(report_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
 
