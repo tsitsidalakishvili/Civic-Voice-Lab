@@ -83,7 +83,6 @@ export const buildModules = (t) => {
       id: 'data-hub',
       label: t('module.dataHub'),
       description: t('module.dataHub.desc'),
-      status: 'In Progress',
       Component: DataHubPage,
     },
     {
