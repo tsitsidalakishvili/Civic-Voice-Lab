@@ -1705,13 +1705,8 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
     summary_table = Table(
         [
             ["Risk level", _pdf_paragraph(summary.get("risk_level", "Unknown"), body_style)],
-            ["Total hits", _pdf_paragraph(summary.get("total_hits", 0), body_style)],
-            ["Wikipedia hits", _pdf_paragraph(summary.get("wikipedia_hits", 0), body_style)],
-            ["Wikidata hits", _pdf_paragraph(summary.get("wikidata_hits", 0), body_style)],
-            ["OpenSanctions hits", _pdf_paragraph(summary.get("opensanctions_hits", 0), body_style)],
-            ["News hits", _pdf_paragraph(summary.get("news_hits", 0), body_style)],
-            ["Georgian media hits", _pdf_paragraph(summary.get("media_hits", 0), body_style)],
-            ["Declaration hits", _pdf_paragraph(summary.get("declaration_hits", 0), body_style)],
+            ["Risk score", _pdf_paragraph(summary.get("risk_score", "-"), body_style)],
+            ["Total signals reviewed", _pdf_paragraph(summary.get("total_hits", 0), body_style)],
         ],
         colWidths=[140, 360],
     )
@@ -1788,8 +1783,8 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
     story.append(Paragraph("Reviewer Note", header_style))
     story.append(
         Paragraph(
-            "This report summarizes public sources (Wikipedia, OpenSanctions, Georgian media, and asset declarations). "
-            "Always validate matches with human review before decisions.",
+            "This report is an analyst-facing summary generated from the DD scan. "
+            "Use it for review and decision support, and validate important claims before action.",
             body_style,
         )
     )
