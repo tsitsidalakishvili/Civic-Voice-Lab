@@ -641,7 +641,27 @@ export function DueDiligencePage({
         },
       })
       setAnalysisResult(result)
-      const embeddedMedia = result?.media || null
+      let embeddedMedia = result?.media || null
+      if (!embeddedMedia) {
+        try {
+          embeddedMedia = await requestJson('/due-diligence/media-monitor', {
+            method: 'POST',
+            payload: {
+              subject: subjectName.trim(),
+              subjectType,
+              caseId: caseId || undefined,
+              topics: aiReportTopic.trim() ? [aiReportTopic.trim()] : [],
+              sourceIds: ['netgazeti', 'publika', 'interpressnews'],
+              maxResults: Number(mediaMaxResults) || 12,
+            },
+          })
+        } catch (mediaErr) {
+          embeddedMedia = null
+          setMediaError(
+            mediaErr.message || 'Georgian media scan could not be loaded from the analysis response or fallback scan.',
+          )
+        }
+      }
       const mediaWarnings = Array.isArray(embeddedMedia?.warnings) ? embeddedMedia.warnings : []
       const mediaScanWarning = mediaWarnings.some((warning) => {
         const text = String(warning || '').toLowerCase()
@@ -653,7 +673,6 @@ export function DueDiligencePage({
         setMediaError('')
       } else {
         setMediaResult(null)
-        setMediaError('Georgian media scan did not return a media payload.')
       }
       const warningsText = (result?.warnings || []).join(' ').toLowerCase()
       const hasWikipediaWarning = warningsText.includes('wikipedia request failed')
