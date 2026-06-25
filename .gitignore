@@ -1,4 +1,4 @@
-.env
+﻿.env
 **/.env
 **/.env.local
 **/.env.auth
@@ -30,3 +30,7 @@ React/Front end/node_modules/
 runtime/cache/
 React/Back end/runtime/cache/
 React/Back end/deliberation/runtime/cache/
+outputs/
+runtime/logs/
+runtime/outputs/
+

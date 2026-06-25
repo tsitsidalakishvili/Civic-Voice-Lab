@@ -1,4 +1,4 @@
-import { dirname, resolve } from 'path'
+﻿import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -10,6 +10,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
+      {
+        find: '@',
+        replacement: resolve(__dirname, 'src'),
+      },
       {
         find: /^leaflet$/,
         replacement: resolve(__dirname, 'node_modules/leaflet/dist/leaflet-src.js'),
@@ -25,3 +29,4 @@ export default defineConfig({
     setupFiles: './src/test/setup.js',
   },
 })
+

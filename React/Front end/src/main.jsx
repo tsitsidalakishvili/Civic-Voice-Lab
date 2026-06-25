@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+﻿import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
 import { MantineProvider } from '@mantine/core'
@@ -7,7 +7,7 @@ import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import '@mantine/spotlight/styles.css'
 import './index.css'
-import App from './App.jsx'
+import App from './app/App.jsx'
 import { theme } from './theme'
 
 createRoot(document.getElementById('root')).render(
@@ -19,3 +19,4 @@ createRoot(document.getElementById('root')).render(
     </MantineProvider>
   </StrictMode>,
 )
+

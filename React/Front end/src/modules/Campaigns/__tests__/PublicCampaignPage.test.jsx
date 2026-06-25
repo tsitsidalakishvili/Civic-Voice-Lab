@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react'
+﻿import React from 'react'
+import { screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
+import { renderWithProviders } from '../../../test/render.jsx'
 import { PublicCampaignPage } from '../PublicCampaignPage.jsx'
 
 vi.mock('../../../services/api', () => ({
@@ -27,7 +29,7 @@ describe('PublicCampaignPage', () => {
         status: 'Funding',
       },
     ])
-    render(<PublicCampaignPage campaignId={null} />)
+    renderWithProviders(<PublicCampaignPage campaignId={null} />)
 
     expect(await screen.findByText('Problem-Solving Campaigns')).toBeInTheDocument()
     expect(await screen.findByText('Fix the park')).toBeInTheDocument()
@@ -65,9 +67,11 @@ describe('PublicCampaignPage', () => {
       return Promise.resolve([])
     })
 
-    render(<PublicCampaignPage campaignId="123" />)
+    renderWithProviders(<PublicCampaignPage campaignId="123" />)
 
     expect(await screen.findByText('Clean the river')).toBeInTheDocument()
     expect(await screen.findByText('Overview')).toBeInTheDocument()
   })
 })
+
+

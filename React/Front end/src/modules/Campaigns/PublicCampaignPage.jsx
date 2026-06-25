@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import React, { useEffect, useMemo, useState } from 'react'
 import { IconChartDots, IconSpeakerphone, IconTarget, IconUsers } from '@tabler/icons-react'
 import { useTextTranslations } from '../../hooks/useTextTranslations'
 import { getJson, requestJson } from '../../services/api'
@@ -400,7 +400,7 @@ export function PublicCampaignPage({
           </div>
         </div>
         {error ? <div className="module-alert">{error}</div> : null}
-        {loading ? <p className="muted">Loading campaigns…</p> : null}
+        {loading ? <p className="muted">Loading campaignsâ€¦</p> : null}
         <div className="module-tiles">
           {publicCampaigns.map((item) => {
             const progress = item.fundingTargetAmount
@@ -474,7 +474,7 @@ export function PublicCampaignPage({
       },
       {
         label: 'Raised',
-        value: isDetail ? `${raisedAmount.toLocaleString()} ${displayCurrency}` : '—',
+        value: isDetail ? `${raisedAmount.toLocaleString()} ${displayCurrency}` : 'â€”',
         icon: <IconChartDots size={18} />,
         note: isDetail ? 'Verified contributions' : 'Select a campaign',
       },
@@ -482,12 +482,12 @@ export function PublicCampaignPage({
         label: 'Contributors',
         value: isDetail
           ? fundingSummary?.contributorCount ?? settledContributions.length
-          : '—',
+          : 'â€”',
         icon: <IconUsers size={18} />,
       },
       {
         label: 'Target',
-        value: isDetail ? `${targetAmount.toLocaleString()} ${displayCurrency}` : '—',
+        value: isDetail ? `${targetAmount.toLocaleString()} ${displayCurrency}` : 'â€”',
         icon: <IconTarget size={18} />,
       },
     ],
@@ -502,9 +502,9 @@ export function PublicCampaignPage({
       targetAmount,
     ],
   )
-  const timelineStart = campaign?.executionStartDate || campaign?.startDate || '—'
+  const timelineStart = campaign?.executionStartDate || campaign?.startDate || 'â€”'
   const timelineEnd =
-    campaign?.expectedCompletionDate || campaign?.endDate || '—'
+    campaign?.expectedCompletionDate || campaign?.endDate || 'â€”'
   const allocatedOperations =
     fundingSummary?.allocatedOperations ??
     fundingSummary?.allocated_operations ??
@@ -553,7 +553,7 @@ export function PublicCampaignPage({
         items={campaignPulse}
       />
       {error ? <div className="module-alert">{error}</div> : null}
-      {loading && !campaign ? <p className="muted">Loading campaign…</p> : null}
+      {loading && !campaign ? <p className="muted">Loading campaignâ€¦</p> : null}
       {campaign && (
         <div className="stack">
           <header className="public-campaign__header">
@@ -639,13 +639,13 @@ export function PublicCampaignPage({
                     <strong>
                       {[campaign.locationCity, campaign.locationDistrict]
                         .filter(Boolean)
-                        .join(', ') || '—'}
+                        .join(', ') || 'â€”'}
                     </strong>
                   </div>
                   <div className="metric-row">
                     <span>{t?.('campaign.public.timeline') || 'Timeline'}</span>
                     <strong>
-                      {timelineStart} → {timelineEnd}
+                      {timelineStart} â†’ {timelineEnd}
                     </strong>
                   </div>
                 </div>
@@ -1062,7 +1062,7 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {milestones.map((milestone) => (
                         <li key={milestone.milestoneId}>
-                          {translateCampaignText(milestone.title)} —{' '}
+                          {translateCampaignText(milestone.title)} â€”{' '}
                           {translateCampaignText(milestone.status)}
                         </li>
                       ))}
@@ -1079,7 +1079,7 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {approvedExpenses.map((expense) => (
                         <li key={expense.expenseId}>
-                          {translateCampaignText(expense.category)} — {expense.amount} {expense.currency}
+                          {translateCampaignText(expense.category)} â€” {expense.amount} {expense.currency}
                         </li>
                       ))}
                     </ul>
@@ -1098,7 +1098,7 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {proofArtifacts.map((artifact) => (
                         <li key={artifact.proofId}>
-                          {translateCampaignText(artifact.artifactType)} —{' '}
+                          {translateCampaignText(artifact.artifactType)} â€”{' '}
                           {translateCampaignText(artifact.caption) || artifact.url}
                         </li>
                       ))}
@@ -1115,7 +1115,7 @@ export function PublicCampaignPage({
                     <ul className="compact-list">
                       {partners.map((partner) => (
                         <li key={partner.partnerId}>
-                          {translateCampaignText(partner.name)} —{' '}
+                          {translateCampaignText(partner.name)} â€”{' '}
                           {translateCampaignText(partner.role) || 'Partner'}
                         </li>
                       ))}
@@ -1138,7 +1138,7 @@ export function PublicCampaignPage({
                         {contrib.isAnonymous
                           ? t?.('campaign.public.anonymousLabel') || 'Anonymous'
                           : contrib.contributorName || 'Supporter'}{' '}
-                        — {contrib.amount} {contrib.currency}
+                        â€” {contrib.amount} {contrib.currency}
                       </li>
                     ))}
                   </ul>
@@ -1151,3 +1151,4 @@ export function PublicCampaignPage({
     </div>
   )
 }
+

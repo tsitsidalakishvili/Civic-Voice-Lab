@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Button, Group, Kbd, Menu, Text } from '@mantine/core'
 import { IconArrowLeft, IconArrowRight, IconPlayerSkipForward, IconX } from '@tabler/icons-react'
-import { buildModuleWalkthroughScenario, hubWalkthroughScenario, taskWalkthroughScenarios } from '../config/walkthroughScenarios'
+import {
+  buildModuleSectionWalkthroughScenario,
+  buildModuleWalkthroughScenario,
+  getSectionTaskScenarios,
+  hubWalkthroughScenario,
+  taskWalkthroughScenarios,
+} from '../config/walkthroughScenarios'
 
 const tourStorageKey = 'fs_walkthrough_seen'
 const placementOffset = 16
@@ -69,6 +75,8 @@ function getSpotlightStyle(rect, padding = 8) {
 export function PlatformWalkthrough({
   activeModule,
   activeModuleConfig,
+  modules = [],
+  moduleSections = {},
   onOpenModuleHub,
   onModuleChange,
   onModuleSectionChange,
@@ -78,15 +86,38 @@ export function PlatformWalkthrough({
   const [targetRect, setTargetRect] = useState(null)
   const [tourKey, setTourKey] = useState('context')
 
+  const walkthroughModules = useMemo(
+    () =>
+      modules.filter((module) => {
+        const tabSections = (moduleSections[module.id]?.sections || []).filter((section) => section.type === 'tab')
+        return !module.status && tabSections.length
+      }),
+    [moduleSections, modules],
+  )
+
   const steps = useMemo(() => {
     if (tourKey.startsWith('task:')) {
       return taskWalkthroughScenarios[tourKey.replace('task:', '')]?.steps || hubWalkthroughScenario
     }
+    if (tourKey.startsWith('module:')) {
+      const moduleId = tourKey.replace('module:', '')
+      const module = modules.find((item) => item.id === moduleId)
+      const moduleConfig = moduleSections[moduleId]
+      return module && moduleConfig ? buildModuleWalkthroughScenario(module, moduleConfig) : hubWalkthroughScenario
+    }
+    if (tourKey.startsWith('section:')) {
+      const [, moduleId, sectionValue] = tourKey.split(':')
+      const module = modules.find((item) => item.id === moduleId)
+      const moduleConfig = moduleSections[moduleId]
+      const section = (moduleConfig?.sections || []).find((item) => item.type === 'tab' && item.value === sectionValue)
+      return module && moduleConfig && section
+        ? buildModuleSectionWalkthroughScenario(module, moduleConfig, section)
+        : hubWalkthroughScenario
+    }
     if (tourKey === 'platform') return hubWalkthroughScenario
     if (activeModule) return buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
     return hubWalkthroughScenario
-  }, [activeModule, activeModuleConfig, tourKey])
-
+  }, [activeModule, activeModuleConfig, moduleSections, modules, tourKey])
   const currentStep = steps[stepIndex]
   const canGoBack = stepIndex > 0
   const isLastStep = stepIndex >= steps.length - 1
@@ -191,18 +222,39 @@ export function PlatformWalkthrough({
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Label>General</Menu.Label>
+          <Menu.Label>Platform</Menu.Label>
           <Menu.Item onClick={() => startTour('platform')}>Platform overview</Menu.Item>
           {activeModule ? (
             <Menu.Item onClick={() => startTour('context')}>Current module</Menu.Item>
           ) : null}
           <Menu.Divider />
-          <Menu.Label>Workflow tours</Menu.Label>
-          {Object.entries(taskWalkthroughScenarios).map(([key, scenario]) => (
-            <Menu.Item key={key} onClick={() => startTour(`task:${key}`)}>
-              {scenario.label}
-            </Menu.Item>
-          ))}
+          <Menu.Label>Modules and flows</Menu.Label>
+          {walkthroughModules.map((module) => {
+            const tabSections = (moduleSections[module.id]?.sections || []).filter((section) => section.type === 'tab')
+            return (
+              <Fragment key={module.id}>
+                <Menu.Item fw={700} onClick={() => startTour(`module:${module.id}`)}>
+                  {module.label}
+                </Menu.Item>
+                {tabSections.map((section) => (
+                  <Fragment key={`${module.id}:${section.value}`}>
+                    <Menu.Item pl={28} onClick={() => startTour(`section:${module.id}:${section.value}`)}>
+                      {section.label}
+                    </Menu.Item>
+                    {getSectionTaskScenarios(module.id, section.value).map((scenario) => (
+                      <Menu.Item
+                        key={`${module.id}:${section.value}:${scenario.key}`}
+                        pl={44}
+                        onClick={() => startTour(`task:${scenario.key}`)}
+                      >
+                        {scenario.label}
+                      </Menu.Item>
+                    ))}
+                  </Fragment>
+                ))}
+              </Fragment>
+            )
+          })}
         </Menu.Dropdown>
       </Menu>
 

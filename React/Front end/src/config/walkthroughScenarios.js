@@ -185,12 +185,14 @@ export function buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
   const steps = [
     {
       selector: '[data-tour="module-context"]',
+      moduleId: activeModule.id,
       title: `${activeModule.label} workspace`,
       body: 'This badge shows where you are. Use Back to return to the module hub whenever you need to switch work areas.',
       placement: 'bottom',
     },
     {
       selector: '[data-tour="module-sidebar"]',
+      moduleId: activeModule.id,
       title: 'Workflow map',
       body: activeModuleConfig?.flowSummary || 'The left side explains the workflow and keeps navigation close while you work.',
       placement: 'right',
@@ -202,6 +204,7 @@ export function buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
     const title = script.title || section.label
     steps.push({
       selector: sectionSelector(section.value),
+      moduleId: activeModule.id,
       sectionValue: section.value,
       title: `${index + 1}. ${title}`,
       body: script.body || section.hint || 'This section contains the main actions and records for this part of the workflow.',
@@ -209,6 +212,7 @@ export function buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
     })
     steps.push({
       selector: '[data-tour="module-content"]',
+      moduleId: activeModule.id,
       sectionValue: section.value,
       title: `${title}: working area`,
       body: script.contentBody || 'The main panel now shows this section. Complete the forms, review the tables, or run the actions here before moving to the next step.',
@@ -219,12 +223,14 @@ export function buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
   steps.push(
     {
       selector: '[data-tour="global-search"]',
+      moduleId: activeModule.id,
       title: 'Fast module search',
       body: 'Open search to jump directly to another module when you already know where you want to go.',
       placement: 'bottom',
     },
     {
       selector: '[data-tour="feedback"]',
+      moduleId: activeModule.id,
       title: 'Leave implementation notes',
       body: 'Use this button to capture feedback while testing. It includes the active module so notes stay contextual.',
       placement: 'left',
@@ -234,6 +240,37 @@ export function buildModuleWalkthroughScenario(activeModule, activeModuleConfig)
   return steps
 }
 
+
+export function buildModuleSectionWalkthroughScenario(activeModule, activeModuleConfig, section) {
+  const script = moduleSectionScripts[activeModule.id]?.[section.value] || {}
+  const title = script.title || section.label
+
+  return [
+    {
+      selector: '[data-tour="module-context"]',
+      moduleId: activeModule.id,
+      title: `${activeModule.label}: ${title}`,
+      body: section.hint || script.body || 'This flow opens the right module and section so you can perform this part of the workflow.',
+      placement: 'bottom',
+    },
+    {
+      selector: sectionSelector(section.value),
+      moduleId: activeModule.id,
+      sectionValue: section.value,
+      title,
+      body: script.body || section.hint || 'This section contains the main actions and records for this part of the workflow.',
+      placement: 'right',
+    },
+    {
+      selector: '[data-tour="module-content"]',
+      moduleId: activeModule.id,
+      sectionValue: section.value,
+      title: `${title}: working area`,
+      body: script.contentBody || 'Use the main panel to complete the forms, review the tables, or run the actions for this workflow.',
+      placement: 'top',
+    },
+  ]
+}
 export const taskWalkthroughScenarios = {
   'create-segment': {
     label: 'Create a segment',
@@ -420,4 +457,20 @@ export const taskWalkthroughScenarios = {
       },
     ],
   },
+}
+export const taskWalkthroughPlacements = {
+  'create-segment': { moduleId: 'crm', sectionValue: 'segments' },
+  'create-conversation': { moduleId: 'deliberation', sectionValue: 'setup' },
+  'distribute-survey': { moduleId: 'deliberation', sectionValue: 'distribute' },
+  'analyze-results': { moduleId: 'deliberation', sectionValue: 'insights' },
+  'survey-lifecycle': { moduleId: 'deliberation', sectionValue: 'overview' },
+}
+
+export function getSectionTaskScenarios(moduleId, sectionValue) {
+  return Object.entries(taskWalkthroughScenarios)
+    .filter(([key]) => {
+      const placement = taskWalkthroughPlacements[key]
+      return placement?.moduleId === moduleId && placement?.sectionValue === sectionValue
+    })
+    .map(([key, scenario]) => ({ key, ...scenario }))
 }

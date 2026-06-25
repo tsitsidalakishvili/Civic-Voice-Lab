@@ -24,17 +24,17 @@ import {
   IconMessage2,
   IconSearch,
 } from '@tabler/icons-react'
-import { AppProvider, useApp } from './context/AppContext'
-import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from './config/modules'
-import { FeedbackDrawer } from './components/FeedbackDrawer'
-import { PlatformWalkthrough } from './components/PlatformWalkthrough'
-import { PublicEventRegistration } from './views/PublicEventRegistration'
-import { PublicSupporterSignup } from './views/PublicSupporterSignup'
-import { DeliberationQuestionnaire } from './views/DeliberationQuestionnaire'
-import { DeliberationPublicReport } from './views/DeliberationPublicReport'
-import { PublicCampaignPage } from './modules'
-import { parseStoredList } from './utils/deck'
-import { PageHeader } from './ui'
+import { AppProvider, useApp } from '@/context/AppContext'
+import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from '@/config/modules'
+import { FeedbackDrawer } from '@/components/FeedbackDrawer'
+import { PlatformWalkthrough } from '@/components/PlatformWalkthrough'
+import { PublicEventRegistration } from '@/views/PublicEventRegistration'
+import { PublicSupporterSignup } from '@/views/PublicSupporterSignup'
+import { DeliberationQuestionnaire } from '@/views/DeliberationQuestionnaire'
+import { DeliberationPublicReport } from '@/views/DeliberationPublicReport'
+import { PublicCampaignPage } from '@/modules'
+import { parseStoredList } from '@/utils/deck'
+import { PageHeader } from '@/ui'
 import './App.css'
 
 function AppShell_() {
@@ -294,6 +294,8 @@ function AppShell_() {
             <PlatformWalkthrough
               activeModule={activeModule}
               activeModuleConfig={activeModuleConfig}
+              modules={modules}
+              moduleSections={MODULE_SECTIONS}
               onOpenModuleHub={() => setActiveModuleId(null)}
               onModuleChange={handleWalkthroughModuleChange}
               onModuleSectionChange={handleWalkthroughSectionChange}
@@ -390,7 +392,7 @@ function AppShell_() {
                 </Accordion.Control>
                 <Accordion.Panel>
                   <div className="platform-description">
-                    <h2>Freedom Square â€“ Civic Engagement Suite</h2>
+                    <h2>Freedom Square Ã¢â‚¬â€œ Civic Engagement Suite</h2>
 
                     <h3>Executive Summary</h3>
                     <p>Freedom Square is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
@@ -453,7 +455,7 @@ function AppShell_() {
 
                     <div className="platform-description__principle">
                       <p><strong>Core Principle</strong></p>
-                      <p><strong>People should not only receive informationâ€”they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
+                      <p><strong>People should not only receive informationÃ¢â‚¬â€they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
                     </div>
                   </div>
                 </Accordion.Panel>
@@ -555,4 +557,3 @@ export default function App() {
     </AppProvider>
   )
 }
-

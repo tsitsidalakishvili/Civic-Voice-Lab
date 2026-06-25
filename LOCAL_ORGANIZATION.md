@@ -1,10 +1,18 @@
 ﻿# Local Folder Organization
 
-This folder was cleaned on 2026-06-21.
+This folder was cleaned on 2026-06-25 without changing deployment roots.
 
-## Main app folders
-- `React/` - current React frontend and backend app.
-- `CRM/`, `Deliberation/`, `DueDiligence/` - older Streamlit app folders kept intact.
+## Active product
+- `React/` - current deployed React/FastAPI product.
+- `React/Front end/` - Vite frontend. Keep this path until Vercel settings are updated.
+- `React/Back end/` - FastAPI backend. Keep this path until Render settings are updated.
+
+## Legacy apps
+- `legacy/CRM/` - older CRM app kept for reference.
+- `legacy/Deliberation/` - older deliberation app kept for reference.
+- `legacy/DueDiligence/` - older due diligence app kept for reference.
+
+New product features should go into `React/`, not the legacy folders.
 
 ## Local support folders
 - `tools/geocoding/` - one-off coordinate/geocoding repair scripts.
@@ -16,5 +24,7 @@ This folder was cleaned on 2026-06-21.
 - `docs/exports/` - static HTML exports kept for reference.
 - `assets/screenshots/` - screenshots/reference images.
 
-## Removed generated files
-Backend logs, React build/dependency caches, Python `__pycache__` folders, temporary CRM map JSON snapshots, and timestamped geocoding result CSVs were removed because they can be regenerated.
+## Generated local files
+- `runtime/logs/` - local server logs, ignored by git.
+- `outputs/` - generated local output, ignored by git.
+- React builds, dependency folders, Python caches, virtualenvs, and runtime cache snapshots are ignored by git.
