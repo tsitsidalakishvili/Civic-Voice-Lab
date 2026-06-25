@@ -300,7 +300,7 @@ export function AdminPage({
       },
       {
         label: 'Network size',
-        value: summary?.total_people ?? '—',
+        value: summary?.total_people ?? '�',
         icon: <IconUsers size={18} />,
         badge: 'Live',
       },
@@ -330,11 +330,11 @@ export function AdminPage({
           <div className="module-header__meta">
             <div className="module-header__metric">
               <span>Neo4j</span>
-              <strong>{status?.neo4j_status ?? '—'}</strong>
+              <strong>{status?.neo4j_status ?? '�'}</strong>
             </div>
             <div className="module-header__metric">
               <span>Survey API</span>
-              <strong>{status?.deliberation_status ?? '—'}</strong>
+              <strong>{status?.deliberation_status ?? '�'}</strong>
             </div>
             <div className="module-header__metric">
               <span>Slack</span>
@@ -382,11 +382,11 @@ export function AdminPage({
             <p className="muted">Live connectivity + config.</p>
             <div className="metric-row">
               <span>Neo4j</span>
-              <strong>{status?.neo4j_status ?? '—'}</strong>
+              <strong>{status?.neo4j_status ?? '�'}</strong>
             </div>
             <div className="metric-row">
               <span>Survey API</span>
-              <strong>{status?.deliberation_status ?? '—'}</strong>
+              <strong>{status?.deliberation_status ?? '�'}</strong>
             </div>
             <div className="metric-row">
               <span>Slack</span>
@@ -410,7 +410,7 @@ export function AdminPage({
             </div>
             <div className="metric-row">
               <span>Max contribution</span>
-              <strong>{featureFlags?.max_contribution_amount ?? '—'}</strong>
+              <strong>{featureFlags?.max_contribution_amount ?? '�'}</strong>
             </div>
           </div>
 
@@ -757,15 +757,15 @@ export function AdminPage({
             <h3>People data quality</h3>
             <div className="metric-row">
               <span>Total people</span>
-              <strong>{summary?.total_people ?? '—'}</strong>
+              <strong>{summary?.total_people ?? '�'}</strong>
             </div>
             <div className="metric-row">
               <span>Missing gender</span>
-              <strong>{summary?.missing_gender ?? '—'}</strong>
+              <strong>{summary?.missing_gender ?? '�'}</strong>
             </div>
             <div className="metric-row">
               <span>Missing age</span>
-              <strong>{summary?.missing_age ?? '—'}</strong>
+              <strong>{summary?.missing_age ?? '�'}</strong>
             </div>
             <button className="button-secondary" type="button" onClick={handleExportSummary}>
               Export people summary

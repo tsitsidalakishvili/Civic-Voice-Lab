@@ -392,7 +392,7 @@ function AppShell_() {
                 </Accordion.Control>
                 <Accordion.Panel>
                   <div className="platform-description">
-                    <h2>Freedom Square Ã¢â‚¬â€œ Civic Engagement Suite</h2>
+                    <h2>Freedom Square - Civic Engagement Suite</h2>
 
                     <h3>Executive Summary</h3>
                     <p>Freedom Square is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
@@ -455,7 +455,7 @@ function AppShell_() {
 
                     <div className="platform-description__principle">
                       <p><strong>Core Principle</strong></p>
-                      <p><strong>People should not only receive informationÃ¢â‚¬â€they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
+                      <p><strong>People should not only receive information; they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
                     </div>
                   </div>
                 </Accordion.Panel>

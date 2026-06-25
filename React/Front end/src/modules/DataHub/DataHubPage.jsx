@@ -100,11 +100,13 @@ function DataHubGraph({
   const svgRef = useRef(null)
   const simRef = useRef(null)
   const dragNodeRef = useRef(null)
+  const panRef = useRef(null)
   const [renderedNodes, setRenderedNodes] = useState([])
   const [renderedEdges, setRenderedEdges] = useState([])
   const [, setTick] = useState(0)
   const [size, setSize] = useState({ width: 720, height: 460 })
   const [hoveredNodeId, setHoveredNodeId] = useState(null)
+  const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, k: 1 })
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -175,7 +177,38 @@ function DataHubGraph({
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
     const rect = svg.getBoundingClientRect()
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    const screenX = event.clientX - rect.left
+    const screenY = event.clientY - rect.top
+    return {
+      x: (screenX - viewTransform.x) / viewTransform.k,
+      y: (screenY - viewTransform.y) / viewTransform.k,
+    }
+  }
+
+  const handleWheel = (event) => {
+    event.preventDefault()
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const pointerX = event.clientX - rect.left
+    const pointerY = event.clientY - rect.top
+    const nextK = Math.max(0.45, Math.min(2.8, viewTransform.k * (event.deltaY > 0 ? 0.9 : 1.1)))
+    setViewTransform({
+      k: nextK,
+      x: pointerX - ((pointerX - viewTransform.x) / viewTransform.k) * nextK,
+      y: pointerY - ((pointerY - viewTransform.y) / viewTransform.k) * nextK,
+    })
+  }
+
+  const handleCanvasPointerDown = (event) => {
+    if (event.target !== svgRef.current) return
+    panRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: viewTransform.x,
+      originY: viewTransform.y,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
   }
 
   const handlePointerDown = (event, node) => {
@@ -190,13 +223,23 @@ function DataHubGraph({
   }
 
   const handlePointerMove = (event) => {
-    if (!dragNodeRef.current) return
-    const point = getSvgPoint(event)
-    dragNodeRef.current.fx = point.x
-    dragNodeRef.current.fy = point.y
+    if (dragNodeRef.current) {
+      const point = getSvgPoint(event)
+      dragNodeRef.current.fx = point.x
+      dragNodeRef.current.fy = point.y
+      return
+    }
+    if (panRef.current) {
+      setViewTransform((current) => ({
+        ...current,
+        x: panRef.current.originX + event.clientX - panRef.current.startX,
+        y: panRef.current.originY + event.clientY - panRef.current.startY,
+      }))
+    }
   }
 
   const handlePointerUp = () => {
+    panRef.current = null
     if (!dragNodeRef.current) return
     dragNodeRef.current.fx = null
     dragNodeRef.current.fy = null
@@ -213,6 +256,8 @@ function DataHubGraph({
         className="graph-svg"
         role="img"
         aria-label="Neo4j graph snapshot"
+        onWheel={handleWheel}
+        onPointerDown={handleCanvasPointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
@@ -222,8 +267,9 @@ function DataHubGraph({
           }
         }}
       >
-        <g>
-          {renderedEdges.map((edge) => {
+        <g transform={`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.k})`}>
+          <g>
+            {renderedEdges.map((edge) => {
             const source = getNodeFromEdge(edge.source)
             const target = getNodeFromEdge(edge.target)
             if (!source || !target) return null
@@ -244,9 +290,9 @@ function DataHubGraph({
               />
             )
           })}
-        </g>
-        <g>
-          {renderedNodes.map((node) => {
+          </g>
+          <g>
+            {renderedNodes.map((node) => {
             const label = node.labels?.[0] || 'Node'
             const color = labelColors[label] || '#94a3b8'
             const degree = degreeMap[node.id] || 0
@@ -274,7 +320,8 @@ function DataHubGraph({
                 ) : null}
               </g>
             )
-          })}
+            })}
+          </g>
         </g>
       </svg>
     </div>
@@ -433,12 +480,16 @@ export function DataHubPage({
   }, [nodes, edges, selectedNode, selectedEdge])
 
   useEffect(() => {
-    if (!graphFullscreen) return undefined
+    document.body.classList.toggle('datahub-graph-is-expanded', graphFullscreen)
+    if (!graphFullscreen) return () => document.body.classList.remove('datahub-graph-is-expanded')
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') setGraphFullscreen(false)
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.classList.remove('datahub-graph-is-expanded')
+    }
   }, [graphFullscreen])
 
   const labelOptions = useMemo(() => {
@@ -730,13 +781,14 @@ export function DataHubPage({
                           {loading ? 'Refreshing...' : 'Refresh'}
                         </button>
                         <button
-                          className="button-secondary"
+                          className="map-filters__toggle map-filters__icon-toggle"
                           type="button"
                           onClick={() => setGraphFullscreen((prev) => !prev)}
                           aria-pressed={graphFullscreen}
+                          aria-label={graphFullscreen ? 'Exit expanded graph' : 'Expand graph'}
+                          title={graphFullscreen ? 'Exit expanded graph' : 'Expand graph'}
                         >
                           {graphFullscreen ? <IconArrowsMinimize size={17} /> : <IconArrowsMaximize size={17} />}
-                          {graphFullscreen ? 'Exit full screen' : 'Full screen'}
                         </button>
                       </div>
                     </div>

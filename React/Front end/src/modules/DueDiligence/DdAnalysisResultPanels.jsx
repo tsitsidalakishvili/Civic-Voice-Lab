@@ -14,7 +14,7 @@ export function DdAnalysisResultPanels({
   return (
     <div className="stack">
       <div className="module-alert module-alert--success">
-        Risk level: {analysisResult.summary?.risk_level || 'Unknown'} · Total hits:{' '}
+        Risk level: {analysisResult.summary?.risk_level || 'Unknown'} - Total hits:{' '}
         {analysisResult.summary?.total_hits - 0}
       </div>
       {analysisResult.summary?.risk_score !== undefined ? (
@@ -54,7 +54,7 @@ export function DdAnalysisResultPanels({
               View full sources
             </button>
           ) : null}
-          <span className="muted">Stored: {analysisResult.storedAt || '—'}</span>
+          <span className="muted">Stored: {analysisResult.storedAt || '-'}</span>
         </div>
       ) : null}
 
@@ -106,15 +106,15 @@ export function DdAnalysisResultPanels({
                 ) : (
                   analysisResult.wikidata.map((row) => (
                     <div className="table-row" key={row.id || row.label}>
-                      <span>{row.label || '—'}</span>
-                      <span>{row.description || '—'}</span>
+                      <span>{row.label || '-'}</span>
+                      <span>{row.description || '-'}</span>
                       <span>
                         {row.url ? (
                           <a href={row.url} target="_blank" rel="noreferrer">
                             View
                           </a>
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </span>
                     </div>
@@ -142,15 +142,15 @@ export function DdAnalysisResultPanels({
                       <span>
                         {row.url ? (
                           <a href={row.url} target="_blank" rel="noreferrer">
-                            {row.name || '—'}
+                            {row.name || '-'}
                           </a>
                         ) : (
-                          row.name || '—'
+                          row.name || '-'
                         )}
                       </span>
-                      <span>{row.schema || '—'}</span>
-                      <span>{(row.datasets || []).slice(0, 3).join(', ') || '—'}</span>
-                      <span>{row.score?.toFixed?.(2) - row.score - '—'}</span>
+                      <span>{row.schema || '-'}</span>
+                      <span>{(row.datasets || []).slice(0, 3).join(', ') || '-'}</span>
+                      <span>{row.score?.toFixed?.(2) ?? row.score ?? '-'}</span>
                     </div>
                   ))
                 )}
@@ -175,14 +175,14 @@ export function DdAnalysisResultPanels({
                       <span>
                         {row.url ? (
                           <a href={row.url} target="_blank" rel="noreferrer">
-                            {row.title || '—'}
+                            {row.title || '-'}
                           </a>
                         ) : (
-                          row.title || '—'
+                          row.title || '-'
                         )}
                       </span>
-                      <span>{row.source || '—'}</span>
-                      <span>{row.tone?.toFixed?.(2) - row.tone - '—'}</span>
+                      <span>{row.source || '-'}</span>
+                      <span>{row.tone?.toFixed?.(2) ?? row.tone ?? '-'}</span>
                     </div>
                   ))
                 )}

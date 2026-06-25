@@ -108,7 +108,7 @@ const renderTemplate = (template, context) => {
 
 /** Human-readable lines for saved segment filterSpec (matches CRM segment form). */
 const formatSegmentFilterSummary = (spec) => {
-  if (!spec || typeof spec !== 'object') return 'â€”'
+  if (!spec || typeof spec !== 'object') return '-'
   const s = spec
   const lines = []
   if (s.group && s.group !== 'All') lines.push(`Group: ${s.group}`)
@@ -858,9 +858,9 @@ export function CRMPage({
 
       let statusMessage = ''
       if (response.emailSent) {
-        statusMessage = `âœ… Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
+        statusMessage = `Sent: Reminder email sent to ${invite.recipientEmail || invite.inviteCode}.`
       } else {
-        statusMessage = `âš ï¸ Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
+        statusMessage = `Warning: Reminder tracked but email failed (${response.emailStatus}). Check email configuration.`
       }
 
       const reminderText = buildSupporterReminderMessage(invite)
@@ -1556,10 +1556,10 @@ export function CRMPage({
     const noteBlock = notes ? `\n\nNote: ${notes}` : ''
     const audience = String(inviteAudience || 'individual').toLowerCase()
     if (audience === 'segment') {
-      return `Hi, here is the Freedom Square event registration link â€” ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+      return `Hi, here is the Freedom Square event registration link - ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
     }
     if (audience !== 'individual') {
-      return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} â€” ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
+      return `Hi team, here is the Freedom Square event registration link for ${getInviteAudienceLabel(audience)} - ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
     }
     const name = recipientName || 'there'
     return `Hi ${name}, you're invited to register for ${event?.name || 'our event'}:\n\n${link}${noteBlock}`
@@ -1882,7 +1882,7 @@ export function CRMPage({
   const crmPulseStats = useMemo(() => {
     const rate = Number(supporterInviteStats?.conversionRate ?? 0)
     const conversionDisplay =
-      supporterInviteStats == null ? 'â€”' : `${Number.isFinite(rate) ? rate.toFixed(1) : '0.0'}%`
+      supporterInviteStats == null ? '-' : `${Number.isFinite(rate) ? rate.toFixed(1) : '0.0'}%`
     return [
       {
         label: 'Total people',
@@ -1962,7 +1962,7 @@ export function CRMPage({
         source: 'invite',
         recipient:
           invite?.recipientName || pendingPerson?.firstName || pendingPerson?.email || 'Recipient',
-        email: invite?.recipientEmail || pendingPerson?.email || invite?.convertedEmail || 'â€”',
+        email: invite?.recipientEmail || pendingPerson?.email || invite?.convertedEmail || '-',
         audience: getInviteAudienceLabel(invite?.inviteAudience || 'individual'),
         channel: invite?.channel || 'manual',
         supporterType: invite?.supporterType || pendingPerson?.supporterType || 'Supporter',
@@ -1974,8 +1974,8 @@ export function CRMPage({
               ? 'Pending approval'
               : 'Sent',
         reminderCount: invite?.reminderCount ?? 0,
-        createdAt: invite?.createdAt || pendingPerson?.createdAt || 'â€”',
-        convertedAt: invite?.convertedAt || 'â€”',
+        createdAt: invite?.createdAt || pendingPerson?.createdAt || '-',
+        convertedAt: invite?.convertedAt || '-',
         sortAt: Math.max(toMillis(invite?.createdAt), toMillis(pendingPerson?.createdAt)),
         invite,
         pendingPerson,
@@ -1990,15 +1990,15 @@ export function CRMPage({
         key: `pending-${person?.signupId || person?.email}`,
         source: 'pending',
         recipient: `${person?.firstName || ''} ${person?.lastName || ''}`.trim() || person?.email || 'Pending form',
-        email: person?.email || 'â€”',
+        email: person?.email || '-',
         audience: 'Single recipient',
-        channel: 'â€”',
+        channel: '-',
         supporterType: person?.supporterType || 'Supporter',
         status: 'pending',
         statusLabel: 'Pending approval',
         reminderCount: 0,
-        createdAt: person?.createdAt || 'â€”',
-        convertedAt: 'â€”',
+        createdAt: person?.createdAt || '-',
+        convertedAt: '-',
         sortAt: toMillis(person?.createdAt),
         invite: null,
         pendingPerson: person,
@@ -2127,7 +2127,7 @@ export function CRMPage({
                   <option value="Member">Members</option>
                 </select>
                 <button className="button" type="submit">
-                  {peopleLoading ? 'Loadingâ€¦' : 'Search'}
+                  {peopleLoading ? 'Loading...' : 'Search'}
                 </button>
               </form>
             </div>
@@ -2139,7 +2139,7 @@ export function CRMPage({
               </div>
               <div className="metric-row">
                 <span>Total people</span>
-                <strong>{summary?.total_people ?? 'â€”'}</strong>
+                <strong>{summary?.total_people ?? '-'}</strong>
               </div>
             </div>
               </aside>
@@ -2178,10 +2178,10 @@ export function CRMPage({
                       <span>{person.fullName || person.email}</span>
                       <span>{person.email || person.personId || '?'}</span>
                       <span>{person.group}</span>
-                      <span>{person.effortScore ?? 'â€”'}</span>
-                      <span>{person.eventAttendCount ?? 'â€”'}</span>
-                      <span>{person.referralCount ?? 'â€”'}</span>
-                      <span>{person.ratingStars || 'â€”'}</span>
+                      <span>{person.effortScore ?? '-'}</span>
+                      <span>{person.eventAttendCount ?? '-'}</span>
+                      <span>{person.referralCount ?? '-'}</span>
+                      <span>{person.ratingStars || '-'}</span>
                     </button>
                   ))}
                 </div>
@@ -2314,7 +2314,7 @@ export function CRMPage({
                       onClick={handleProfileSave}
                       disabled={profileSaving}
                     >
-                      {profileSaving ? 'Savingâ€¦' : <IconCircleCheck size={17} />}
+                      {profileSaving ? 'Saving...' : <IconCircleCheck size={17} />}
                     </button>
                   </div>
                 </div>
@@ -2576,7 +2576,7 @@ export function CRMPage({
                     disabled={supporterInviteLoading}
                   >
                     {supporterInviteLoading
-                      ? 'Refreshingâ€¦'
+                      ? 'Refreshing...'
                       : `Refresh (${invitePipelinePendingCount})`}
                   </button>
                 </div>
@@ -2613,13 +2613,13 @@ export function CRMPage({
                 ) : null}
                 {invitePipelineRows.map((row) => (
                   <div className="table-row" key={row.key}>
-                    <span>{row.recipient || 'â€”'}</span>
-                    <span>{row.email || 'â€”'}</span>
-                    <span>{row.audience || 'â€”'}</span>
-                    <span>{row.channel || 'â€”'}</span>
+                    <span>{row.recipient || '-'}</span>
+                    <span>{row.email || '-'}</span>
+                    <span>{row.audience || '-'}</span>
+                    <span>{row.channel || '-'}</span>
                     <span>{row.supporterType || 'Supporter'}</span>
                     <span>{row.statusLabel}</span>
-                    <span>{row.createdAt || 'â€”'}</span>
+                    <span>{row.createdAt || '-'}</span>
                     <span>{row.reminderCount ?? 0}</span>
                     <span className="filter-row">
                       {row.status === 'pending' ? (
@@ -2635,7 +2635,7 @@ export function CRMPage({
                               )
                             }
                             disabled={
-                              (!row.pendingPerson?.signupId && (!row.email || row.email === 'â€”')) ||
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === '-')) ||
                               supporterApprovalProcessingEmail ===
                                 (row.pendingPerson?.signupId || row.email)
                             }
@@ -2656,7 +2656,7 @@ export function CRMPage({
                               )
                             }
                             disabled={
-                              (!row.pendingPerson?.signupId && (!row.email || row.email === 'â€”')) ||
+                              (!row.pendingPerson?.signupId && (!row.email || row.email === '-')) ||
                               supporterApprovalProcessingEmail ===
                                 (row.pendingPerson?.signupId || row.email)
                             }
@@ -2775,7 +2775,7 @@ export function CRMPage({
                       onClick={handleSaveSupporterSignupVideo}
                       disabled={supporterSignupVideoSaving}
                     >
-                      {supporterSignupVideoSaving ? 'Savingâ€¦' : <IconCircleCheck size={16} />}
+                      {supporterSignupVideoSaving ? 'Saving...' : <IconCircleCheck size={16} />}
                     </button>
                   </div>
                   {supporterSignupVideoEmbedUrl ? (
@@ -2845,7 +2845,7 @@ export function CRMPage({
                   onChange={(event) => setTaskLimit(event.target.value)}
                 />
                 <button className="button" type="button" onClick={loadTasks}>
-                  {tasksLoading ? 'Loadingâ€¦' : 'Refresh'}
+                  {tasksLoading ? 'Loading...' : 'Refresh'}
                 </button>
               </div>
             </div>
@@ -2969,7 +2969,7 @@ export function CRMPage({
                   <div className="table-row table-row--tasks" key={task.taskId}>
                     <span>{task.title}</span>
                     <span>{task.status}</span>
-                    <span>{task.dueDate || 'â€”'}</span>
+                    <span>{task.dueDate || '-'}</span>
                     <span>{task.email}</span>
                     <div className="table-actions">
                       <button
@@ -3045,20 +3045,20 @@ export function CRMPage({
                     <div className="stack" style={{ marginTop: 0, gap: 12 }}>
                       <div className="module-footer outreach-detail-footer">
                         <span>
-                          <strong>Name:</strong> {selectedSegment.name || 'â€”'}
+                          <strong>Name:</strong> {selectedSegment.name || '-'}
                         </span>
                         <span>
-                          <strong>Description:</strong> {selectedSegment.description || 'â€”'}
+                          <strong>Description:</strong> {selectedSegment.description || '-'}
                         </span>
                         <span>
                           <strong>Size:</strong>{' '}
-                          {segmentCountLoading ? 'â€¦' : segmentMemberCount != null ? segmentMemberCount : 'â€”'}
+                          {segmentCountLoading ? '...' : segmentMemberCount != null ? segmentMemberCount : '-'}
                         </span>
                         <span>
-                          <strong>Updated:</strong> {selectedSegment.updatedAt || 'â€”'}
+                          <strong>Updated:</strong> {selectedSegment.updatedAt || '-'}
                         </span>
                         <span>
-                          <strong>ID:</strong> {selectedSegment.segmentId || 'â€”'}
+                          <strong>ID:</strong> {selectedSegment.segmentId || '-'}
                         </span>
                       </div>
                       <div>
@@ -3347,13 +3347,13 @@ export function CRMPage({
                   {outreachSelectedEvent ? (
                     <div className="module-footer outreach-detail-footer">
                       <span>
-                        <strong>Name:</strong> {outreachSelectedEvent.name || 'â€”'}
+                        <strong>Name:</strong> {outreachSelectedEvent.name || '-'}
                       </span>
                       <span>
-                        <strong>Start:</strong> {outreachSelectedEvent.startDate || 'â€”'}
+                        <strong>Start:</strong> {outreachSelectedEvent.startDate || '-'}
                       </span>
                       <span>
-                        <strong>End:</strong> {outreachSelectedEvent.endDate || 'â€”'}
+                        <strong>End:</strong> {outreachSelectedEvent.endDate || '-'}
                       </span>
                       <span>
                         <strong>Status:</strong> {outreachSelectedEvent.status || 'Planned'}
@@ -3362,7 +3362,7 @@ export function CRMPage({
                         <strong>Registrations:</strong> {outreachSelectedEvent.registrations ?? 0}
                       </span>
                       <span>
-                        <strong>Location:</strong> {outreachSelectedEvent.location || 'â€”'}
+                        <strong>Location:</strong> {outreachSelectedEvent.location || '-'}
                       </span>
                     </div>
                   ) : (
@@ -4101,7 +4101,7 @@ function CRMDataEntryTab() {
             Facebook group member
           </label>
           <button className="button" type="submit" disabled={saving}>
-            {saving ? 'Savingâ€¦' : 'Save person'}
+            {saving ? 'Saving...' : 'Save person'}
           </button>
         </form>
       </div>
@@ -4350,12 +4350,12 @@ function CRMDashboardTab({ mapStats } = {}) {
 
   // Georgian to English translations for Involvement Areas
   const involvementAreaTranslations = {
-    'áƒ”áƒ¥áƒ¡áƒžáƒ”áƒ áƒ¢áƒ£áƒšáƒ˜ áƒ›áƒ®áƒáƒ áƒ“áƒáƒ­áƒ”áƒ áƒ áƒ—áƒ¥áƒ•áƒ”áƒœáƒ¡ áƒ¡áƒ¤áƒ”áƒ áƒáƒ¨áƒ˜': 'Expert Support',
-    'áƒ¡áƒáƒ˜áƒœáƒ¤áƒáƒ áƒ›áƒáƒªáƒ˜áƒ áƒ“áƒ áƒ¡áƒáƒ’áƒáƒœáƒ›áƒáƒœáƒáƒ—áƒšáƒ”áƒ‘áƒšáƒ áƒ¨áƒ”áƒ®áƒ•áƒ”áƒ“áƒ áƒ”áƒ‘áƒ¨áƒ˜ áƒ›áƒáƒœáƒáƒ¬áƒ˜áƒšáƒ”áƒáƒ‘áƒ': 'Educational Events',
-    'áƒáƒœáƒšáƒáƒ˜áƒœ áƒ™áƒáƒ›áƒžáƒáƒœáƒ˜áƒáƒ¨áƒ˜ áƒ›áƒáƒœáƒáƒ¬áƒ˜áƒšáƒ”áƒáƒ‘áƒ/ áƒ˜áƒœáƒ¤áƒáƒ áƒ›áƒáƒªáƒ˜áƒ˜áƒ¡ áƒ’áƒáƒ•áƒ áƒªáƒ”áƒšáƒ”áƒ‘áƒáƒ¨áƒ˜ áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ': 'Online Campaign',
-    'áƒ”áƒ•áƒ”áƒœáƒ¢áƒ”áƒ‘áƒ˜áƒ¡ áƒáƒ áƒ’áƒáƒœáƒ˜áƒ–áƒ”áƒ‘áƒ': 'Event Organization',
-    'áƒáƒ“áƒ’áƒ˜áƒšáƒ–áƒ” áƒ›áƒ®áƒáƒ áƒ“áƒáƒ­áƒ”áƒ áƒ áƒ›áƒ˜áƒ¢áƒ˜áƒœáƒ’áƒ”áƒ‘áƒ¡áƒ áƒ“áƒ áƒ¡áƒ®áƒ•áƒ áƒ¦áƒáƒœáƒ˜áƒ¡áƒ«áƒ˜áƒ”áƒ‘áƒ”áƒ‘áƒ–áƒ”': 'On-site Support',
-    'áƒ¡áƒ®áƒ•áƒ': 'Other',
+    'ექსპერტული მხარდაჭერა თქვენს სფეროში': 'Expert Support',
+    'საინფორმაციო და საგანმანათლებლო შეხვედრებში მონაწილეობა': 'Educational Events',
+    'ონლაინ კამპანიაში მონაწილეობა/ ინფორმაციის გავრცელებაში დახმარება': 'Online Campaign',
+    'ევენტების ორგანიზება': 'Event Organization',
+    'ადგილზე მხარდაჭერა მიტინგებსა და სხვა ღონისძიებებზე': 'On-site Support',
+    'სხვა': 'Other',
   }
 
   // Translate involvement areas for display
@@ -4921,7 +4921,7 @@ function CRMVolunteersTab() {
         <div className="module-card">
         <h3>Volunteer metrics</h3>
         {loading ? (
-          <p className="muted">Loading volunteersâ€¦</p>
+          <p className="muted">Loading volunteers...</p>
         ) : (
           <>
             <div className="metric-row">
@@ -4960,7 +4960,7 @@ function CRMVolunteersTab() {
               <div className="table-row" key={row.email}>
                 <span>{row.fullName || row.email}</span>
                 <span>{row.email}</span>
-                <span>{row.ratingStars || row.rating || 'â€”'}</span>
+                <span>{row.ratingStars || row.rating || '-'}</span>
                 <span>{row.effortScore ?? row.effortHours ?? 0}</span>
               </div>
             ))}
@@ -5938,7 +5938,7 @@ function CRMCampaignsTab() {
       )
     }
     if (campaignOwnerFilter !== 'All') {
-      rows = rows.filter((row) => (row.owner || 'â€”') === campaignOwnerFilter)
+      rows = rows.filter((row) => (row.owner || '-') === campaignOwnerFilter)
     }
     if (searchTerm) {
       rows = rows.filter((row) =>
@@ -6449,7 +6449,7 @@ function CRMCampaignsTab() {
           </div>
           {selectedCampaignId ? <div className="pill">Selected</div> : null}
         </div>
-        {loading ? <p className="muted">Loadingâ€¦</p> : null}
+        {loading ? <p className="muted">Loading...</p> : null}
         <div className="campaigns-list-toolbar">
           <div className="filter-row">
             <input
@@ -6486,7 +6486,7 @@ function CRMCampaignsTab() {
               onChange={(event) => setCampaignSort(event.target.value)}
             >
               <option value="recent">Most recent</option>
-              <option value="name">Name Aâ€“Z</option>
+              <option value="name">Name A-Z</option>
               <option value="status">Status</option>
               <option value="funding">Funding progress</option>
             </select>
@@ -6522,8 +6522,8 @@ function CRMCampaignsTab() {
             </div>
           )}
           {filteredCampaigns.map((campaign) => {
-            const startDate = campaign.startDate || 'â€”'
-            const endDate = campaign.endDate || 'â€”'
+            const startDate = campaign.startDate || '-'
+            const endDate = campaign.endDate || '-'
             const isSelected = selectedCampaignId === campaign.campaignId
             return (
               <button
@@ -6537,12 +6537,12 @@ function CRMCampaignsTab() {
                 aria-pressed={isSelected}
               >
                 <span data-label="Name">{campaign.name}</span>
-                <span data-label="Topic">{campaign.topic || 'â€”'}</span>
+                <span data-label="Topic">{campaign.topic || '-'}</span>
                 <span data-label="Status">{campaign.status || 'Planned'}</span>
                 <span data-label="Dates">
-                  {startDate} â†’ {endDate}
+                  {startDate} to {endDate}
                 </span>
-                <span data-label="Owner">{campaign.owner || 'â€”'}</span>
+                <span data-label="Owner">{campaign.owner || '-'}</span>
                 <span data-label="Goal">{campaign.goal ?? 0}</span>
                 <span data-label="Funding">
                   {Number(campaign.fundsRaisedAmount ?? 0).toLocaleString()} /{' '}
@@ -6579,7 +6579,7 @@ function CRMCampaignsTab() {
                   <strong>
                     {selectedCampaign.responsibleOwner ||
                       selectedCampaign.owner ||
-                      'â€”'}
+                      '-'}
                   </strong>
                 </div>
                 <div className="metric-row">
@@ -6591,11 +6591,10 @@ function CRMCampaignsTab() {
                   <strong>
                     {selectedCampaign.startDate ||
                       selectedCampaign.executionStartDate ||
-                      'â€”'}{' '}
-                    â†’{' '}
+                      '-'}{' '} to {' '}
                     {selectedCampaign.endDate ||
                       selectedCampaign.expectedCompletionDate ||
-                      'â€”'}
+                      '-'}
                   </strong>
                 </div>
                 <div className="metric-row">
@@ -6992,7 +6991,7 @@ function CRMCampaignsTab() {
                         {contrib.isAnonymous
                           ? 'Anonymous'
                           : contrib.contributorName || 'Supporter'}{' '}
-                        â€” {contrib.amount} {contrib.currency}{' '}
+                        - {contrib.amount} {contrib.currency}{' '}
                         {contrib.paymentStatus ? `(${contrib.paymentStatus})` : ''}
                       </li>
                     ))}
@@ -7107,7 +7106,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {milestones.slice(0, 5).map((milestone) => (
                         <li key={milestone.milestoneId}>
-                          {milestone.title} â€” {milestone.status}
+                          {milestone.title} - {milestone.status}
                         </li>
                       ))}
                     </ul>
@@ -7228,7 +7227,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {expenses.slice(0, 5).map((expense) => (
                         <li key={expense.expenseId}>
-                          {expense.category} â€” {expense.amount} {expense.currency}{' '}
+                          {expense.category} - {expense.amount} {expense.currency}{' '}
                           {expense.approvalStatus
                             ? `(${expense.approvalStatus})`
                             : ''}
@@ -7344,7 +7343,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {proofArtifacts.slice(0, 5).map((artifact) => (
                         <li key={artifact.proofId}>
-                          {artifact.artifactType} â€” {artifact.caption || artifact.url}
+                          {artifact.artifactType} - {artifact.caption || artifact.url}
                         </li>
                       ))}
                     </ul>
@@ -7414,7 +7413,7 @@ function CRMCampaignsTab() {
                     <ul className="compact-list">
                       {partners.slice(0, 5).map((partner) => (
                         <li key={partner.partnerId}>
-                          {partner.name} â€” {partner.role || 'Partner'}
+                          {partner.name} - {partner.role || 'Partner'}
                         </li>
                       ))}
                     </ul>
@@ -7698,7 +7697,7 @@ function CRMCampaignsTab() {
                     {campaignUpdates.slice(0, 5).map((update) => (
                       <li key={update.updateId}>
                         {update.message}
-                        {update.createdBy ? ` â€” ${update.createdBy}` : ''}
+                        {update.createdBy ? ` - ${update.createdBy}` : ''}
                       </li>
                     ))}
                   </ul>
@@ -7799,7 +7798,7 @@ function CRMCampaignsTab() {
                   <ul className="compact-list">
                     {campaignVolunteers.slice(0, 5).map((volunteer) => (
                       <li key={volunteer.volunteerId}>
-                        {volunteer.name} â€” {volunteer.role || 'Volunteer'}
+                        {volunteer.name} - {volunteer.role || 'Volunteer'}
                       </li>
                     ))}
                   </ul>
@@ -7895,15 +7894,15 @@ function CRMCampaignsTab() {
             <div className="stack">
               <div className="metric-row">
                 <span>Total votes</span>
-                <strong>{report?.metrics?.total_votes ?? 'â€”'}</strong>
+                <strong>{report?.metrics?.total_votes ?? '-'}</strong>
               </div>
               <div className="metric-row">
                 <span>Participants</span>
-                <strong>{report?.metrics?.total_participants ?? 'â€”'}</strong>
+                <strong>{report?.metrics?.total_participants ?? '-'}</strong>
               </div>
               <div className="metric-row">
                 <span>Clusters</span>
-                <strong>{report?.clusters?.length ?? 'â€”'}</strong>
+                <strong>{report?.clusters?.length ?? '-'}</strong>
               </div>
             </div>
           ) : null}
@@ -8395,7 +8394,7 @@ function CRMEventsTab() {
             onClick={handleShareLink}
             disabled={sendingLink || groups.length === 0}
           >
-            {sendingLink ? 'Sendingâ€¦' : 'Send link'}
+            {sendingLink ? 'Sending...' : 'Send link'}
           </button>
           <div className="card-divider">
             <h4>Slack</h4>
@@ -8408,7 +8407,7 @@ function CRMEventsTab() {
             onClick={handleSlackShare}
             disabled={sendingSlack}
           >
-            {sendingSlack ? 'Sendingâ€¦' : 'Send to default Slack'}
+            {sendingSlack ? 'Sending...' : 'Send to default Slack'}
           </button>
         </div>
       </div>
@@ -8434,7 +8433,7 @@ function CRMEventsTab() {
               <span>{`${row.firstName || ''} ${row.lastName || ''}`.trim()}</span>
               <span>{row.email}</span>
               <span>{row.registrationStatus}</span>
-              <span>{row.updatedAt || 'â€”'}</span>
+              <span>{row.updatedAt || '-'}</span>
             </div>
           ))}
         </div>

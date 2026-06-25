@@ -891,7 +891,7 @@ export function DueDiligencePage({
         ? 'Known'
         : 'New'
       : 'Not checked'
-    : 'Ã¢â‚¬â€'
+    : '-'
 
   const gmailUrl = useMemo(() => {
     const subjectLine = encodeURIComponent(
@@ -937,9 +937,9 @@ export function DueDiligencePage({
     const evidenceCards = mentions.slice(0, 6).map((row, idx) => ({
       id: row.url || row.title || `mention-${idx}`,
       title: row.title || 'Public mention',
-      source: row.source || 'Ã¢â‚¬â€',
-      date: row.publishedAt || 'Ã¢â‚¬â€',
-      snippet: row.snippet || 'Ã¢â‚¬â€',
+      source: row.source || '-',
+      date: row.publishedAt || '-',
+      snippet: row.snippet || '-',
       url: row.url || '',
       phase: idx < 2 ? 'Opening' : idx < 4 ? 'Cross-exam' : 'Closing',
     }))
@@ -1239,7 +1239,7 @@ export function DueDiligencePage({
     () => [
       {
         label: 'Watchlist',
-        value: summary?.competitors ?? 'Ã¢â‚¬â€',
+        value: summary?.competitors ?? '-',
         icon: <IconShieldCheck size={18} />,
         badge: 'Tracked',
       },
@@ -1330,7 +1330,7 @@ export function DueDiligencePage({
                 <span>Updated</span>
               </div>
               {casesLoading ? (
-                <div className="table-row empty">Loading casesÃ¢â‚¬Â¦</div>
+                <div className="table-row empty">Loading cases...</div>
               ) : cases.length === 0 ? (
                 <div className="table-row empty">No cases yet.</div>
               ) : (
@@ -1344,14 +1344,14 @@ export function DueDiligencePage({
                     onClick={() => handleSelectCase(row.caseId)}
                   >
                     <span>
-                      {getCaseDisplayName(row) || 'Ã¢â‚¬â€'}
+                      {getCaseDisplayName(row) || '-'}
                       {getCaseSecondaryName(row) ? (
                         <small className="muted">{getCaseSecondaryName(row)}</small>
                       ) : null}
                     </span>
                     <span>{row.status || 'Draft'}</span>
-                    <span>{row.lastRiskLevel || 'Ã¢â‚¬â€'}</span>
-                    <span>{row.updatedAt || row.createdAt || 'Ã¢â‚¬â€'}</span>
+                    <span>{row.lastRiskLevel || '-'}</span>
+                    <span>{row.updatedAt || row.createdAt || '-'}</span>
                   </button>
                 ))
               )}
@@ -1359,7 +1359,7 @@ export function DueDiligencePage({
             <div className="module-footer">
               <span>
                 {activeCaseId
-                  ? `Active case: ${getCaseDisplayName(activeCase) || 'Ã¢â‚¬â€'}`
+                  ? `Active case: ${getCaseDisplayName(activeCase) || '-'}`
                   : 'No case selected.'}
               </span>
               <button
@@ -1395,15 +1395,15 @@ export function DueDiligencePage({
               <div className="module-header__meta">
                 <div className="module-header__metric">
                   <span>Watchlist</span>
-                  <strong>{summary?.competitors ?? 'Ã¢â‚¬â€'}</strong>
+                  <strong>{summary?.competitors ?? '-'}</strong>
                 </div>
                 <div className="module-header__metric">
                   <span>Network People</span>
-                  <strong>{crmSummary?.total_people ?? 'Ã¢â‚¬â€'}</strong>
+                  <strong>{crmSummary?.total_people ?? '-'}</strong>
                 </div>
                 <div className="module-header__metric">
                   <span>Supporters</span>
-                  <strong>{crmSummary?.supporters ?? 'Ã¢â‚¬â€'}</strong>
+                  <strong>{crmSummary?.supporters ?? '-'}</strong>
                 </div>
               </div>
             </div>
@@ -1436,7 +1436,7 @@ export function DueDiligencePage({
 
           {activeCaseId ? (
             <div className="module-alert module-alert--success">
-              Active case: {getCaseDisplayName(activeCase) || 'Ã¢â‚¬â€'} Ã‚Â· {caseStatus}
+              Active case: {getCaseDisplayName(activeCase) || '-'} - {caseStatus}
             </div>
           ) : (
             <div className="module-alert">
@@ -1482,16 +1482,16 @@ export function DueDiligencePage({
                   </div>
                   <div className="metric-row">
                     <span>Georgian name</span>
-                    <strong>{subjectGeorgian || 'Ã¢â‚¬â€'}</strong>
+                    <strong>{subjectGeorgian || '-'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>English name</span>
-                    <strong>{subjectEnglish || 'Ã¢â‚¬â€'}</strong>
+                    <strong>{subjectEnglish || '-'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>Search/display name</span>
                     <strong>
-                      {subjectName.trim() ? `${subjectName} (${subjectType})` : 'Ã¢â‚¬â€'}
+                      {subjectName.trim() ? `${subjectName} (${subjectType})` : '-'}
                     </strong>
                   </div>
                   <div className="metric-row">
@@ -1500,15 +1500,15 @@ export function DueDiligencePage({
                   </div>
                   <div className="metric-row">
                     <span>Owner</span>
-                    <strong>{caseOwner || 'Ã¢â‚¬â€'}</strong>
+                    <strong>{caseOwner || '-'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>Last risk</span>
-                    <strong>{activeCase?.lastRiskLevel || 'Ã¢â‚¬â€'}</strong>
+                    <strong>{activeCase?.lastRiskLevel || '-'}</strong>
                   </div>
                   <div className="metric-row">
                     <span>Last report</span>
-                    <strong>{activeCase?.lastReportAt || 'Ã¢â‚¬â€'}</strong>
+                    <strong>{activeCase?.lastReportAt || '-'}</strong>
                   </div>
                   <div className="filter-row">
                     <input
@@ -1566,7 +1566,7 @@ export function DueDiligencePage({
                       onClick={handleUpdateCase}
                       disabled={caseSaving}
                     >
-                      {caseSaving ? 'SavingÃ¢â‚¬Â¦' : 'Update case'}
+                      {caseSaving ? 'Saving...' : 'Update case'}
                     </button>
                     <button
                       className="button-secondary"
@@ -1642,7 +1642,7 @@ export function DueDiligencePage({
                         onClick={handleSaveSubjectToCase}
                         disabled={caseSaving}
                       >
-                        {caseSaving ? 'SavingÃ¢â‚¬Â¦' : 'Save subject to case'}
+                        {caseSaving ? 'Saving...' : 'Save subject to case'}
                       </button>
                       <button
                         className="button-secondary"
@@ -1659,7 +1659,7 @@ export function DueDiligencePage({
                 <p className="muted">
                   Current subject:{' '}
                   <strong>
-                    {subjectName.trim() ? `${subjectName} (${subjectType})` : 'Ã¢â‚¬â€'}
+                    {subjectName.trim() ? `${subjectName} (${subjectType})` : '-'}
                   </strong>
                 </p>
               </div>
@@ -1692,7 +1692,7 @@ export function DueDiligencePage({
                           <div className="table-row" key={`${row.email || 'match'}-${idx}`}>
                             <span>{row.fullName || row.email}</span>
                             <span>{row.email}</span>
-                            <span>{row.group || 'Ã¢â‚¬â€'}</span>
+                            <span>{row.group || '-'}</span>
                             <span>{row.timeAvailability || 'Unspecified'}</span>
                           </div>
                         ))
@@ -1721,7 +1721,7 @@ export function DueDiligencePage({
                           <div className="table-row" key={row.competitorId || row.name}>
                             <span>{row.name}</span>
                             <span>{row.competitorType}</span>
-                            <span>{row.notes || 'Ã¢â‚¬â€'}</span>
+                            <span>{row.notes || '-'}</span>
                           </div>
                         ))
                       )}
@@ -1876,7 +1876,7 @@ export function DueDiligencePage({
                     onClick={handleRunMediaMonitor}
                     disabled={mediaLoading}
                   >
-                    {mediaLoading ? 'ScanningÃ¢â‚¬Â¦' : 'Scan media'}
+                    {mediaLoading ? 'Scanning...' : 'Scan media'}
                   </button>
                 </div>
                 <div className="filter-row">
@@ -1919,7 +1919,7 @@ export function DueDiligencePage({
                 ) : null}
                 {mediaResult ? (
                   <div className="module-alert module-alert--success">
-                    {mediaResult.mentions?.length ?? 0} mentions fetched Ã‚Â·{' '}
+                    {mediaResult.mentions?.length ?? 0} mentions fetched -{' '}
                     {mediaResult.storedCount ?? 0} stored
                   </div>
                 ) : null}
@@ -1974,11 +1974,11 @@ export function DueDiligencePage({
                           <small className="muted">{mention.publishedAt || ''}</small>
                         </span>
                         <span>{mention.source}</span>
-                        <span>{mention.matchedTopics?.join(', ') || 'Ã¢â‚¬â€'}</span>
+                        <span>{mention.matchedTopics?.join(', ') || '-'}</span>
                         <span>
                           {mention.quotes?.length
-                            ? mention.quotes.map((quote) => `Ã¢â‚¬Å“${quote.text}Ã¢â‚¬Â`).join(' / ')
-                            : 'Ã¢â‚¬â€'}
+                            ? mention.quotes.map((quote) => `"${quote.text}"`).join(' / ')
+                            : '-'}
                         </span>
                       </div>
                     ))
@@ -2196,16 +2196,16 @@ export function DueDiligencePage({
                         <span>PDF</span>
                       </div>
                       {historyLoading ? (
-                        <div className="table-row empty">Loading report historyÃ¢â‚¬Â¦</div>
+                        <div className="table-row empty">Loading report history...</div>
                       ) : reportHistory.length === 0 ? (
                         <div className="table-row empty">No prior reports for this case or subject.</div>
                       ) : (
                         reportHistory.map((row) => (
                           <div className="table-row" key={row.reportId}>
-                            <span>{row.createdAt || 'Ã¢â‚¬â€'}</span>
-                            <span>{row.riskLevel || 'Ã¢â‚¬â€'}</span>
+                            <span>{row.createdAt || '-'}</span>
+                            <span>{row.riskLevel || '-'}</span>
                             <span>{row.totalHits ?? 0}</span>
-                            <span>{(row.sources || []).join(', ') || 'Ã¢â‚¬â€'}</span>
+                            <span>{(row.sources || []).join(', ') || '-'}</span>
                             <span>
                               <button
                                 type="button"
@@ -2213,7 +2213,7 @@ export function DueDiligencePage({
                                 onClick={() => handleOpenReportFromHistory(row.reportId)}
                                 disabled={archivedReportLoading}
                               >
-                                {archivedReportLoading ? 'LoadingÃ¢â‚¬Â¦' : 'Open'}
+                                {archivedReportLoading ? 'Loading...' : 'Open'}
                               </button>
                             </span>
                             <span>
@@ -2265,7 +2265,7 @@ export function DueDiligencePage({
                   onClick={handleCreateDecision}
                   disabled={decisionSaving}
                 >
-                  {decisionSaving ? 'SavingÃ¢â‚¬Â¦' : 'Save decision'}
+                  {decisionSaving ? 'Saving...' : 'Save decision'}
                 </button>
               </div>
               {decisionError ? <div className="module-alert">{decisionError}</div> : null}
@@ -2285,15 +2285,15 @@ export function DueDiligencePage({
                       <h3>Network context</h3>
                       <div className="metric-row">
                         <span>People</span>
-                        <strong>{crmSummary?.total_people ?? 'Ã¢â‚¬â€'}</strong>
+                        <strong>{crmSummary?.total_people ?? '-'}</strong>
                       </div>
                       <div className="metric-row">
                         <span>Supporters</span>
-                        <strong>{crmSummary?.supporters ?? 'Ã¢â‚¬â€'}</strong>
+                        <strong>{crmSummary?.supporters ?? '-'}</strong>
                       </div>
                       <div className="metric-row">
                         <span>Members</span>
-                        <strong>{crmSummary?.members ?? 'Ã¢â‚¬â€'}</strong>
+                        <strong>{crmSummary?.members ?? '-'}</strong>
                       </div>
                     </div>
                     <div className="module-card">
@@ -2363,7 +2363,7 @@ export function DueDiligencePage({
                       onChange={(event) => setNotes(event.target.value)}
                     />
                     <button className="button" type="submit">
-                      {saving ? 'SavingÃ¢â‚¬Â¦' : 'Add'}
+                      {saving ? 'Saving...' : 'Add'}
                     </button>
                   </form>
 
@@ -2401,7 +2401,7 @@ export function DueDiligencePage({
                       <div className="table-row" key={item.competitorId}>
                         <span>{item.name}</span>
                         <span>{item.competitorType}</span>
-                        <span>{item.notes || 'Ã¢â‚¬â€'}</span>
+                        <span>{item.notes || '-'}</span>
                         <div className="table-actions">
                           <button
                             className="button-secondary"
@@ -2464,7 +2464,7 @@ export function DueDiligencePage({
                         type="button"
                         onClick={handleRunDebatePrep}
                       >
-                        {debateLoading ? 'RunningÃ¢â‚¬Â¦' : 'Run debate prep'}
+                        {debateLoading ? 'Running...' : 'Run debate prep'}
                       </button>
                     </div>
                     <div className="filter-row">
@@ -2505,8 +2505,8 @@ export function DueDiligencePage({
                     {debateResult ? (
                       <div className="stack">
                         <div className="module-alert module-alert--success">
-                          {debateResult.mentions?.length ?? 0} mentions Ã‚Â·{' '}
-                          {debateResult.startDate} Ã¢â€ â€™ {debateResult.endDate}
+                          {debateResult.mentions?.length ?? 0} mentions -{' '}
+                          {debateResult.startDate} to {debateResult.endDate}
                         </div>
                         <p className="muted">
                           Query: <strong>{debateResult.query}</strong>
@@ -2597,7 +2597,7 @@ export function DueDiligencePage({
                                       <span className="pill">{card.phase}</span>
                                     </div>
                                     <p className="muted">
-                                      {card.source} Ã‚Â· {card.date}
+                                      {card.source} - {card.date}
                                     </p>
                                     <p>{card.snippet}</p>
                                     {card.url ? (
@@ -2626,15 +2626,15 @@ export function DueDiligencePage({
                           ) : (
                             debateResult.wikipedia.map((row) => (
                               <div className="table-row" key={row.url || row.title}>
-                                <span>{row.title || 'Ã¢â‚¬â€'}</span>
-                                <span>{row.summary || 'Ã¢â‚¬â€'}</span>
+                                <span>{row.title || '-'}</span>
+                                <span>{row.summary || '-'}</span>
                                 <span>
                                   {row.url ? (
                                     <a href={row.url} target="_blank" rel="noreferrer">
                                       View
                                     </a>
                                   ) : (
-                                    'Ã¢â‚¬â€'
+                                    '-'
                                   )}
                                 </span>
                               </div>
@@ -2659,7 +2659,7 @@ export function DueDiligencePage({
                                 <span>{theme.name}</span>
                                 <span>{theme.count}</span>
                                 <span>
-                                  {(theme.examples || []).slice(0, 2).join(' Ã‚Â· ') || 'Ã¢â‚¬â€'}
+                                  {(theme.examples || []).slice(0, 2).join(' - ') || '-'}
                                 </span>
                               </div>
                             ))
@@ -2684,15 +2684,15 @@ export function DueDiligencePage({
                                 <span>
                                   {row.url ? (
                                     <a href={row.url} target="_blank" rel="noreferrer">
-                                      {row.title || 'Ã¢â‚¬â€'}
+                                      {row.title || '-'}
                                     </a>
                                   ) : (
-                                    row.title || 'Ã¢â‚¬â€'
+                                    row.title || '-'
                                   )}
                                 </span>
-                                <span>{row.source || 'Ã¢â‚¬â€'}</span>
-                                <span>{row.snippet || 'Ã¢â‚¬â€'}</span>
-                                <span>{row.publishedAt || 'Ã¢â‚¬â€'}</span>
+                                <span>{row.source || '-'}</span>
+                                <span>{row.snippet || '-'}</span>
+                                <span>{row.publishedAt || '-'}</span>
                               </div>
                             ))
                           )}

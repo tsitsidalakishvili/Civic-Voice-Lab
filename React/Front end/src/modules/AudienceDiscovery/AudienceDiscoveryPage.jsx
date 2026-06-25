@@ -145,16 +145,16 @@ export function AudienceDiscoveryPage({
   const metrics = useMemo(() => {
     if (!analysis?.summary) return []
     return [
-      { label: 'Coverage', value: analysis.summary.coverage ?? '—' },
-      { label: 'Explainability', value: analysis.summary.explainability ?? '—' },
-      { label: 'Evidence pass rate', value: analysis.summary.evidencePassRate ?? '—' },
-      { label: 'Runtime (sec)', value: analysis.summary.runtimeSeconds ?? '—' },
-      { label: 'P95 runtime (sec)', value: analysis.summary.p95RuntimeSeconds ?? '—' },
-      { label: 'Pages crawled', value: analysis.summary.pagesCrawled ?? '—' },
-      { label: 'Segments', value: analysis.summary.segmentsGenerated ?? '—' },
-      { label: 'Verified segments', value: analysis.summary.verifiedSegments ?? '—' },
-      { label: 'Chunks', value: analysis.summary.chunksCreated ?? '—' },
-      { label: 'Clusters', value: analysis.summary.clustersCreated ?? '—' },
+      { label: 'Coverage', value: analysis.summary.coverage ?? '�' },
+      { label: 'Explainability', value: analysis.summary.explainability ?? '�' },
+      { label: 'Evidence pass rate', value: analysis.summary.evidencePassRate ?? '�' },
+      { label: 'Runtime (sec)', value: analysis.summary.runtimeSeconds ?? '�' },
+      { label: 'P95 runtime (sec)', value: analysis.summary.p95RuntimeSeconds ?? '�' },
+      { label: 'Pages crawled', value: analysis.summary.pagesCrawled ?? '�' },
+      { label: 'Segments', value: analysis.summary.segmentsGenerated ?? '�' },
+      { label: 'Verified segments', value: analysis.summary.verifiedSegments ?? '�' },
+      { label: 'Chunks', value: analysis.summary.chunksCreated ?? '�' },
+      { label: 'Clusters', value: analysis.summary.clustersCreated ?? '�' },
     ]
   }, [analysis])
 
@@ -284,10 +284,10 @@ export function AudienceDiscoveryPage({
     if (!analysis?.summary) return []
     const summary = analysis.summary
     return [
-      { label: 'Pages', value: summary.pagesCrawled ?? '—' },
-      { label: 'Chunks', value: summary.chunksCreated ?? '—' },
-      { label: 'Segments', value: summary.segmentsGenerated ?? '—' },
-      { label: 'Verified', value: summary.verifiedSegments ?? '—' },
+      { label: 'Pages', value: summary.pagesCrawled ?? '�' },
+      { label: 'Chunks', value: summary.chunksCreated ?? '�' },
+      { label: 'Segments', value: summary.segmentsGenerated ?? '�' },
+      { label: 'Verified', value: summary.verifiedSegments ?? '�' },
       { label: 'Evidence pass', value: formatPercent(summary.evidencePassRate) },
       {
         label: 'Runtime',
@@ -1111,7 +1111,7 @@ export function AudienceDiscoveryPage({
                     <div className="table-row" key={stage.id}>
                       <span data-label="Stage">{stage.label}</span>
                       <span data-label="Status">{stage.status}</span>
-                      <span data-label="Count">{stage.count ?? '—'}</span>
+                      <span data-label="Count">{stage.count ?? '�'}</span>
                       <span data-label="Duration">
                         {stage.durationSec ? `${stage.durationSec}s` : '—'}
                       </span>
@@ -1460,8 +1460,8 @@ export function AudienceDiscoveryPage({
                   </a>
                 </span>
                 <span data-label="Status">{page.crawlStatus || '—'}</span>
-                <span data-label="Chunks">{page.chunkCount ?? '—'}</span>
-                <span data-label="Words">{page.wordCount ?? '—'}</span>
+                <span data-label="Chunks">{page.chunkCount ?? '�'}</span>
+                <span data-label="Words">{page.wordCount ?? '�'}</span>
                 <span data-label="Inspect">
                   <button
                     className="button-secondary"

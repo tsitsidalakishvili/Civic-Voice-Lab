@@ -1682,14 +1682,17 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
     summary = report.get("summary") or {}
     rationale = summary.get("risk_rationale") or []
     warnings = report.get("warnings") or []
-    wikidata = report.get("wikidata") or []
-    wikipedia = report.get("wikipedia") or []
-    opensanctions = report.get("opensanctions") or []
-    news = report.get("news") or []
-    media = report.get("media") or {}
-    media_mentions = (media.get("mentions") or []) if isinstance(media, dict) else []
-    declarations = report.get("declarations") or []
-    sources = ", ".join(report.get("sources") or [])
+    ai_report = report.get("aiReport") or report.get("ai_report") or {}
+    if isinstance(ai_report, dict):
+        ai_sections = ai_report.get("sections") or []
+        ai_key_findings = ai_report.get("keyFindings") or []
+        ai_actions = ai_report.get("recommendedActions") or []
+        ai_limitations = ai_report.get("limitations") or ai_report.get("caveats") or []
+    else:
+        ai_sections = []
+        ai_key_findings = []
+        ai_actions = []
+        ai_limitations = []
 
     story = [
         Paragraph("Due Diligence Report", title_style),
@@ -1709,7 +1712,6 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
             ["News hits", _pdf_paragraph(summary.get("news_hits", 0), body_style)],
             ["Georgian media hits", _pdf_paragraph(summary.get("media_hits", 0), body_style)],
             ["Declaration hits", _pdf_paragraph(summary.get("declaration_hits", 0), body_style)],
-            ["Sources", _pdf_paragraph(sources or "-", body_style)],
         ],
         colWidths=[140, 360],
     )
@@ -1739,192 +1741,50 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         story.append(Paragraph(warning_text, body_style))
         story.append(Spacer(1, 12))
 
-    story.append(Paragraph("Wikipedia Findings", header_style))
-    if wikipedia:
-        rows = [["Title", "Summary", "URL"]]
-        for row in wikipedia:
-            rows.append([
-                _pdf_paragraph(row.get("title") or "", body_style),
-                _pdf_paragraph(row.get("summary") or "", body_style),
-                _pdf_paragraph(row.get("url") or "", body_style),
-            ])
-        table = Table(rows, colWidths=[140, 250, 110])
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        story.append(table)
+    story.append(Paragraph("Analyst Report", header_style))
+    if ai_sections:
+        for section in ai_sections:
+            if not isinstance(section, dict):
+                continue
+            heading = section.get("heading") or "Report Section"
+            story.append(Paragraph(_pdf_escape(heading), header_style))
+            for paragraph in section.get("paragraphs") or []:
+                if str(paragraph).strip():
+                    story.append(_pdf_paragraph(paragraph, body_style))
+                    story.append(Spacer(1, 6))
+            bullets = [str(item) for item in (section.get("bullets") or []) if str(item).strip()]
+            if bullets:
+                bullet_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in bullets])
+                story.append(Paragraph(bullet_text, body_style))
+                story.append(Spacer(1, 8))
     else:
-        story.append(Paragraph("No Wikipedia matches.", body_style))
-    story.append(Spacer(1, 12))
-
-    story.append(Paragraph("Wikidata Findings", header_style))
-    if wikidata:
-        rows = [["Label", "Description", "URL"]]
-        for row in wikidata:
-            rows.append(
-                [
-                    _pdf_paragraph(row.get("label") or "", body_style),
-                    _pdf_paragraph(row.get("description") or "", body_style),
-                    _pdf_paragraph(row.get("url") or "", body_style),
-                ]
-            )
-        table = Table(rows, colWidths=[140, 250, 110])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
+        story.append(
+            Paragraph(
+                "No separate AI narrative has been saved with this scan yet. "
+                "Use the summary, risk rationale, and reviewer notes below as the decision brief.",
+                body_style,
             )
         )
-        story.append(table)
-    else:
-        story.append(Paragraph("No Wikidata matches.", body_style))
-    story.append(Spacer(1, 12))
+        story.append(Spacer(1, 8))
 
-    story.append(Paragraph("OpenSanctions Findings", header_style))
-    if opensanctions:
-        rows = [["Name", "Schema", "Datasets", "Topics", "Score"]]
-        for row in opensanctions:
-            rows.append(
-                [
-                    _pdf_paragraph(row.get("name") or "", body_style),
-                    _pdf_paragraph(row.get("schema") or "", body_style),
-                    _pdf_paragraph(", ".join(row.get("datasets") or []), body_style),
-                    _pdf_paragraph(", ".join(row.get("topics") or []), body_style),
-                    _pdf_paragraph(
-                        f"{row.get('score'):.2f}"
-                        if isinstance(row.get("score"), (int, float))
-                        else "",
-                        body_style,
-                    ),
-                ]
-            )
-        table = Table(rows, colWidths=[140, 70, 120, 120, 50])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        story.append(table)
-    else:
-        story.append(Paragraph("No OpenSanctions matches.", body_style))
-    story.append(Spacer(1, 12))
+    if ai_key_findings:
+        story.append(Paragraph("Key Findings", header_style))
+        findings_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_key_findings if str(item).strip()])
+        story.append(Paragraph(findings_text, body_style))
+        story.append(Spacer(1, 10))
 
-    story.append(Paragraph("News & Web Mentions (GDELT)", header_style))
-    if news:
-        rows = [["Headline", "Source", "Published", "Tone"]]
-        for row in news:
-            rows.append(
-                [
-                    _pdf_paragraph(row.get("title") or "", body_style),
-                    _pdf_paragraph(row.get("source") or "", body_style),
-                    _pdf_paragraph(row.get("publishedAt") or "", body_style),
-                    _pdf_paragraph(
-                        f"{row.get('tone'):.2f}" if isinstance(row.get("tone"), (int, float)) else "",
-                        body_style,
-                    ),
-                ]
-            )
-        table = Table(rows, colWidths=[260, 120, 80, 50])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        story.append(table)
-    else:
-        story.append(Paragraph("No recent news found.", body_style))
+    if ai_actions:
+        story.append(Paragraph("Recommended Actions", header_style))
+        actions_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_actions if str(item).strip()])
+        story.append(Paragraph(actions_text, body_style))
+        story.append(Spacer(1, 10))
 
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("Georgian Media Findings", header_style))
-    if media_mentions:
-        rows = [["Headline", "Source", "Published", "URL"]]
-        for row in media_mentions[:12]:
-            rows.append(
-                [
-                    _pdf_paragraph(row.get("title") or "", body_style),
-                    _pdf_paragraph(row.get("source") or "", body_style),
-                    _pdf_paragraph(row.get("publishedAt") or "", body_style),
-                    _pdf_paragraph(row.get("url") or "", body_style),
-                ]
-            )
-        table = Table(rows, colWidths=[190, 90, 80, 150])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        story.append(table)
-    else:
-        story.append(Paragraph("No Georgian media matches found in configured sources.", body_style))
+    if ai_limitations:
+        story.append(Paragraph("Limitations", header_style))
+        limitations_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_limitations if str(item).strip()])
+        story.append(Paragraph(limitations_text, body_style))
+        story.append(Spacer(1, 10))
 
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("Asset Declaration Findings", header_style))
-    if declarations:
-        rows = [["Name", "Organization", "Submitted", "Key counts"]]
-        for row in declarations:
-            counts = ((row.get("summary") or {}).get("counts") or {})
-            key_counts = ", ".join(
-                f"{label}: {counts.get(key, 0)}"
-                for label, key in [
-                    ("Properties", "properties"),
-                    ("Bank", "bankAccounts"),
-                    ("Jobs", "jobs"),
-                    ("Contracts", "contracts"),
-                    ("Family", "familyMembers"),
-                ]
-            )
-            rows.append(
-                [
-                    _pdf_paragraph(row.get("name") or "", body_style),
-                    _pdf_paragraph(row.get("organization") or "", body_style),
-                    _pdf_paragraph(row.get("declarationSubmitDate") or row.get("dateEdited") or "", body_style),
-                    _pdf_paragraph(key_counts, body_style),
-                ]
-            )
-        table = Table(rows, colWidths=[130, 170, 80, 130])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("FONTNAME", (0, 0), (-1, -1), pdf_font),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        story.append(table)
-    else:
-        story.append(Paragraph("No asset declarations found.", body_style))
-
-    story.append(Spacer(1, 12))
     story.append(Paragraph("Reviewer Note", header_style))
     story.append(
         Paragraph(
