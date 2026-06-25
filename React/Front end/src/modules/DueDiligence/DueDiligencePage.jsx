@@ -107,7 +107,7 @@ export function DueDiligencePage({
   const [mediaLoading, setMediaLoading] = useState(false)
   const [mediaError, setMediaError] = useState('')
   const [mediaResult, setMediaResult] = useState(null)
-  const [aiReportTopic, setAiReportTopic] = useState('education')
+  const [aiReportTopic] = useState('General')
   const [aiReportLoading, setAiReportLoading] = useState(false)
   const [aiReportError, setAiReportError] = useState('')
   const [aiReport, setAiReport] = useState(null)
@@ -1745,12 +1745,6 @@ export function DueDiligencePage({
                   ))}
                 </div>
                 <div className="filter-row">
-                  <input
-                    className="input"
-                    placeholder="Topic, e.g. education"
-                    value={aiReportTopic}
-                    onChange={(event) => setAiReportTopic(event.target.value)}
-                  />
                   <button className="button" type="button" onClick={handleRunAnalysis} disabled={analysisLoading || mediaLoading}>
                     {analysisLoading || mediaLoading ? 'Running...' : 'Run DD scan'}
                   </button>
@@ -2039,12 +2033,6 @@ export function DueDiligencePage({
                   <div className="pill">AI layer</div>
                 </div>
                 <div className="filter-row">
-                  <input
-                    className="input"
-                    placeholder="Topic, e.g. education"
-                    value={aiReportTopic}
-                    onChange={(event) => setAiReportTopic(event.target.value)}
-                  />
                   <button
                     className="button"
                     type="button"
