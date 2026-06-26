@@ -2389,39 +2389,121 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
         f"Risk is currently assessed as {risk_level}. Escalation should depend on confirmed identity, source relevance, recency, "
         "and whether the same concern appears across more than one independent signal."
     )
-    declaration_bullets: List[str] = []
-    for declaration in declarations[:3]:
-        if not isinstance(declaration, dict):
-            continue
-        dossier = ((declaration.get("summary") or {}).get("dossier") or {}) if isinstance(declaration.get("summary"), dict) else {}
-        counts = ((declaration.get("summary") or {}).get("counts") or {}) if isinstance(declaration.get("summary"), dict) else {}
-        declarant = dossier.get("declarant") or {}
-        submitted = declarant.get("submitted") or declaration.get("declarationSubmitDate") or declaration.get("dateEdited") or "unknown date"
-        declaration_bullets.append(
-            f"Declaration {submitted}: {counts.get('properties', 0)} properties, {counts.get('movableProperties', 0)} vehicles/movable assets, "
-            f"{counts.get('enterprises', 0) + counts.get('linkedEnterprises', 0)} business links, {counts.get('familyMembers', 0)} family members, "
-            f"{counts.get('jobs', 0)} job/income records, and {counts.get('contracts', 0)} contracts."
-        )
-        for job in (dossier.get("careerAndIncome") or [])[:3]:
-            declaration_bullets.append(
-                "Career/income: " + "; ".join(str(part) for part in [job.get("owner"), job.get("organization"), job.get("position"), job.get("amount")] if part)
+    declaration_sections: List[Dict[str, object]] = []
+    if declarations:
+        overview_lines: List[str] = []
+        property_lines: List[str] = []
+        career_lines: List[str] = []
+        family_lines: List[str] = []
+        vehicle_lines: List[str] = []
+        business_lines: List[str] = []
+        finance_lines: List[str] = []
+        declaration_count = len([row for row in declarations if isinstance(row, dict)])
+        latest_submitted = ""
+
+        def _parts(*values: object) -> List[str]:
+            return [str(value).strip() for value in values if str(value or "").strip()]
+
+        def _sentence(prefix: str, values: List[str]) -> str:
+            return f"{prefix}: " + "; ".join(values) + "." if values else ""
+
+        for declaration in declarations[:4]:
+            if not isinstance(declaration, dict):
+                continue
+            summary_obj = declaration.get("summary") if isinstance(declaration.get("summary"), dict) else {}
+            dossier = summary_obj.get("dossier") or {}
+            counts = summary_obj.get("counts") or {}
+            declarant = dossier.get("declarant") or {}
+            submitted = declarant.get("submitted") or declaration.get("declarationSubmitDate") or declaration.get("dateEdited") or "unknown date"
+            if not latest_submitted:
+                latest_submitted = str(submitted)
+            overview_lines.append(
+                f"The {submitted} declaration lists {counts.get('properties', 0)} real-estate assets, "
+                f"{counts.get('movableProperties', 0)} vehicle or movable-asset record(s), "
+                f"{counts.get('enterprises', 0) + counts.get('linkedEnterprises', 0)} business link(s), "
+                f"{counts.get('familyMembers', 0)} family member(s), {counts.get('jobs', 0)} job/income record(s), "
+                f"and {counts.get('contracts', 0)} contract or obligation record(s)."
             )
-        for item in (dossier.get("properties") or [])[:3]:
-            declaration_bullets.append(
-                "Property: " + "; ".join(str(part) for part in [item.get("owner"), item.get("type"), item.get("address"), item.get("area"), item.get("share"), item.get("amount")] if part)
+            for item in (dossier.get("properties") or [])[:4]:
+                line = _sentence(
+                    f"Property declared in {submitted}",
+                    _parts(item.get("owner"), item.get("type"), item.get("address"), item.get("area") and f"area {item.get('area')}", item.get("share") and f"share {item.get('share')}", item.get("amount")),
+                )
+                if line:
+                    property_lines.append(line)
+            for item in (dossier.get("careerAndIncome") or [])[:4]:
+                line = _sentence(
+                    f"Declared employment income in {submitted}",
+                    _parts(item.get("owner"), item.get("organization"), item.get("position"), item.get("period") and item.get("endDate") and f"{item.get('period')} to {item.get('endDate')}", item.get("amount")),
+                )
+                if line:
+                    career_lines.append(line)
+            for item in (dossier.get("vehiclesAndMovable") or [])[:4]:
+                line = _sentence(
+                    f"Vehicle or movable asset declared in {submitted}",
+                    _parts(item.get("owner"), item.get("type"), item.get("details"), item.get("acquired") and f"acquired {item.get('acquired')}", item.get("amount")),
+                )
+                if line:
+                    vehicle_lines.append(line)
+            for item in (dossier.get("businesses") or [])[:4]:
+                line = _sentence(
+                    f"Business interest declared in {submitted}",
+                    _parts(item.get("name"), item.get("role"), item.get("share") and f"share {item.get('share')}", item.get("amount")),
+                )
+                if line:
+                    business_lines.append(line)
+            for item in (dossier.get("linkedBusinesses") or [])[:4]:
+                line = _sentence(
+                    f"Linked business declared in {submitted}",
+                    _parts(item.get("name"), item.get("relation"), item.get("role"), item.get("share") and f"share {item.get('share')}", item.get("amount")),
+                )
+                if line:
+                    business_lines.append(line)
+            for item in (dossier.get("familyMembers") or [])[:4]:
+                line = _sentence(
+                    f"Family member listed in {submitted}",
+                    _parts(item.get("name"), item.get("relation"), item.get("birthDate") and f"born {item.get('birthDate')}", item.get("position")),
+                )
+                if line:
+                    family_lines.append(line)
+            bank_totals = summary_obj.get("bankAccountTotals") or {}
+            cash_totals = summary_obj.get("cashTotals") or {}
+            job_totals = summary_obj.get("jobIncomeTotals") or {}
+            contract_totals = summary_obj.get("contractAmountTotals") or {}
+            contract_income = summary_obj.get("contractIncomeTotals") or {}
+            totals_parts = []
+            for label, totals in [
+                ("bank account balances", bank_totals),
+                ("cash", cash_totals),
+                ("job income", job_totals),
+                ("contract amounts", contract_totals),
+                ("contract income/payments", contract_income),
+            ]:
+                if isinstance(totals, dict) and totals:
+                    totals_parts.append(label + " " + ", ".join(f"{amount} {currency}" for currency, amount in totals.items()))
+            if totals_parts:
+                finance_lines.append(f"The {submitted} declaration reports " + "; ".join(totals_parts) + ".")
+
+        if overview_lines:
+            opening = (
+                f"The asset-declaration review covers {declaration_count} public declaration record(s)"
+                + (f", with the latest submitted on {latest_submitted}." if latest_submitted else ".")
+                + " The figures below are self-declared public records and should be verified against source documents before any decision."
             )
-        for item in (dossier.get("vehiclesAndMovable") or [])[:3]:
-            declaration_bullets.append(
-                "Vehicle/movable asset: " + "; ".join(str(part) for part in [item.get("owner"), item.get("type"), item.get("details"), item.get("amount")] if part)
-            )
-        for item in (dossier.get("businesses") or [])[:3]:
-            declaration_bullets.append(
-                "Business interest: " + "; ".join(str(part) for part in [item.get("name"), item.get("role"), item.get("share"), item.get("amount")] if part)
-            )
-        for item in (dossier.get("familyMembers") or [])[:3]:
-            declaration_bullets.append(
-                "Family member: " + "; ".join(str(part) for part in [item.get("name"), item.get("relation"), item.get("birthDate"), item.get("position")] if part)
-            )
+            declaration_sections.append({"heading": "Asset Declaration Dossier", "paragraphs": [opening] + overview_lines[:3]})
+        if property_lines:
+            declaration_sections.append({"heading": "Declared Property Portfolio", "paragraphs": ["The property profile below summarizes real-estate holdings reported in the declarations."], "bullets": property_lines[:10]})
+        if career_lines:
+            declaration_sections.append({"heading": "Career and Declared Income", "paragraphs": ["Declared employment records show the roles and income amounts reported by the declarant or related persons."], "bullets": career_lines[:10]})
+        if family_lines:
+            declaration_sections.append({"heading": "Family and Related Parties", "paragraphs": ["Family-member records are relevant for related-party and asset-attribution review."], "bullets": family_lines[:10]})
+        if vehicle_lines:
+            declaration_sections.append({"heading": "Vehicles and Movable Assets", "paragraphs": ["Movable assets are summarized separately from real estate to make ownership patterns easier to review."], "bullets": vehicle_lines[:8]})
+        if business_lines:
+            declaration_sections.append({"heading": "Business Interests", "paragraphs": ["Declared enterprise interests and linked businesses should be cross-checked against registry and media records."], "bullets": business_lines[:8]})
+        if finance_lines:
+            declaration_sections.append({"heading": "Financial and Contract Notes", "paragraphs": finance_lines[:6]})
+
     actions = [
         "Confirm the subject identity against Georgian and English names before relying on any match.",
         "Review the highest-risk signals first and separate verified facts from contextual mentions.",
@@ -2435,7 +2517,7 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
     sections = [
         {"heading": "Executive Summary", "paragraphs": [executive]},
         {"heading": "Source Coverage", "paragraphs": [coverage]},
-        *([{"heading": "Asset Declaration Dossier", "bullets": declaration_bullets[:12]}] if declaration_bullets else []),
+        *declaration_sections,
         {"heading": f"Assessment Scope: {topic_label}", "paragraphs": [topic_assessment]},
         {"heading": "Risk Assessment", "paragraphs": [risk_assessment]},
         {"heading": "Key Findings", "bullets": key_findings},
@@ -2503,6 +2585,11 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
                 "sections": [
                     {"heading": "Executive Summary", "paragraphs": ["ready-to-render report paragraphs"], "bullets": []},
                     {"heading": "Profile and Source Coverage", "paragraphs": ["what sources returned and what did not"], "bullets": []},
+                    {"heading": "Asset Declaration Dossier", "paragraphs": ["narrative overview of declaration coverage and most important declared asset signals"], "bullets": []},
+                    {"heading": "Declared Property Portfolio", "paragraphs": ["short interpretation of real-estate holdings"], "bullets": ["one complete sentence per important property or ownership pattern"]},
+                    {"heading": "Career and Declared Income", "paragraphs": ["short interpretation of positions, organizations, years, and declared income"], "bullets": ["one complete sentence per role/income pattern"]},
+                    {"heading": "Family and Related Parties", "paragraphs": ["short interpretation of listed family members and related-party relevance"], "bullets": ["one complete sentence per relevant family or related-party signal"]},
+                    {"heading": "Vehicles, Businesses, and Contracts", "paragraphs": ["short interpretation of vehicles, movable assets, businesses, loans, rent, contracts, and bank/cash signals"], "bullets": ["one complete sentence per important financial or ownership signal"]},
                     {"heading": "Assessment Scope: <topic>", "paragraphs": ["topic-specific assessment"], "bullets": []},
                     {"heading": "Risk Assessment", "paragraphs": ["risk interpretation with confidence limits"], "bullets": []}
                 ],
@@ -2530,7 +2617,7 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
         "analysisRules": [
             "Use only facts present in rawEvidence. Do not invent facts, quotes, dates, sanctions, assets, relationships, or allegations.",
             "Treat OpenSanctions results as possible matches until identity is verified; never state a sanctions/PEP match as confirmed unless the supplied evidence clearly supports it.",
-            "Treat asset declarations as self-declared public records. Build a clear dossier section from declaration summaries: properties owned, vehicles/movable property, business interests, linked businesses, career/positions, yearly job income, contracts/loans/rent, bank/cash totals, gifts, family members, and family-member assets when present. Do not dump raw declaration JSON.",
+            "Treat asset declarations as self-declared public records. Write them as a professional dossier, not as raw bullets. Create separate report sections for declaration overview, declared property portfolio, career and declared income, family and related parties, vehicles/movable assets, business interests, contracts/loans/rent, and bank/cash totals when data is present. Use complete sentences and explain why each category matters for due diligence. Do not dump raw declaration JSON.",
             "Keep Georgian titles, organization names, and quotes in Georgian when present. You may explain their relevance in English.",
             "Separate evidence from interpretation: every key finding should be traceable to Wikipedia, OpenSanctions, declarations, or a named media source.",
             "If the selected topic is not directly supported by the evidence, say so clearly instead of stretching unrelated material.",
@@ -2542,7 +2629,8 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
             "Concise, professional, readable for a non-technical decision maker.",
             "No generic filler. Each sentence should add a finding, limitation, or action.",
             "Do not create a raw sources section, article dump, JSON-looking prose, or evidence table in the report text.",
-            "For asset declarations, write like a professional dossier: grouped headings, short conclusions, amounts with currencies, and clear caveats where ownership or family relationship needs verification.",
+            "For asset declarations, write like a professional dossier: use grouped headings, narrative paragraphs, concise findings, amounts with currencies, dates where available, and clear caveats where ownership or family relationship needs verification.",
+            "Avoid semicolon-only list items. Convert declaration rows into readable sentences such as: 'The 2018 declaration reports three apartments in Tbilisi, including one 158 sq.m. apartment valued at 50,000 GEL.'",
             "Do not overstate automated risk scores; explain what drove the signal.",
         ],
     }
