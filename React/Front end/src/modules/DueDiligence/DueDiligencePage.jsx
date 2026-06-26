@@ -641,6 +641,7 @@ export function DueDiligencePage({
         },
       })
       setAnalysisResult(result)
+      setAiReport(result?.aiReport || null)
       let embeddedMedia = result?.media || null
       if (!embeddedMedia) {
         try {
@@ -773,6 +774,7 @@ export function DueDiligencePage({
       const raw = await getJson(`/due-diligence/reports/${reportId}`)
       const normalized = normalizeStoredReportToAnalysisResult(raw)
       setAnalysisResult(normalized)
+      setAiReport(normalized?.aiReport || null)
       setMediaResult(normalized?.media || null)
       setSelectedHistoryReportId(reportId)
       applyActiveTab('reports')

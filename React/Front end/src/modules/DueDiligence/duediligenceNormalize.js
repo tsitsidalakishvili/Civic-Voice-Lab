@@ -14,6 +14,7 @@ export function normalizeStoredReportToAnalysisResult(apiReport) {
     news: Array.isArray(p.news) ? p.news : [],
     declarations: Array.isArray(p.declarations) ? p.declarations : [],
     media: p.media && typeof p.media === 'object' ? p.media : null,
+    aiReport: p.aiReport && typeof p.aiReport === 'object' ? p.aiReport : null,
     summary: p.summary && typeof p.summary === 'object' ? p.summary : {},
     warnings: Array.isArray(p.warnings) ? p.warnings : [],
     reportId: apiReport.reportId,

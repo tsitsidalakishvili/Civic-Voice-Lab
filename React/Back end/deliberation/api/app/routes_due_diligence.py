@@ -229,6 +229,7 @@ class DueDiligenceAnalysisOut(BaseModel):
     news: List[NewsResult]
     declarations: List[AssetDeclarationResult] = []
     media: Optional[Dict[str, object]] = None
+    ai_report: Optional[Dict[str, object]] = Field(default=None, alias="aiReport")
     sources: List[str] = []
     summary: Dict[str, object]
     warnings: List[str]
@@ -1694,8 +1695,31 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         ai_actions = []
         ai_limitations = []
 
+    if not ai_sections:
+        fallback_compact = _compact_dd_evidence(
+            report,
+            report.get("media") if isinstance(report.get("media"), dict) else None,
+        )
+        fallback_report = _fallback_dd_ai_report(
+            str(report.get("subject") or "Subject"),
+            str(report.get("subjectType") or report.get("subject_type") or "Person"),
+            "General",
+            fallback_compact,
+            [str(w) for w in warnings if str(w).strip()],
+        )
+        ai_sections = fallback_report.get("sections") or []
+        ai_key_findings = fallback_report.get("keyFindings") or []
+        ai_actions = fallback_report.get("recommendedActions") or []
+        ai_limitations = fallback_report.get("limitations") or fallback_report.get("caveats") or []
+
+    rendered_section_headings = {
+        str(section.get("heading") or "").strip().lower()
+        for section in ai_sections
+        if isinstance(section, dict)
+    }
+
     story = [
-        Paragraph("Due Diligence Report", title_style),
+        Paragraph(_pdf_escape((ai_report if isinstance(ai_report, dict) else {}).get("reportTitle") or f"Due Diligence Brief: {report.get('subject') or 'Subject'}"), title_style),
         Paragraph(f"Subject: <b>{_pdf_escape(report.get('subject'))}</b>", body_style),
         Paragraph(f"Type: {_pdf_escape(report.get('subjectType'))}", body_style),
         Paragraph(f"Generated: {_pdf_escape(report.get('createdAt'))}", body_style),
@@ -1736,7 +1760,7 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
         story.append(Paragraph(warning_text, body_style))
         story.append(Spacer(1, 12))
 
-    story.append(Paragraph("Analyst Report", header_style))
+    story.append(Paragraph("Analyst Brief", header_style))
     if ai_sections:
         for section in ai_sections:
             if not isinstance(section, dict):
@@ -1753,28 +1777,22 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
                 story.append(Paragraph(bullet_text, body_style))
                 story.append(Spacer(1, 8))
     else:
-        story.append(
-            Paragraph(
-                "No separate AI narrative has been saved with this scan yet. "
-                "Use the summary, risk rationale, and reviewer notes below as the decision brief.",
-                body_style,
-            )
-        )
+        story.append(Paragraph("The scan did not produce enough structured findings for a narrative report.", body_style))
         story.append(Spacer(1, 8))
 
-    if ai_key_findings:
+    if ai_key_findings and "key findings" not in rendered_section_headings:
         story.append(Paragraph("Key Findings", header_style))
         findings_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_key_findings if str(item).strip()])
         story.append(Paragraph(findings_text, body_style))
         story.append(Spacer(1, 10))
 
-    if ai_actions:
+    if ai_actions and "recommended actions" not in rendered_section_headings:
         story.append(Paragraph("Recommended Actions", header_style))
         actions_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_actions if str(item).strip()])
         story.append(Paragraph(actions_text, body_style))
         story.append(Spacer(1, 10))
 
-    if ai_limitations:
+    if ai_limitations and "limitations" not in rendered_section_headings:
         story.append(Paragraph("Limitations", header_style))
         limitations_text = "<br/>".join([f"- {_pdf_escape(item)}" for item in ai_limitations if str(item).strip()])
         story.append(Paragraph(limitations_text, body_style))
@@ -2111,10 +2129,13 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
     wikidata = compact.get("wikidata") or []
     wikipedia = compact.get("wikipedia") or []
     opensanctions = compact.get("opensanctions") or []
+    declarations = compact.get("declarations") or []
     evidence = compact.get("evidence") or []
     risk_level = str(summary.get("risk_level") or "Unknown")
+    risk_score = summary.get("risk_score")
     total_hits = int(summary.get("total_hits") or len(evidence) or 0)
-    topic_l = topic.lower().strip()
+    topic_label = (topic or "General").strip() or "General"
+    topic_l = topic_label.lower()
     topic_hits = []
     for row in evidence:
         haystack = " ".join([str(row.get("title") or ""), str(row.get("snippet") or "")]).lower()
@@ -2122,80 +2143,92 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
             topic_hits.append(row)
     if not topic_hits:
         topic_hits = evidence[:5]
+
+    coverage_notes = []
+    if wikipedia or wikidata:
+        coverage_notes.append("Profile and identity context was available from encyclopedic sources.")
+    if opensanctions:
+        coverage_notes.append("Watchlist-style screening returned possible matches that require identity verification.")
+    if declarations:
+        coverage_notes.append("Public asset declaration records were available for review.")
+    if topic_hits:
+        coverage_notes.append("Media or news material was available for the selected review scope.")
+    if not coverage_notes:
+        coverage_notes.append("The configured sources returned limited material for this subject at scan time.")
+
     key_findings = [
-        f"{subject} has {total_hits} public-source hit(s) across the selected DD sources.",
-        f"Current automated risk level is {risk_level} based on watchlist, sanctions, Wikipedia, declarations, and media signals.",
+        f"The scan found {total_hits} signal(s) that may require analyst review.",
+        f"The automated risk level is {risk_level}; treat this as triage guidance, not a final decision.",
     ]
     if wikipedia:
-        key_findings.append(f"Wikipedia returned {len(wikipedia)} profile/context match(es); verify the exact article before relying on it.")
+        key_findings.append("Wikipedia returned profile context that should be checked against the subject's Georgian and English names.")
     if wikidata:
-        key_findings.append(f"Wikidata returned {len(wikidata)} identity/context match(es); verify the exact entity before relying on them.")
+        key_findings.append("Wikidata returned identity context that can help with alias and entity disambiguation.")
     if opensanctions:
-        key_findings.append(f"OpenSanctions returned {len(opensanctions)} possible match(es); manual disambiguation is required.")
-    key_findings.append(f"For topic '{topic}', the report selected {len(topic_hits)} relevant media/news item(s) from the raw scan.")
+        key_findings.append("OpenSanctions returned possible match(es); confirm identity before using them in a conclusion.")
+    if declarations:
+        key_findings.append("Asset declaration records should be reviewed for roles, ownership, income, and related-party patterns.")
+    if topic_hits:
+        key_findings.append(f"Relevant source material was available for the review scope: {topic_label}.")
+
     executive = (
-        f"This due diligence report synthesizes raw public-source material for {subject} ({subject_type}) "
-        f"with focus on '{topic}'. The current signal is {risk_level}. Treat the output as an analyst brief: "
-        "it organizes evidence and highlights verification needs, but it does not replace human review."
+        f"This brief summarizes the due diligence scan for {subject} ({subject_type}). "
+        f"The current automated risk level is {risk_level}"
+        + (f" with a score of {risk_score}" if risk_score is not None else "")
+        + ". The purpose of the report is to help an analyst identify what should be verified before a case decision."
     )
+    coverage = " ".join(coverage_notes)
     topic_assessment = (
-        f"The loaded material contains {len(topic_hits)} item(s) useful for assessing the subject against the topic '{topic}'. "
-        "Prioritize direct article links, dates, and quotes when deciding whether the evidence supports a claim."
+        f"For the review scope '{topic_label}', the scan identified {len(topic_hits)} item(s) that may support further assessment. "
+        "Where material is indirect, ambiguous, or based on similar names, it should be treated as context rather than a finding."
     )
     risk_assessment = (
-        f"Automated risk level: {risk_level}. Higher risk should be assigned only when source links confirm identity, relevance, "
-        "and adverse content. Ambiguous name matches should remain in review."
+        f"Risk is currently assessed as {risk_level}. Escalation should depend on confirmed identity, source relevance, recency, "
+        "and whether the same concern appears across more than one independent signal."
     )
     actions = [
-        "Open each cited source and confirm the subject identity.",
-        f"Tag evidence by topic '{topic}' and separate direct quotes from article summaries.",
-        "Manually review any OpenSanctions match before using it in a decision.",
+        "Confirm the subject identity against Georgian and English names before relying on any match.",
+        "Review the highest-risk signals first and separate verified facts from contextual mentions.",
+        "Record a short analyst conclusion explaining whether the signals support approval, escalation, or rejection.",
     ]
     caveats = [
-        "This report only uses evidence currently loaded in the DD module.",
-        "Media search coverage is incomplete and can be affected by rate limits, transliteration, and source availability.",
-        "Public-source matches can be false positives for common names or organizations.",
-    ]
-    evidence_table = [
-        {
-            "id": f"E{idx + 1}",
-            "source": str(row.get("source") or "Evidence"),
-            "date": str(row.get("date") or ""),
-            "claim": str(row.get("title") or row.get("snippet") or ""),
-            "url": str(row.get("url") or ""),
-        }
-        for idx, row in enumerate(topic_hits[:8])
+        "Automated screening can miss relevant material because of rate limits, language variation, transliteration, and source availability.",
+        "Similar names and organization aliases can create false positives.",
+        "This report supports human review and should not be treated as a final legal or factual determination by itself.",
     ]
     sections = [
         {"heading": "Executive Summary", "paragraphs": [executive]},
-        {"heading": f"Topic Assessment: {topic}", "paragraphs": [topic_assessment], "evidenceRefs": [row.get("id") for row in evidence_table]},
+        {"heading": "Source Coverage", "paragraphs": [coverage]},
+        {"heading": f"Assessment Scope: {topic_label}", "paragraphs": [topic_assessment]},
         {"heading": "Risk Assessment", "paragraphs": [risk_assessment]},
+        {"heading": "Key Findings", "bullets": key_findings},
         {"heading": "Recommended Actions", "bullets": actions},
         {"heading": "Limitations", "bullets": caveats},
     ]
     return {
         "subject": subject,
         "subjectType": subject_type,
-        "topic": topic,
+        "topic": topic_label,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "mode": "fallback-structured",
-        "reportTitle": f"Due Diligence Report: {subject}",
+        "reportTitle": f"Due Diligence Brief: {subject}",
         "classification": "Internal review",
         "reportMetadata": {
             "subject": subject,
             "subjectType": subject_type,
-            "topic": topic,
+            "topic": topic_label,
             "riskLevel": risk_level,
+            "riskScore": risk_score,
             "totalHits": total_hits,
         },
         "sections": sections,
-        "evidenceTable": evidence_table,
+        "evidenceTable": [],
         "limitations": caveats,
         "executiveSummary": executive,
         "keyFindings": key_findings,
         "topicAssessment": topic_assessment,
         "riskAssessment": risk_assessment,
-        "evidence": topic_hits[:8],
+        "evidence": [],
         "recommendedActions": actions,
         "caveats": caveats,
         "warnings": warnings,
@@ -2225,25 +2258,25 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
     prompt = {
         "task": "Draft a decision-ready due diligence report from the supplied evidence only.",
         "outputContract": {
-            "format": "Return one valid JSON object only. No markdown, no prose outside JSON.",
+            "format": "Return one valid JSON object only so the app can render it. The JSON values must contain finished, reader-facing report text; do not include markdown, code fences, raw payloads, or prose outside JSON.",
             "schema": {
                 "reportTitle": "Due Diligence Report: <subject>",
                 "classification": "Internal review",
                 "reportMetadata": {"subject": "string", "subjectType": "string", "topic": "string", "riskLevel": "string", "generatedFor": "string"},
                 "sections": [
-                    {"heading": "Executive Summary", "paragraphs": ["ready-to-render report paragraphs"], "bullets": [], "evidenceRefs": []},
-                    {"heading": "Profile and Source Coverage", "paragraphs": ["what sources returned and what did not"], "bullets": [], "evidenceRefs": []},
-                    {"heading": "Topic Assessment: <topic>", "paragraphs": ["topic-specific assessment"], "bullets": [], "evidenceRefs": ["E1"]},
-                    {"heading": "Risk Assessment", "paragraphs": ["risk interpretation with confidence limits"], "bullets": [], "evidenceRefs": []}
+                    {"heading": "Executive Summary", "paragraphs": ["ready-to-render report paragraphs"], "bullets": []},
+                    {"heading": "Profile and Source Coverage", "paragraphs": ["what sources returned and what did not"], "bullets": []},
+                    {"heading": "Assessment Scope: <topic>", "paragraphs": ["topic-specific assessment"], "bullets": []},
+                    {"heading": "Risk Assessment", "paragraphs": ["risk interpretation with confidence limits"], "bullets": []}
                 ],
-                "evidenceTable": [{"id": "E1", "source": "string", "date": "string", "claim": "short evidence claim", "url": "string"}],
+                "evidenceTable": [],
                 "limitations": ["coverage gaps, ambiguity, rate limits, language/transliteration issues, or false-positive risks"],
                 "recommendedActions": ["specific verification or follow-up actions"],
                 "executiveSummary": "same content as Executive Summary, retained for compatibility",
                 "keyFindings": ["4-8 source-backed findings; retained for compatibility"],
                 "topicAssessment": "same content as topic section, retained for compatibility",
                 "riskAssessment": "same content as risk section, retained for compatibility",
-                "evidence": [{"source": "string", "title": "string", "url": "string", "date": "string", "snippet": "short evidence note"}],
+                "evidence": [],
                 "caveats": ["same content as limitations, retained for compatibility"],
             },
         },
@@ -2271,6 +2304,7 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
         "styleGuide": [
             "Concise, professional, readable for a non-technical decision maker.",
             "No generic filler. Each sentence should add a finding, limitation, or action.",
+            "Do not create a raw sources section, article dump, JSON-looking prose, or evidence table in the report text.",
             "Do not overstate automated risk scores; explain what drove the signal.",
         ],
     }
@@ -2300,6 +2334,37 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
     except Exception as exc:
         return None, f"LLM report failed ({type(exc).__name__}); generated fallback report."
 
+
+def _prepare_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dict[str, object]) -> Dict[str, object]:
+    warnings = [str(w) for w in (compact.get("warnings") or []) if str(w).strip()]
+    ai_report, ai_warning = _call_dd_ai_report(subject, subject_type, topic, compact)
+    if ai_warning:
+        warnings.append(ai_warning)
+    fallback = _fallback_dd_ai_report(subject, subject_type, topic, compact, warnings)
+    if not ai_report:
+        return fallback
+    return {
+        "subject": subject,
+        "subjectType": subject_type,
+        "topic": topic,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "mode": str(ai_report.get("mode") or "ai"),
+        "reportTitle": str(ai_report.get("reportTitle") or fallback.get("reportTitle") or f"Due Diligence Brief: {subject}"),
+        "classification": str(ai_report.get("classification") or fallback.get("classification") or "Internal review"),
+        "reportMetadata": dict(ai_report.get("reportMetadata") or fallback.get("reportMetadata") or {}),
+        "sections": list(ai_report.get("sections") or fallback.get("sections") or [])[:8],
+        "evidenceTable": [],
+        "limitations": [str(item) for item in (ai_report.get("limitations") or ai_report.get("caveats") or fallback.get("limitations") or fallback["caveats"])] [:8],
+        "executiveSummary": str(ai_report.get("executiveSummary") or fallback["executiveSummary"]),
+        "keyFindings": [str(item) for item in (ai_report.get("keyFindings") or fallback["keyFindings"])] [:8],
+        "topicAssessment": str(ai_report.get("topicAssessment") or fallback["topicAssessment"]),
+        "riskAssessment": str(ai_report.get("riskAssessment") or fallback["riskAssessment"]),
+        "evidence": [],
+        "recommendedActions": [str(item) for item in (ai_report.get("recommendedActions") or fallback["recommendedActions"])] [:8],
+        "caveats": [str(item) for item in (ai_report.get("caveats") or fallback["caveats"])] [:8],
+        "warnings": warnings,
+    }
+
 @router.post("/ai-report", response_model=DueDiligenceAiReportOut)
 def generate_due_diligence_ai_report(payload: DueDiligenceAiReportRequest):
     subject = payload.subject.strip()
@@ -2308,35 +2373,7 @@ def generate_due_diligence_ai_report(payload: DueDiligenceAiReportRequest):
     subject_type = _normalize_subject_type(payload.subject_type)
     topic = payload.topic.strip() or "General"
     compact = _compact_dd_evidence(payload.analysis, payload.media)
-    warnings = [str(w) for w in (compact.get("warnings") or []) if str(w).strip()]
-    ai_report, ai_warning = _call_dd_ai_report(subject, subject_type, topic, compact)
-    if ai_warning:
-        warnings.append(ai_warning)
-    if not ai_report:
-        return _fallback_dd_ai_report(subject, subject_type, topic, compact, warnings)
-    fallback = _fallback_dd_ai_report(subject, subject_type, topic, compact, warnings)
-    return {
-        "subject": subject,
-        "subjectType": subject_type,
-        "topic": topic,
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "mode": str(ai_report.get("mode") or "ai"),
-        "reportTitle": str(ai_report.get("reportTitle") or fallback.get("reportTitle") or f"Due Diligence Report: {subject}"),
-        "classification": str(ai_report.get("classification") or fallback.get("classification") or "Internal review"),
-        "reportMetadata": dict(ai_report.get("reportMetadata") or fallback.get("reportMetadata") or {}),
-        "sections": list(ai_report.get("sections") or fallback.get("sections") or [])[:8],
-        "evidenceTable": list(ai_report.get("evidenceTable") or fallback.get("evidenceTable") or [])[:12],
-        "limitations": [str(item) for item in (ai_report.get("limitations") or ai_report.get("caveats") or fallback.get("limitations") or fallback["caveats"])] [:8],
-        "executiveSummary": str(ai_report.get("executiveSummary") or fallback["executiveSummary"]),
-        "keyFindings": [str(item) for item in (ai_report.get("keyFindings") or fallback["keyFindings"])] [:8],
-        "topicAssessment": str(ai_report.get("topicAssessment") or fallback["topicAssessment"]),
-        "riskAssessment": str(ai_report.get("riskAssessment") or fallback["riskAssessment"]),
-        "evidence": list(ai_report.get("evidence") or fallback["evidence"])[:10],
-        "recommendedActions": [str(item) for item in (ai_report.get("recommendedActions") or fallback["recommendedActions"])] [:8],
-        "caveats": [str(item) for item in (ai_report.get("caveats") or fallback["caveats"])] [:8],
-        "warnings": warnings,
-    }
-
+    return _prepare_dd_ai_report(subject, subject_type, topic, compact)
 
 
 @router.post("/analyze", response_model=DueDiligenceAnalysisOut)
@@ -2458,7 +2495,8 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
             if isinstance(source, dict) and source.get("name") and source.get("name") not in sources:
                 sources.append(str(source.get("name")))
 
-    payload_blob = {
+    ai_topic = "General"
+    analysis_for_ai = {
         "subject": subject,
         "subjectType": subject_type,
         "caseId": case_id,
@@ -2471,7 +2509,28 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         "sources": sources,
         "summary": summary,
         "warnings": warnings,
+    }
+    ai_report = _prepare_dd_ai_report(
+        subject,
+        subject_type,
+        ai_topic,
+        _compact_dd_evidence(analysis_for_ai, media_result),
+    )
+
+    payload_blob = {
+        "subject": subject,
+        "subjectType": subject_type,
+        "caseId": case_id,
+        "wikidata": [row.dict(by_alias=True) for row in wikidata_results],
+        "wikipedia": [row.dict(by_alias=True) for row in wikipedia_results],
+        "opensanctions": [row.dict(by_alias=True) for row in opensanctions_results],
+        "news": [row.dict(by_alias=True) for row in news_results],
+        "declarations": [row.dict(by_alias=True) for row in declaration_results],
+        "media": media_result,
+        "aiReport": ai_report,
         "sources": sources,
+        "summary": summary,
+        "warnings": warnings,
     }
     report_id, stored_at = _store_dd_report(
         subject=subject,
@@ -2492,6 +2551,7 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         "news": news_results,
         "declarations": declaration_results,
         "media": media_result,
+        "aiReport": ai_report,
         "sources": sources,
         "summary": summary,
         "warnings": warnings,
