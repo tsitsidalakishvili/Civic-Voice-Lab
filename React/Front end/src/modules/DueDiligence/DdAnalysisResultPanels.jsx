@@ -1,5 +1,28 @@
 import { getApiBaseUrl } from '../../services/api'
 
+const moneyTotalsText = (totals) => {
+  if (!totals || typeof totals !== 'object') return '-'
+  const entries = Object.entries(totals).filter(([, value]) => Number(value) || value === 0)
+  if (!entries.length) return '-'
+  return entries.map(([currency, value]) => String(value) + ' ' + currency).join(' / ')
+}
+
+const compactParts = (parts) => parts.filter(Boolean).join(' - ') || '-'
+
+function DossierList({ title, items, renderItem }) {
+  if (!items?.length) return null
+  return (
+    <div className="dd-dossier-section">
+      <h4>{title}</h4>
+      <ul className="compact-list">
+        {items.slice(0, 4).map((item, idx) => (
+          <li key={title + '-' + idx}>{renderItem(item)}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /**
  * Renders stored or live analysis output: summary, warnings, source tables, PDF link.
  */
@@ -195,43 +218,88 @@ export function DdAnalysisResultPanels({
               Asset declarations ({(analysisResult.declarations || []).length})
             </summary>
             <div className="dashboard-detail__body">
-              <div className="table">
-                <div className="table-row table-head">
-                  <span>Declarant</span>
-                  <span>Role</span>
-                  <span>Submitted</span>
-                  <span>Profile</span>
-                </div>
-                {(analysisResult.declarations || []).length === 0 ? (
-                  <div className="table-row empty">No asset declarations found.</div>
-                ) : (
-                  analysisResult.declarations.map((row) => {
-                    const counts = row.summary?.counts || {}
-                    const profile = [
-                      `Properties: ${counts.properties || 0}`,
-                      `Bank: ${counts.bankAccounts || 0}`,
-                      `Jobs: ${counts.jobs || 0}`,
-                      `Contracts: ${counts.contracts || 0}`,
-                    ].join(' / ')
+              {(analysisResult.declarations || []).length === 0 ? (
+                <div className="table-row empty">No asset declarations found.</div>
+              ) : (
+                <div className="dd-dossier-grid">
+                  {analysisResult.declarations.map((row) => {
+                    const summary = row.summary || {}
+                    const counts = summary.counts || {}
+                    const dossier = summary.dossier || {}
+                    const declarant = dossier.declarant || {}
+                    const financialTotals = [
+                      ['Bank', moneyTotalsText(summary.bankAccountTotals)],
+                      ['Cash', moneyTotalsText(summary.cashTotals)],
+                      ['Job income', moneyTotalsText(summary.jobIncomeTotals)],
+                      ['Contracts', moneyTotalsText(summary.contractAmountTotals)],
+                      ['Contract income', moneyTotalsText(summary.contractIncomeTotals)],
+                      ['In/out', moneyTotalsText(summary.inOutTotals)],
+                    ].filter(([, value]) => value && value !== '-')
                     return (
-                      <div className="table-row" key={row.id || row.name}>
-                        <span>
-                          {row.sourceUrl ? (
-                            <a href={row.sourceUrl} target="_blank" rel="noreferrer">
-                              {row.name || '-'}
-                            </a>
-                          ) : (
-                            row.name || '-'
-                          )}
-                        </span>
-                        <span>{[row.organization, row.position].filter(Boolean).join(' - ') || '-'}</span>
-                        <span>{row.declarationSubmitDate || row.dateEdited || '-'}</span>
-                        <span>{profile}</span>
-                      </div>
+                      <article className="dd-dossier-card" key={row.id || row.name}>
+                        <header className="dd-dossier-card__header">
+                          <div>
+                            <h3>
+                              {row.sourceUrl ? (
+                                <a href={row.sourceUrl} target="_blank" rel="noreferrer">
+                                  {row.name || declarant.name || '-'}
+                                </a>
+                              ) : (
+                                row.name || declarant.name || '-'
+                              )}
+                            </h3>
+                            <p>{compactParts([row.organization || declarant.organization, row.position || declarant.position])}</p>
+                          </div>
+                          <span>{row.declarationSubmitDate || row.dateEdited || declarant.submitted || '-'}</span>
+                        </header>
+                        <div className="dd-dossier-stats">
+                          <span>Properties: {counts.properties || 0}</span>
+                          <span>Vehicles/assets: {counts.movableProperties || 0}</span>
+                          <span>Businesses: {(counts.enterprises || 0) + (counts.linkedEnterprises || 0)}</span>
+                          <span>Family: {counts.familyMembers || 0}</span>
+                          <span>Jobs: {counts.jobs || 0}</span>
+                          <span>Contracts: {counts.contracts || 0}</span>
+                        </div>
+                        <DossierList
+                          title="Career and yearly income"
+                          items={dossier.careerAndIncome}
+                          renderItem={(item) => compactParts([item.owner, item.organization, item.position, item.period && item.endDate ? item.period + ' to ' + item.endDate : item.period, item.amount])}
+                        />
+                        <DossierList
+                          title="Properties"
+                          items={dossier.properties}
+                          renderItem={(item) => compactParts([item.owner, item.type, item.address, item.area, item.share, item.amount])}
+                        />
+                        <DossierList
+                          title="Businesses"
+                          items={[...(dossier.businesses || []), ...(dossier.linkedBusinesses || [])]}
+                          renderItem={(item) => compactParts([item.name, item.role || item.relation, item.share, item.amount])}
+                        />
+                        <DossierList
+                          title="Family members"
+                          items={dossier.familyMembers}
+                          renderItem={(item) => compactParts([item.name, item.relation, item.birthDate, item.position])}
+                        />
+                        <DossierList
+                          title="Vehicles and movable assets"
+                          items={dossier.vehiclesAndMovable}
+                          renderItem={(item) => compactParts([item.owner, item.type, item.details, item.acquired, item.amount])}
+                        />
+                        {financialTotals.length ? (
+                          <div className="dd-dossier-section">
+                            <h4>Financial totals</h4>
+                            <div className="dd-dossier-finance">
+                              {financialTotals.map(([label, value]) => (
+                                <span key={label}>{label}: {value}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
                     )
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
           </details>
         </>

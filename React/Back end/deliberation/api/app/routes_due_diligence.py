@@ -941,6 +941,105 @@ def _money_totals(rows: List[Dict[str, Any]], amount_keys: Tuple[str, ...] = ("A
     return totals
 
 
+def _clean_decl_text(value: Any) -> str:
+    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
+    return " ".join(text.split())
+
+
+def _decl_pick(row: Dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and _clean_decl_text(value):
+            return _clean_decl_text(value)
+    return ""
+
+
+def _decl_person_name(row: Dict[str, Any], first_key: str = "OwnerFirstName", last_key: str = "OwnerLatsName") -> str:
+    first = _decl_pick(row, first_key, "FirstName", "firstName")
+    last = _decl_pick(row, last_key, "OwnerLastName", "LastName", "lastName")
+    return " ".join(part for part in [first, last] if part).strip() or _decl_pick(row, "Name", "FullName")
+
+
+def _decl_money(row: Dict[str, Any], *amount_keys: str) -> str:
+    amount = None
+    for key in amount_keys or ("Amount", "Price", "Income", "Share"):
+        if row.get(key) is not None:
+            amount = row.get(key)
+            break
+    if amount is None or str(amount).strip() == "":
+        return ""
+    currency = _decl_pick(row, "Currency", "CurrencyName", "AmountCurrency", "IncomeCurrency", "IncomeCurrencyName")
+    return f"{amount} {currency}".strip()
+
+
+def _decl_sample(rows: List[Dict[str, Any]], fields: Tuple[Tuple[str, Tuple[str, ...]], ...], limit: int = 6) -> List[Dict[str, str]]:
+    output: List[Dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item: Dict[str, str] = {}
+        for label, keys in fields:
+            if label == "owner":
+                value = _decl_person_name(row)
+            elif label == "amount":
+                value = _decl_money(row, *keys)
+            else:
+                value = _decl_pick(row, *keys)
+            if value:
+                item[label] = value
+        if item:
+            output.append(item)
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _declaration_dossier(row: Dict[str, Any]) -> Dict[str, Any]:
+    family = _as_list(row.get("FamilyMembers"))
+    properties = _as_list(row.get("Properties"))
+    movable = _as_list(row.get("MovableProperties"))
+    securities = _as_list(row.get("Securities"))
+    bank_accounts = _as_list(row.get("BankAccounts"))
+    cashes = _as_list(row.get("Cashes"))
+    jobs = _as_list(row.get("Jobs"))
+    contracts = _as_list(row.get("Contracts"))
+    gifts = _as_list(row.get("Gifts"))
+    inouts = _as_list(row.get("InOuts"))
+    enterprises = _as_list(row.get("Enterprice")) + _as_list(row.get("Enterprise"))
+    linked_enterprises = _as_list(row.get("LinkedEnterprice")) + _as_list(row.get("LinkedEnterprise"))
+    education = _as_list(row.get("Education")) + _as_list(row.get("Educations"))
+    return {
+        "declarant": {
+            "name": _declaration_name(row),
+            "birthDate": _decl_pick(row, "BirthDate"),
+            "birthPlace": _decl_pick(row, "BirthPlace"),
+            "organization": _decl_pick(row, "Organisation", "Organization"),
+            "position": _decl_pick(row, "Position"),
+            "submitted": _decl_pick(row, "DeclarationSubmitDate"),
+            "edited": _decl_pick(row, "DateEdited"),
+        },
+        "familyMembers": _decl_sample(family, (("name", ("Name", "FullName")), ("relation", ("Relationship", "RelationName", "Relation")), ("birthDate", ("BirthDate",)), ("position", ("Position",)))) or [
+            {k: v for k, v in {"name": _decl_person_name(item, "FirstName", "LastName"), "relation": _decl_pick(item, "Relationship", "RelationName", "Relation"), "birthDate": _decl_pick(item, "BirthDate")}.items() if v}
+            for item in family[:6]
+            if isinstance(item, dict)
+        ],
+        "properties": _decl_sample(properties, (("owner", ()), ("type", ("PropertyType", "Type", "Kind")), ("address", ("Address", "Location", "City", "District")), ("area", ("Area", "Square", "LandArea")), ("share", ("Share", "Part")), ("acquired", ("PurchaseDate", "RegisterDate", "Date")), ("amount", ("Price", "Amount")))) ,
+        "vehiclesAndMovable": _decl_sample(movable, (("owner", ()), ("type", ("PropertyType", "Type", "Kind")), ("details", ("Details", "Description", "Name", "Model")), ("acquired", ("PurchaseDate", "PurchaseYear", "RegisterDate")), ("amount", ("Price", "Amount")))) ,
+        "businesses": _decl_sample(enterprises, (("name", ("Name", "EnterpriseName")), ("role", ("PartnershipFormName", "Role", "Position")), ("share", ("Share", "SharePct")), ("registered", ("RegisterDate",)), ("amount", ("Income", "Amount")))) ,
+        "linkedBusinesses": _decl_sample(linked_enterprises, (("name", ("Name", "EnterpriseName")), ("relation", ("RelationName", "Relationship")), ("role", ("PartnershipFormName", "Role", "Position")), ("share", ("Share", "SharePct")), ("amount", ("Income", "Amount")))) ,
+        "careerAndIncome": _decl_sample(jobs, (("owner", ()), ("organization", ("Organisation", "Organization")), ("position", ("Position",)), ("period", ("StartDate",)), ("endDate", ("EndDate",)), ("amount", ("Amount",)))) ,
+        "contracts": _decl_sample(contracts, (("owner", ()), ("type", ("ContractType",)), ("subject", ("Subject",)), ("agency", ("Agency",)), ("period", ("StartDate",)), ("endDate", ("EndDate", "EndDateName")), ("amount", ("Amount",)), ("income", ("Income",)))) ,
+        "bankAndCash": {
+            "accounts": _decl_sample(bank_accounts, (("owner", ()), ("bank", ("BankName",)), ("type", ("AccountType",)), ("amount", ("Amount",))), 8),
+            "cash": _decl_sample(cashes, (("owner", ()), ("amount", ("Amount",))), 6),
+        },
+        "gifts": _decl_sample(gifts, (("owner", ()), ("source", ("Source", "Giver", "From")), ("description", ("Description", "Comment", "GiftType")), ("amount", ("Amount",)))) ,
+        "inOuts": _decl_sample(inouts, (("owner", ()), ("kind", ("InOutKind", "Kind")), ("amount", ("Amount",)))) ,
+        "securities": _decl_sample(securities, (("owner", ()), ("issuer", ("Issuer", "Name")), ("type", ("SecurityType", "Type")), ("amount", ("Amount", "NominalValue")))) ,
+        "education": _decl_sample(education, (("institution", ("Institution", "University", "School")), ("degree", ("Degree", "Qualification")), ("period", ("StartDate",)), ("endDate", ("EndDate",)))) ,
+    }
+
+
 def _declaration_name(row: Dict[str, Any]) -> str:
     first = str(row.get("FirstName") or "").strip()
     last = str(row.get("LastName") or "").strip()
@@ -987,6 +1086,7 @@ def _summarize_declaration(row: Dict[str, Any]) -> Dict[str, Any]:
         "contractIncomeTotals": _money_totals(income_rows),
         "inOutTotals": _money_totals([row for row in inouts if isinstance(row, dict)]),
         "giftTotals": _money_totals([row for row in gifts if isinstance(row, dict)]),
+        "dossier": _declaration_dossier(row),
     }
 
 
@@ -2170,7 +2270,32 @@ def _compact_dd_evidence(analysis: Optional[Dict[str, object]], media: Optional[
     wikipedia = list(analysis.get("wikipedia") or [])[:5]
     opensanctions = list(analysis.get("opensanctions") or [])[:5]
     news = list(analysis.get("news") or [])[:10]
-    declarations = list(analysis.get("declarations") or [])[:5]
+    declarations = []
+    for row in list(analysis.get("declarations") or [])[:5]:
+        if not isinstance(row, dict):
+            continue
+        summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+        declarations.append({
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "organization": row.get("organization"),
+            "position": row.get("position"),
+            "birthDate": row.get("birthDate"),
+            "declarationSubmitDate": row.get("declarationSubmitDate"),
+            "dateEdited": row.get("dateEdited"),
+            "sourceUrl": row.get("sourceUrl"),
+            "summary": {
+                "counts": summary.get("counts") or {},
+                "bankAccountTotals": summary.get("bankAccountTotals") or {},
+                "cashTotals": summary.get("cashTotals") or {},
+                "jobIncomeTotals": summary.get("jobIncomeTotals") or {},
+                "contractAmountTotals": summary.get("contractAmountTotals") or {},
+                "contractIncomeTotals": summary.get("contractIncomeTotals") or {},
+                "inOutTotals": summary.get("inOutTotals") or {},
+                "giftTotals": summary.get("giftTotals") or {},
+                "dossier": summary.get("dossier") or {},
+            },
+        })
     mentions = list(media.get("mentions") or [])[:12]
     evidence: List[Dict[str, str]] = []
     for row in news:
@@ -2264,6 +2389,39 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
         f"Risk is currently assessed as {risk_level}. Escalation should depend on confirmed identity, source relevance, recency, "
         "and whether the same concern appears across more than one independent signal."
     )
+    declaration_bullets: List[str] = []
+    for declaration in declarations[:3]:
+        if not isinstance(declaration, dict):
+            continue
+        dossier = ((declaration.get("summary") or {}).get("dossier") or {}) if isinstance(declaration.get("summary"), dict) else {}
+        counts = ((declaration.get("summary") or {}).get("counts") or {}) if isinstance(declaration.get("summary"), dict) else {}
+        declarant = dossier.get("declarant") or {}
+        submitted = declarant.get("submitted") or declaration.get("declarationSubmitDate") or declaration.get("dateEdited") or "unknown date"
+        declaration_bullets.append(
+            f"Declaration {submitted}: {counts.get('properties', 0)} properties, {counts.get('movableProperties', 0)} vehicles/movable assets, "
+            f"{counts.get('enterprises', 0) + counts.get('linkedEnterprises', 0)} business links, {counts.get('familyMembers', 0)} family members, "
+            f"{counts.get('jobs', 0)} job/income records, and {counts.get('contracts', 0)} contracts."
+        )
+        for job in (dossier.get("careerAndIncome") or [])[:3]:
+            declaration_bullets.append(
+                "Career/income: " + "; ".join(str(part) for part in [job.get("owner"), job.get("organization"), job.get("position"), job.get("amount")] if part)
+            )
+        for item in (dossier.get("properties") or [])[:3]:
+            declaration_bullets.append(
+                "Property: " + "; ".join(str(part) for part in [item.get("owner"), item.get("type"), item.get("address"), item.get("area"), item.get("share"), item.get("amount")] if part)
+            )
+        for item in (dossier.get("vehiclesAndMovable") or [])[:3]:
+            declaration_bullets.append(
+                "Vehicle/movable asset: " + "; ".join(str(part) for part in [item.get("owner"), item.get("type"), item.get("details"), item.get("amount")] if part)
+            )
+        for item in (dossier.get("businesses") or [])[:3]:
+            declaration_bullets.append(
+                "Business interest: " + "; ".join(str(part) for part in [item.get("name"), item.get("role"), item.get("share"), item.get("amount")] if part)
+            )
+        for item in (dossier.get("familyMembers") or [])[:3]:
+            declaration_bullets.append(
+                "Family member: " + "; ".join(str(part) for part in [item.get("name"), item.get("relation"), item.get("birthDate"), item.get("position")] if part)
+            )
     actions = [
         "Confirm the subject identity against Georgian and English names before relying on any match.",
         "Review the highest-risk signals first and separate verified facts from contextual mentions.",
@@ -2277,6 +2435,7 @@ def _fallback_dd_ai_report(subject: str, subject_type: str, topic: str, compact:
     sections = [
         {"heading": "Executive Summary", "paragraphs": [executive]},
         {"heading": "Source Coverage", "paragraphs": [coverage]},
+        *([{"heading": "Asset Declaration Dossier", "bullets": declaration_bullets[:12]}] if declaration_bullets else []),
         {"heading": f"Assessment Scope: {topic_label}", "paragraphs": [topic_assessment]},
         {"heading": "Risk Assessment", "paragraphs": [risk_assessment]},
         {"heading": "Key Findings", "bullets": key_findings},
@@ -2371,18 +2530,19 @@ def _call_dd_ai_report(subject: str, subject_type: str, topic: str, compact: Dic
         "analysisRules": [
             "Use only facts present in rawEvidence. Do not invent facts, quotes, dates, sanctions, assets, relationships, or allegations.",
             "Treat OpenSanctions results as possible matches until identity is verified; never state a sanctions/PEP match as confirmed unless the supplied evidence clearly supports it.",
-            "Treat asset declarations as self-declared public records. Summarize what is declared, and recommend cross-checking against media, sanctions, and official sources.",
+            "Treat asset declarations as self-declared public records. Build a clear dossier section from declaration summaries: properties owned, vehicles/movable property, business interests, linked businesses, career/positions, yearly job income, contracts/loans/rent, bank/cash totals, gifts, family members, and family-member assets when present. Do not dump raw declaration JSON.",
             "Keep Georgian titles, organization names, and quotes in Georgian when present. You may explain their relevance in English.",
             "Separate evidence from interpretation: every key finding should be traceable to Wikipedia, OpenSanctions, declarations, or a named media source.",
             "If the selected topic is not directly supported by the evidence, say so clearly instead of stretching unrelated material.",
             "Prefer cautious analyst language: possible, reported, declared, appears, requires verification. Avoid legal conclusions or defamatory phrasing.",
-            "Prioritize recent, source-linked evidence, but mention important older declaration or sanctions records when relevant.",
+            "Prioritize the most recent declaration, but mention meaningful older declaration records when they show career, income, property, business, or family-asset changes.",
             "If evidence is thin or sources returned zero results, make that a caveat and propose next verification steps.",
         ],
         "styleGuide": [
             "Concise, professional, readable for a non-technical decision maker.",
             "No generic filler. Each sentence should add a finding, limitation, or action.",
             "Do not create a raw sources section, article dump, JSON-looking prose, or evidence table in the report text.",
+            "For asset declarations, write like a professional dossier: grouped headings, short conclusions, amounts with currencies, and clear caveats where ownership or family relationship needs verification.",
             "Do not overstate automated risk scores; explain what drove the signal.",
         ],
     }
