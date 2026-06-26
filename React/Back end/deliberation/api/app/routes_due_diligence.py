@@ -1668,6 +1668,82 @@ def _pdf_escape(value: object) -> str:
 def _pdf_paragraph(value: object, style: ParagraphStyle) -> Paragraph:
     return Paragraph(_pdf_escape(value), style)
 
+
+_RAW_AI_SECTION_HEADINGS = {
+    "raw sources",
+    "raw source",
+    "raw data",
+    "raw evidence",
+    "source payload",
+    "json payload",
+}
+
+
+def _looks_like_raw_report_payload(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if "raw sources" in lowered:
+        return True
+    if not (text.startswith("{") or text.startswith("[")):
+        return False
+    markers = [
+        '"subject"',
+        '"subjecttype"',
+        '"caseid"',
+        '"wikidata"',
+        '"wikipedia"',
+        '"opensanctions"',
+        '"declarations"',
+        '"media"',
+        '"news"',
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def _sanitize_dd_ai_list(items: object) -> List[str]:
+    if not isinstance(items, list):
+        return []
+    return [
+        str(item)
+        for item in items
+        if str(item).strip() and not _looks_like_raw_report_payload(item)
+    ]
+
+
+def _sanitize_dd_ai_sections(sections: object) -> List[Dict[str, object]]:
+    cleaned: List[Dict[str, object]] = []
+    if not isinstance(sections, list):
+        return cleaned
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        heading = str(section.get("heading") or "Report Section").strip() or "Report Section"
+        heading_key = heading.lower()
+        if heading_key in _RAW_AI_SECTION_HEADINGS or "raw source" in heading_key:
+            continue
+        paragraphs = [
+            str(item)
+            for item in (section.get("paragraphs") or [])
+            if str(item).strip() and not _looks_like_raw_report_payload(item)
+        ]
+        bullets = [
+            str(item)
+            for item in (section.get("bullets") or [])
+            if str(item).strip() and not _looks_like_raw_report_payload(item)
+        ]
+        if not paragraphs and not bullets and heading_key == "report section":
+            continue
+        cleaned_section: Dict[str, object] = {"heading": heading}
+        if paragraphs:
+            cleaned_section["paragraphs"] = paragraphs
+        if bullets:
+            cleaned_section["bullets"] = bullets
+        cleaned.append(cleaned_section)
+    return cleaned
+
+
 def _build_report_pdf(report: Dict[str, object]) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=LETTER, title="Due Diligence Report")
@@ -1686,14 +1762,16 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
     ai_report = report.get("aiReport") or report.get("ai_report") or {}
     if isinstance(ai_report, dict):
         ai_sections = ai_report.get("sections") or []
-        ai_key_findings = ai_report.get("keyFindings") or []
-        ai_actions = ai_report.get("recommendedActions") or []
-        ai_limitations = ai_report.get("limitations") or ai_report.get("caveats") or []
+        ai_key_findings = _sanitize_dd_ai_list(ai_report.get("keyFindings") or [])
+        ai_actions = _sanitize_dd_ai_list(ai_report.get("recommendedActions") or [])
+        ai_limitations = _sanitize_dd_ai_list(ai_report.get("limitations") or ai_report.get("caveats") or [])
     else:
         ai_sections = []
         ai_key_findings = []
         ai_actions = []
         ai_limitations = []
+
+    ai_sections = _sanitize_dd_ai_sections(ai_sections)
 
     if not ai_sections:
         fallback_compact = _compact_dd_evidence(
@@ -1707,10 +1785,10 @@ def _build_report_pdf(report: Dict[str, object]) -> bytes:
             fallback_compact,
             [str(w) for w in warnings if str(w).strip()],
         )
-        ai_sections = fallback_report.get("sections") or []
-        ai_key_findings = fallback_report.get("keyFindings") or []
-        ai_actions = fallback_report.get("recommendedActions") or []
-        ai_limitations = fallback_report.get("limitations") or fallback_report.get("caveats") or []
+        ai_sections = _sanitize_dd_ai_sections(fallback_report.get("sections") or [])
+        ai_key_findings = _sanitize_dd_ai_list(fallback_report.get("keyFindings") or [])
+        ai_actions = _sanitize_dd_ai_list(fallback_report.get("recommendedActions") or [])
+        ai_limitations = _sanitize_dd_ai_list(fallback_report.get("limitations") or fallback_report.get("caveats") or [])
 
     rendered_section_headings = {
         str(section.get("heading") or "").strip().lower()
@@ -2352,16 +2430,16 @@ def _prepare_dd_ai_report(subject: str, subject_type: str, topic: str, compact: 
         "reportTitle": str(ai_report.get("reportTitle") or fallback.get("reportTitle") or f"Due Diligence Brief: {subject}"),
         "classification": str(ai_report.get("classification") or fallback.get("classification") or "Internal review"),
         "reportMetadata": dict(ai_report.get("reportMetadata") or fallback.get("reportMetadata") or {}),
-        "sections": list(ai_report.get("sections") or fallback.get("sections") or [])[:8],
+        "sections": (_sanitize_dd_ai_sections(ai_report.get("sections") or fallback.get("sections") or []) or fallback.get("sections") or [])[:8],
         "evidenceTable": [],
-        "limitations": [str(item) for item in (ai_report.get("limitations") or ai_report.get("caveats") or fallback.get("limitations") or fallback["caveats"])] [:8],
+        "limitations": _sanitize_dd_ai_list(ai_report.get("limitations") or ai_report.get("caveats") or fallback.get("limitations") or fallback["caveats"])[:8],
         "executiveSummary": str(ai_report.get("executiveSummary") or fallback["executiveSummary"]),
-        "keyFindings": [str(item) for item in (ai_report.get("keyFindings") or fallback["keyFindings"])] [:8],
+        "keyFindings": _sanitize_dd_ai_list(ai_report.get("keyFindings") or fallback["keyFindings"])[:8],
         "topicAssessment": str(ai_report.get("topicAssessment") or fallback["topicAssessment"]),
         "riskAssessment": str(ai_report.get("riskAssessment") or fallback["riskAssessment"]),
         "evidence": [],
-        "recommendedActions": [str(item) for item in (ai_report.get("recommendedActions") or fallback["recommendedActions"])] [:8],
-        "caveats": [str(item) for item in (ai_report.get("caveats") or fallback["caveats"])] [:8],
+        "recommendedActions": _sanitize_dd_ai_list(ai_report.get("recommendedActions") or fallback["recommendedActions"])[:8],
+        "caveats": _sanitize_dd_ai_list(ai_report.get("caveats") or fallback["caveats"])[:8],
         "warnings": warnings,
     }
 
