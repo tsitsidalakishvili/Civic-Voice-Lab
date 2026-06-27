@@ -105,8 +105,7 @@ export const buildModuleSections = (t) => ({
     sections: [
       { label: t('nav.crm.overview'), type: 'tab', value: 'overview', hint: t('nav.crm.overviewHint') },
       { label: t('nav.crm.intake'), type: 'tab', value: 'intake', hint: t('nav.crm.intakeHint') },
-      { label: t('nav.crm.people'), type: 'tab', value: 'people', hint: t('nav.crm.peopleHint') },
-      { label: t('nav.crm.segments'), type: 'tab', value: 'segments', hint: t('nav.crm.segmentsHint') },
+      { label: 'People & Segments', type: 'tab', value: 'people', hint: 'Find people, edit records, and create reusable audience segments.' },
     ],
   },
   campaigns: {

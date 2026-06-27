@@ -1396,6 +1396,12 @@ export function DueDiligencePage({
         </aside>
 
         <div className="module-main">
+          <CivicStatGrid
+            title="Risk intelligence pulse"
+            description="Signals across watchlist, network matches, and internal checks."
+            items={duePulseStats}
+          />
+
           {showIntro ? (
             <div className="module-card module-card__wide section-intro">
               <div className="card-header">
@@ -1429,12 +1435,6 @@ export function DueDiligencePage({
               </div>
             </div>
           </details>
-
-          <CivicStatGrid
-            title="Risk intelligence pulse"
-            description="Signals across watchlist, network matches, and internal checks."
-            items={duePulseStats}
-          />
 
           {showTabs ? (
             <div className="subtabs">

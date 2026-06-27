@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Button, Group, Kbd, Menu, Text } from '@mantine/core'
-import { IconArrowLeft, IconArrowRight, IconPlayerSkipForward, IconX } from '@tabler/icons-react'
+import { IconArrowLeft, IconArrowRight, IconChevronDown, IconChevronRight, IconPlayerSkipForward, IconX } from '@tabler/icons-react'
 import {
   buildModuleSectionWalkthroughScenario,
   buildModuleWalkthroughScenario,
@@ -85,6 +85,8 @@ export function PlatformWalkthrough({
   const [stepIndex, setStepIndex] = useState(0)
   const [targetRect, setTargetRect] = useState(null)
   const [tourKey, setTourKey] = useState('context')
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [expandedModuleIds, setExpandedModuleIds] = useState(() => new Set())
 
   const walkthroughModules = useMemo(
     () =>
@@ -95,7 +97,30 @@ export function PlatformWalkthrough({
     [moduleSections, modules],
   )
 
+  const getModuleFlowScenarios = (moduleId) => {
+    const tabSections = (moduleSections[moduleId]?.sections || []).filter((section) => section.type === 'tab')
+    return tabSections.flatMap((section) => getSectionTaskScenarios(moduleId, section.value))
+  }
+
+  const getModuleFlowSteps = (moduleId) =>
+    getModuleFlowScenarios(moduleId).flatMap((scenario) => scenario.steps || [])
+
+  const getModuleFlowStartIndex = (moduleId, scenarioKey) => {
+    if (!scenarioKey) return 0
+    let cursor = 0
+    for (const scenario of getModuleFlowScenarios(moduleId)) {
+      if (scenario.key === scenarioKey) return cursor
+      cursor += scenario.steps?.length || 0
+    }
+    return 0
+  }
+
   const steps = useMemo(() => {
+    if (tourKey.startsWith('module-flow:')) {
+      const [, moduleId] = tourKey.split(':')
+      const moduleFlowSteps = getModuleFlowSteps(moduleId)
+      return moduleFlowSteps.length ? moduleFlowSteps : hubWalkthroughScenario
+    }
     if (tourKey.startsWith('task:')) {
       return taskWalkthroughScenarios[tourKey.replace('task:', '')]?.steps || hubWalkthroughScenario
     }
@@ -129,11 +154,25 @@ export function PlatformWalkthrough({
     localStorage.setItem(tourStorageKey, '1')
   }
 
-  const startTour = (nextTourKey = 'context') => {
+  const startTour = (nextTourKey = 'context', nextStepIndex = 0) => {
     setTourKey(nextTourKey)
     setTargetRect(null)
-    setStepIndex(0)
+    setStepIndex(nextStepIndex)
+    setIsMenuOpen(false)
     setIsOpen(true)
+  }
+
+  const startModuleFlowTour = (moduleId, scenarioKey) => {
+    startTour('module-flow:' + moduleId, getModuleFlowStartIndex(moduleId, scenarioKey))
+  }
+
+  const toggleModule = (moduleId) => {
+    setExpandedModuleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(moduleId)) next.delete(moduleId)
+      else next.add(moduleId)
+      return next
+    })
   }
 
   useEffect(() => {
@@ -205,12 +244,21 @@ export function PlatformWalkthrough({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, steps.length])
 
-  const tooltipStyle = targetRect ? getTooltipPosition(targetRect, currentStep?.placement) : {}
+  const isTargetReady = !currentStep?.selector || Boolean(targetRect)
+  const tooltipStyle = targetRect
+    ? getTooltipPosition(targetRect, currentStep?.placement)
+    : {
+        width: Math.min(400, window.innerWidth - 32),
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        visibility: 'hidden',
+      }
   const spotlightStyle = targetRect ? getSpotlightStyle(targetRect, currentStep?.padding || 8) : {}
 
   return (
     <>
-      <Menu position="bottom-end" withinPortal>
+      <Menu position="bottom-end" withinPortal closeOnItemClick={false} opened={isMenuOpen} onChange={setIsMenuOpen}>
         <Menu.Target>
           <Button
             variant="light"
@@ -231,27 +279,29 @@ export function PlatformWalkthrough({
           <Menu.Label>Modules and flows</Menu.Label>
           {walkthroughModules.map((module) => {
             const tabSections = (moduleSections[module.id]?.sections || []).filter((section) => section.type === 'tab')
+            const scenarios = tabSections.flatMap((section) => getSectionTaskScenarios(module.id, section.value))
+            const isExpanded = expandedModuleIds.has(module.id)
+            const moduleLabel = module.id === 'deliberation' ? 'Survey and Conversations' : module.label
             return (
               <Fragment key={module.id}>
-                <Menu.Item fw={700} onClick={() => startTour(`module:${module.id}`)}>
-                  {module.label}
+                <Menu.Item
+                  fw={700}
+                  leftSection={isExpanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                  onClick={() => toggleModule(module.id)}
+                >
+                  {moduleLabel}
                 </Menu.Item>
-                {tabSections.map((section) => (
-                  <Fragment key={`${module.id}:${section.value}`}>
-                    <Menu.Item pl={28} onClick={() => startTour(`section:${module.id}:${section.value}`)}>
-                      {section.label}
-                    </Menu.Item>
-                    {getSectionTaskScenarios(module.id, section.value).map((scenario) => (
+                {isExpanded
+                  ? scenarios.map((scenario) => (
                       <Menu.Item
-                        key={`${module.id}:${section.value}:${scenario.key}`}
-                        pl={44}
-                        onClick={() => startTour(`task:${scenario.key}`)}
+                        key={module.id + ':' + scenario.key}
+                        pl={34}
+                        onClick={() => startModuleFlowTour(module.id, scenario.key)}
                       >
                         {scenario.label}
                       </Menu.Item>
-                    ))}
-                  </Fragment>
-                ))}
+                    ))
+                  : null}
               </Fragment>
             )
           })}
@@ -262,7 +312,7 @@ export function PlatformWalkthrough({
         <div className="walkthrough" role="dialog" aria-modal="true" aria-labelledby="walkthrough-title">
           <div className="walkthrough__scrim" />
           {targetRect ? <div className="walkthrough__spotlight" style={spotlightStyle} /> : null}
-          <div className="walkthrough__card" style={tooltipStyle}>
+          <div className="walkthrough__card" style={tooltipStyle} aria-hidden={!isTargetReady}>
             <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
               <div>
                 <Text size="xs" c="dimmed" fw={700} tt="uppercase">

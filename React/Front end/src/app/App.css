@@ -5816,11 +5816,12 @@ button.module-flow__step:hover {
   min-height: 180px;
   overflow: auto;
   padding: var(--space-4);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 16px;
-  background: #ffffff;
-  color: var(--text-h);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  border: 1px solid rgba(245, 158, 11, 0.68);
+  border-left: 5px solid #f59e0b;
+  border-radius: 14px;
+  background: #172554 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   pointer-events: auto;
 }
 
@@ -5828,11 +5829,12 @@ button.module-flow__step:hover {
   margin: 4px 0 0;
   font-size: 21px;
   line-height: 1.2;
+  color: #ffffff !important;
 }
 
 .walkthrough__card p {
   margin: 0;
-  color: var(--muted);
+  color: #dbeafe !important;
   line-height: 1.55;
 }
 
@@ -5853,4 +5855,24 @@ button.module-flow__step:hover {
   .walkthrough__keys {
     display: none;
   }
+}
+
+
+.walkthrough .walkthrough__card,
+.walkthrough .walkthrough__card * {
+  color-scheme: dark;
+}
+
+.walkthrough .walkthrough__card .mantine-Text-root {
+  color: #fde68a !important;
+}
+
+.walkthrough .walkthrough__card .mantine-Button-root,
+.walkthrough .walkthrough__card .mantine-ActionIcon-root {
+  color: #f8fafc !important;
+}
+
+.walkthrough[role="dialog"] .walkthrough__card {
+  background-color: #172554 !important;
+  background-image: none !important;
 }

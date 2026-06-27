@@ -248,7 +248,7 @@ export default function CRMNeighborhoodMap({ onStatsChange, refreshToken } = {})
 
   return (
     <div className="crm-neighborhood-map">
-      <div className={`module-card module-card__wide panel panel--highlight map-card ${mapExpanded ? 'map-card--expanded' : ''}`}>
+      <div className={`module-card module-card__wide panel panel--highlight map-card ${mapExpanded ? 'map-card--expanded' : ''}`} data-tour="network-map">
         <div className="card-header">
           <div>
             <h3>Map</h3>
@@ -262,7 +262,7 @@ export default function CRMNeighborhoodMap({ onStatsChange, refreshToken } = {})
           </div>
         </div>
 
-        <div className="map-filters">
+        <div className="map-filters" data-tour="network-map-filters">
           <div className="map-filters__actions">
             <button
               className="map-filters__toggle map-filters__icon-toggle"
@@ -359,7 +359,8 @@ export default function CRMNeighborhoodMap({ onStatsChange, refreshToken } = {})
           ) : null}
         </div>
 
-        {loading ? <p className="muted">Loading neighborhood map...</p> : null}
+        <div data-tour="network-map-canvas">
+          {loading ? <p className="muted">Loading neighborhood map...</p> : null}
         {error ? <div className="module-alert">{error}</div> : null}
         {!loading && !error && neighborhoods.length === 0 ? (
           <p className="muted">No matched neighborhoods for the selected filters.</p>
@@ -388,7 +389,7 @@ export default function CRMNeighborhoodMap({ onStatsChange, refreshToken } = {})
           </MapContainer>
         ) : null}
       </div>
-
+      </div>
       <NeighborhoodPeoplePanel
         neighborhood={selected}
         people={selected ? selectedPeople : allPeople}

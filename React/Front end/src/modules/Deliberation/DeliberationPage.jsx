@@ -2325,12 +2325,16 @@ ${link}`
 
       {activeTab === 'overview' && (
         <div className="stack">
-          <CivicStatGrid
+          <div data-tour="survey-overview-pulse">
+
+            <CivicStatGrid
             title="Deliberation pulse"
             description="Track active conversations, moderation load, and participation signals."
             items={deliberationPulse}
           />
-          <div className="module-card module-card__wide">
+
+            </div>
+          <div className="module-card module-card__wide" data-tour="survey-active-conversations">
             <div className="card-header">
               <div>
                 <h3>Conversations</h3>

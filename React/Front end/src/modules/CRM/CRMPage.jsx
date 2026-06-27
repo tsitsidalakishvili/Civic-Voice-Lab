@@ -2066,7 +2066,6 @@ export function CRMPage({
       ) : null}
 
       {error ? <div className="module-alert">{error}</div> : null}
-
       <CivicStatGrid
         title="Network pulse"
         description={overviewPulseSummary?.hasActiveFilters
@@ -2080,8 +2079,7 @@ export function CRMPage({
           {[
             { id: 'overview', label: 'Map & Coverage' },
             { id: 'intake', label: 'New supporters/members' },
-            { id: 'people', label: 'People directory' },
-            { id: 'segments', label: 'Segments' },
+            { id: 'people', label: 'People & Segments' },
             CRM_TASKS_ENABLED ? { id: 'tasks', label: 'Task board' } : null,
           ].filter(Boolean).map((tab) => (
             <button
@@ -2105,7 +2103,7 @@ export function CRMPage({
           <div className="section-block">
             <div className="module-layout">
               <aside className="module-sidebar">
-            <div className="sidebar-card sidebar-card--accent">
+            <div className="sidebar-card sidebar-card--accent" data-tour="network-people-search">
               <h3>Find people</h3>
               <form className="stack" onSubmit={handlePeopleSearch}>
                 <label className="label">Search</label>
@@ -2145,7 +2143,7 @@ export function CRMPage({
               </aside>
               <div className="module-main">
                 {peopleError ? <div className="module-alert">{peopleError}</div> : null}
-              <div className="module-card module-card__wide panel panel--highlight">
+              <div className="module-card module-card__wide panel panel--highlight" data-tour="network-people-directory">
                 <div className="card-header">
                   <div>
                     <h3>People directory</h3>
@@ -2187,7 +2185,7 @@ export function CRMPage({
                 </div>
               </div>
 
-              <div className="module-card module-card__wide panel">
+              <div className="module-card module-card__wide panel" data-tour="network-profile-editor">
                 <div className="card-header">
                   <div>
                     <h3>Profile details</h3>
@@ -2330,7 +2328,7 @@ export function CRMPage({
       {activeTab === 'intake' && (
         <div className="stack">
           <div className="module-card module-card__wide panel intake-flow">
-            <div className="module-card intake-tile intake-order-links">
+            <div className="module-card intake-tile intake-order-links" data-tour="network-signup-link">
               <div className="intake-invite-compact">
                 <div className="intake-invite-compact__form">
                   <div className="intake-section-heading">
@@ -2559,7 +2557,7 @@ export function CRMPage({
                 </div>
               </div>
             </div>
-            <div className="module-card intake-tile stack intake-order-pending">
+            <div className="module-card intake-tile stack intake-order-pending" data-tour="network-application-pipeline">
               <div className="card-header">
                 <h4 className="intake-section-title">Pipeline</h4>
               </div>
@@ -2689,7 +2687,7 @@ export function CRMPage({
                 ))}
               </div>
             </div>
-            <div className="module-card module-card__wide conversion-visual intake-order-conversion">
+            <div className="module-card module-card__wide conversion-visual intake-order-conversion" data-tour="network-conversion-rate">
               <div className="card-header">
                 <div>
                   <h3 className="intake-section-title">Conversion funnel</h3>
@@ -2987,16 +2985,16 @@ export function CRMPage({
           </div>
         </div>
       )}
-      {(activeTab === 'segments' || activeTab === 'outreach') && (
+      {(activeTab === 'people' || activeTab === 'segments' || activeTab === 'outreach') && (
         <div className="stack crm-outreach-flow">
           <div className="module-card module-card__wide module-card--outreach-flow-segment" data-tour="network-segment-builder">
             <div className="card-header">
               <div>
-                <h3>{activeTab === 'segments' ? 'Segments' : 'Audience'}</h3>
+                <h3>{activeTab === 'outreach' ? 'Audience' : 'Segments'}</h3>
                 <p className="muted">
-                  {activeTab === 'segments'
-                    ? 'Create reusable audience groups from your people directory. Campaigns and surveys can use these same saved segments.'
-                    : 'Pick a saved Network segment, then register that audience for the selected event.'}
+                  {activeTab === 'outreach'
+                    ? 'Pick a saved Network segment, then register that audience for the selected event.'
+                    : 'Create reusable audience groups from your people directory. Campaigns and surveys can use these same saved segments.'}
                 </p>
               </div>
               <div className="pill">Audience</div>
@@ -3021,7 +3019,7 @@ export function CRMPage({
                 disabled={!segmentSelectedId}
                 onClick={() => handleDeleteSegment(segmentSelectedId)}
               ><IconTrash size={17} /></button>
-              {activeTab === 'segments' ? (
+              {activeTab !== 'outreach' ? (
                 <button
                   className="button"
                   type="button"
@@ -3119,7 +3117,7 @@ export function CRMPage({
               ) : null}
             </div>
             ) : null}
-            {activeTab === 'segments' && showNewSegmentForm ? (
+            {activeTab !== 'outreach' && showNewSegmentForm ? (
                 <form className="stack" onSubmit={handleCreateSegment} data-tour="network-segment-form">
                   <input
                     className="input"
@@ -4433,7 +4431,7 @@ function CRMDashboardTab({ mapStats } = {}) {
 
   return (
     <div className="stack">
-      <div className="module-card module-card__wide section-intro">
+      <div className="module-card module-card__wide section-intro" data-tour="network-statistics">
         <div className="card-header">
           <div>
             <h3>Stats</h3>
