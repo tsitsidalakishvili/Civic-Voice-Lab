@@ -41,6 +41,76 @@ const downloadCsv = (filename, rows) => {
   URL.revokeObjectURL(url)
 }
 
+const PRODUCT_TICKET_STORAGE_KEY = 'fs_product_ticket_routes'
+
+const PRODUCT_MODULE_FLOWS = [
+  {
+    module: 'Network',
+    flows: ['Map and coverage', 'New supporters/members', 'People and segments'],
+  },
+  {
+    module: 'Survey and Consensus',
+    flows: ['Overview', 'Set up survey', 'Share survey', 'Explore insights'],
+  },
+  {
+    module: 'Campaigns and Audience',
+    flows: ['Campaign planning', 'Audience discovery', 'Messaging', 'Evidence'],
+  },
+  {
+    module: 'Due Diligence',
+    flows: ['Case profile', 'Source scan', 'AI dossier report', 'Case archive'],
+  },
+  {
+    module: 'Data Hub',
+    flows: ['Data connectors', 'Graph explorer', 'Source health'],
+  },
+  {
+    module: 'Platform Operations',
+    flows: ['Walkthrough', 'Product intake', 'Settings', 'Data management'],
+  },
+]
+
+const TICKET_TYPES = [
+  'New feature',
+  'Improve existing flow',
+  'Bug fix',
+  'Data/source integration',
+  'AI/reporting',
+  'Technical debt',
+  'Documentation',
+]
+
+const TICKET_PRIORITIES = ['P0 Critical', 'P1 High', 'P2 Medium', 'P3 Low']
+const PRODUCT_DECISIONS = ['Build now', 'Needs shaping', 'Later', 'Reject']
+const REVIEW_PATHS = ['PO only', 'Tech review', 'Design review', 'Full review']
+
+const createEmptyTicketDraft = () => ({
+  title: '',
+  problem: '',
+  module: PRODUCT_MODULE_FLOWS[0].module,
+  flow: PRODUCT_MODULE_FLOWS[0].flows[0],
+  type: TICKET_TYPES[0],
+  priority: TICKET_PRIORITIES[2],
+  decision: PRODUCT_DECISIONS[1],
+  reviewPath: REVIEW_PATHS[0],
+  rationale: '',
+})
+
+const createTicketDraft = (kind) => ({
+  ...createEmptyTicketDraft(),
+  type: kind === 'bug' ? 'Bug fix' : 'New feature',
+})
+
+const readStoredProductTickets = () => {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(PRODUCT_TICKET_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 export function AdminPage({
   t,
   activeTabOverride,
@@ -76,6 +146,9 @@ export function AdminPage({
   const [summary, setSummary] = useState(null)
   const [featureFlags, setFeatureFlags] = useState(null)
   const [campaignAdminStatus, setCampaignAdminStatus] = useState('')
+  const [ticketDraft, setTicketDraft] = useState(createEmptyTicketDraft)
+  const [productTickets, setProductTickets] = useState(readStoredProductTickets)
+  const [showTicketChoices, setShowTicketChoices] = useState(false)
 
   const applyActiveTab = (nextTab) => {
     if (!nextTab) return
@@ -151,6 +224,14 @@ export function AdminPage({
       setActiveTab(activeTabOverride)
     }
   }, [activeTabOverride, activeTab])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(
+      PRODUCT_TICKET_STORAGE_KEY,
+      JSON.stringify(productTickets),
+    )
+  }, [productTickets])
 
   const handleSlackTest = async () => {
     setSlackError('')
@@ -278,8 +359,60 @@ export function AdminPage({
     }
   }
 
+  const ticketFlowOptions = useMemo(() => {
+    return PRODUCT_MODULE_FLOWS.find((item) => item.module === ticketDraft.module)?.flows || []
+  }, [ticketDraft.module])
+
+  const handleStartTicket = (kind) => {
+    setError('')
+    setShowTicketChoices(false)
+    setTicketDraft(createTicketDraft(kind))
+  }
+
+  const updateTicketDraft = (field, value) => {
+    setTicketDraft((current) => {
+      if (field === 'module') {
+        const moduleConfig = PRODUCT_MODULE_FLOWS.find((item) => item.module === value)
+        return {
+          ...current,
+          module: value,
+          flow: moduleConfig?.flows?.[0] || '',
+        }
+      }
+      return { ...current, [field]: value }
+    })
+  }
+
+  const handleSaveTicketRoute = () => {
+    const title = ticketDraft.title.trim()
+    if (!title) {
+      setError('Add a ticket title before saving the PO routing decision.')
+      return
+    }
+    setError('')
+    const ticket = {
+      ...ticketDraft,
+      title,
+      problem: ticketDraft.problem.trim(),
+      rationale: ticketDraft.rationale.trim(),
+      id: `ticket-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    }
+    setProductTickets((current) => [ticket, ...current].slice(0, 25))
+    setTicketDraft(createEmptyTicketDraft())
+  }
+
+  const handleRemoveTicketRoute = (ticketId) => {
+    setProductTickets((current) => current.filter((ticket) => ticket.id !== ticketId))
+  }
   const adminPulse = useMemo(
     () => [
+      {
+        label: 'Product routes',
+        value: productTickets.length,
+        icon: <IconChecklist size={18} />,
+        badge: 'PO',
+      },
       {
         label: 'Feedback',
         value: feedback.length,
@@ -305,7 +438,13 @@ export function AdminPage({
         badge: 'Live',
       },
     ],
-    [expenseQueue.length, feedback.length, proofQueue.length, summary?.total_people],
+    [
+      expenseQueue.length,
+      feedback.length,
+      productTickets.length,
+      proofQueue.length,
+      summary?.total_people,
+    ],
   )
 
   return (
@@ -376,6 +515,191 @@ export function AdminPage({
               <p className="muted">Monitor system health and manage admin tools.</p>
             </div>
           </details>
+          <div className="module-card module-card__wide">
+            <div className="card-header">
+              <div>
+                <h3>Product intake</h3>
+                <p className="muted">
+                  Route new tickets to the correct module and flow before development starts.
+                </p>
+              </div>
+              <span className="pill">PO decision</span>
+            </div>
+
+            <div className="module-grid">
+              <div className="module-card">
+                <div className="card-header">
+                  <div>
+                    <h4>New ticket</h4>
+                    <p className="muted">Start with the simplest choice. PO routing happens after intake.</p>
+                  </div>
+                  <button
+                    className="button-secondary button-secondary--small"
+                    type="button"
+                    onClick={() => setShowTicketChoices((current) => !current)}
+                  >
+                    New ticket
+                  </button>
+                </div>
+
+                {showTicketChoices ? (
+                  <div className="module-grid">
+                    <button
+                      className="module-card"
+                      type="button"
+                      onClick={() => handleStartTicket('idea')}
+                    >
+                      <h4>Got a new idea</h4>
+                      <p className="muted">Drop an idea and create a new feature/story ticket.</p>
+                    </button>
+                    <button
+                      className="module-card"
+                      type="button"
+                      onClick={() => handleStartTicket('bug')}
+                    >
+                      <h4>Something broke?</h4>
+                      <p className="muted">Create a bug ticket for something that is not working correctly.</p>
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="metric-row">
+                  <span>Intake type</span>
+                  <strong>{ticketDraft.type}</strong>
+                </div>
+                <input
+                  className="input"
+                  placeholder={ticketDraft.intakeKind === 'bug' ? 'What broke?' : 'What is the idea?'}
+                  value={ticketDraft.title}
+                  onChange={(event) => updateTicketDraft('title', event.target.value)}
+                />
+                <textarea
+                  className="textarea"
+                  placeholder={ticketDraft.intakeKind === 'bug'
+                    ? 'What happened, where did it happen, and what did you expect instead?'
+                    : 'Describe the user problem, opportunity, or outcome this idea supports.'}
+                  value={ticketDraft.problem}
+                  onChange={(event) => updateTicketDraft('problem', event.target.value)}
+                />
+
+                <h4>PO inspection</h4>
+                <div className="form-grid">
+                  <select
+                    className="input"
+                    value={ticketDraft.module}
+                    onChange={(event) => updateTicketDraft('module', event.target.value)}
+                  >
+                    {PRODUCT_MODULE_FLOWS.map((item) => (
+                      <option key={item.module} value={item.module}>{item.module}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={ticketDraft.flow}
+                    onChange={(event) => updateTicketDraft('flow', event.target.value)}
+                  >
+                    {ticketFlowOptions.map((flow) => (
+                      <option key={flow} value={flow}>{flow}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={ticketDraft.reviewPath}
+                    onChange={(event) => updateTicketDraft('reviewPath', event.target.value)}
+                  >
+                    {REVIEW_PATHS.map((path) => (
+                      <option key={path} value={path}>{path}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={ticketDraft.priority}
+                    onChange={(event) => updateTicketDraft('priority', event.target.value)}
+                  >
+                    {TICKET_PRIORITIES.map((priority) => (
+                      <option key={priority} value={priority}>{priority}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={ticketDraft.decision}
+                    onChange={(event) => updateTicketDraft('decision', event.target.value)}
+                  >
+                    {PRODUCT_DECISIONS.map((decision) => (
+                      <option key={decision} value={decision}>{decision}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  className="textarea"
+                  placeholder="PO rationale: why this flow, what review is needed, and what should not be changed?"
+                  value={ticketDraft.rationale}
+                  onChange={(event) => updateTicketDraft('rationale', event.target.value)}
+                />
+                <div className="table-actions">
+                  <button className="button" type="button" onClick={handleSaveTicketRoute}>
+                    Save PO decision
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => {
+                      setTicketDraft(createEmptyTicketDraft())
+                      setShowTicketChoices(false)
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="module-card">
+                <h4>PO checklist</h4>
+                <p className="muted">
+                  Decide where the ticket belongs before implementation, so new work strengthens the existing product instead of creating duplicate flows.
+                </p>
+                <div className="metric-row"><span>User job is clear</span><strong>Required</strong></div>
+                <div className="metric-row"><span>Existing module selected</span><strong>Required</strong></div>
+                <div className="metric-row"><span>Existing flow selected</span><strong>Preferred</strong></div>
+                <div className="metric-row"><span>Review path fits ticket</span><strong>Flexible</strong></div>
+                <div className="metric-row"><span>Decision is explicit</span><strong>Build / shape / later</strong></div>
+              </div>
+            </div>
+
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Ticket</span>
+                <span>Type</span>
+                <span>Module</span>
+                <span>Flow</span>
+                <span>Review</span>
+                <span>Decision</span>
+                <span>Priority</span>
+                <span />
+              </div>
+              {productTickets.length === 0 && (
+                <div className="table-row empty">No product routing decisions saved yet.</div>
+              )}
+              {productTickets.map((ticket) => (
+                <div className="table-row" key={ticket.id}>
+                  <span>{ticket.title}</span>
+                  <span>{ticket.type}</span>
+                  <span>{ticket.module}</span>
+                  <span>{ticket.flow}</span>
+                  <span>{ticket.reviewPath || 'PO only'}</span>
+                  <span>{ticket.decision}</span>
+                  <span>{ticket.priority}</span>
+                  <button
+                    className="button-secondary button-secondary--small"
+                    type="button"
+                    onClick={() => handleRemoveTicketRoute(ticket.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="module-grid">
             <div className="module-card">
             <h3>System status</h3>

@@ -1557,7 +1557,7 @@ body.datahub-graph-is-expanded .module-view__sidebar {
   border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   padding: 16px;
-  background: #ffffff;
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   display: grid;
   gap: var(--space-2);
@@ -1773,7 +1773,7 @@ body.datahub-graph-is-expanded .module-view__sidebar {
 .module-flow__step {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.35);
-  background: #ffffff;
+  background: var(--surface);
   padding: 14px;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
@@ -1923,7 +1923,7 @@ button.module-flow__step:hover {
 .module-panel {
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 28px;
-  background: #f8fafc;
+  background: var(--surface-alt);
   padding: 28px 32px;
   box-shadow: 0 30px 60px rgba(15, 23, 42, 0.12);
   min-width: 0;
@@ -2311,7 +2311,7 @@ button.module-flow__step:hover {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 18px;
-  background: #ffffff;
+  background: var(--surface);
   min-width: 0;
   width: 100%;
   max-width: 100%;
