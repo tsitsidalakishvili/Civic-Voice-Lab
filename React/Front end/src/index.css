@@ -85,4 +85,23 @@ a:hover {
   text-decoration: underline;
 }
 
+[data-mantine-color-scheme="dark"] {
+  --bg: #141517;
+  --surface: #1a1b1e;
+  --surface-alt: #25262b;
+  --surface-strong: #2c2e33;
+  --border: #373a40;
+  --border-strong: #5c5f66;
+  --text: #c1c2c5;
+  --text-h: #e9ecef;
+  --muted: #909296;
+  --accent-bg: rgba(37, 99, 235, 0.2);
+  --accent-border: rgba(37, 99, 235, 0.5);
+  --accent-soft: rgba(37, 99, 235, 0.15);
+  --focus-ring: #4dabf7;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 22px 40px rgba(0, 0, 0, 0.6);
+}
+
 

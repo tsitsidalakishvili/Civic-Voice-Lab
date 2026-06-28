@@ -13,7 +13,6 @@ import {
   ThemeIcon,
   Tooltip,
   Menu,
-  useMantineColorScheme,
 } from '@mantine/core'
 import { Spotlight, spotlight } from '@mantine/spotlight'
 import {
@@ -25,6 +24,7 @@ import {
   IconSearch,
 } from '@tabler/icons-react'
 import { AppProvider, useApp } from '@/context/AppContext'
+import { ThemeToggle } from '@/components/ThemeToggle/ThemeToggle'
 import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from '@/config/modules'
 import { FeedbackDrawer } from '@/components/FeedbackDrawer'
 import { PlatformWalkthrough } from '@/components/PlatformWalkthrough'
@@ -82,8 +82,6 @@ function AppShell_() {
   const [moduleTabs, setModuleTabs] = useState({})
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const initialUrlSync = useRef(true)
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme()
-
   const activeModule = modules.find((m) => m.id === activeModuleId)
   const ActiveComponent = activeModule?.Component
 
@@ -300,6 +298,7 @@ function AppShell_() {
               onModuleChange={handleWalkthroughModuleChange}
               onModuleSectionChange={handleWalkthroughSectionChange}
             />
+            <ThemeToggle />
             <Menu position="bottom-end" withinPortal>
               <Menu.Target>
                 <Tooltip label={t('language.label')}>

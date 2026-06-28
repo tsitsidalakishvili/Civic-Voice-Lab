@@ -5876,3 +5876,56 @@ button.module-flow__step:hover {
   background-color: #172554 !important;
   background-image: none !important;
 }
+
+/* ── Dark-mode overrides ── */
+[data-mantine-color-scheme="dark"] .module-tile {
+  background: linear-gradient(
+    140deg,
+    #25262b 0%,
+    #1a1b1e 52%,
+    rgba(var(--tile-accent-rgb), 0.12) 100%
+  );
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-mantine-color-scheme="dark"] .module-tile:hover {
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.5), 0 12px 26px rgba(var(--tile-accent-rgb), 0.22);
+}
+
+[data-mantine-color-scheme="dark"] .module-view__card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-mantine-color-scheme="dark"] .form-section {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-mantine-color-scheme="dark"] .tab-button {
+  background: var(--surface);
+}
+
+[data-mantine-color-scheme="dark"] .pill--status {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+[data-mantine-color-scheme="dark"] .pill--success {
+  color: #4ade80;
+}
+
+[data-mantine-color-scheme="dark"] .pill--warning {
+  color: #fb923c;
+}
+
+/* Keep public views in light mode to prevent double-inversion of their dark hero */
+[data-mantine-color-scheme="dark"] .public-dashboard {
+  color-scheme: light;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 28%),
+    linear-gradient(180deg, #06111f 0%, #0b1728 30%, #eef4ff 30%, #f8fbff 100%);
+  color: inherit;
+}
