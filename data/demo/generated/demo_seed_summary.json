@@ -1,0 +1,17 @@
+{
+  "target_uri": "neo4j+s://8896b63f.databases.neo4j.io",
+  "target_database": "neo4j",
+  "people": 160,
+  "tasks": 6,
+  "events": [
+    "Neighborhood Listening Session",
+    "Civic Innovation Workshop"
+  ],
+  "segments": 2,
+  "whatsapp_groups": 2,
+  "campaigns": [
+    "Clean Streets Initiative",
+    "Winter Relief Fund"
+  ],
+  "conversations": 3
+}

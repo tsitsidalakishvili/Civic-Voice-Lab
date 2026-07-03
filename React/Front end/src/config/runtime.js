@@ -44,7 +44,7 @@ function resolveApiBaseUrl(overrides) {
     base = fromVite || DEFAULT_API_BASE_URL
     if (pointsToLoopback(base) && import.meta.env.PROD) {
       console.warn(
-        '[Freedom Square] API base URL points to localhost while the app is on a public host. ' +
+        '[Civic Voice Lab] API base URL points to localhost while the app is on a public host. ' +
           'Set VITE_API_BASE_URL in your host (e.g. Vercel → Environment Variables) to your API ' +
           '(e.g. https://your-api.onrender.com), or set window.__FS_RUNTIME_CONFIG__.API_BASE_URL before the app loads.',
       )

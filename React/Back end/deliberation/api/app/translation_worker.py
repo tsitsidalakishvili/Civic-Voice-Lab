@@ -10,7 +10,7 @@ from .core.translation import (
     get_translation_service,
 )
 
-app = FastAPI(title="Freedom Square Translation Worker")
+app = FastAPI(title="Civic Voice Lab Translation Worker")
 
 
 class TranslationBatchIn(BaseModel):

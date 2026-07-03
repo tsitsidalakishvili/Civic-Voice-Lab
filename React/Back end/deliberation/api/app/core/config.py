@@ -116,8 +116,8 @@ def get_settings() -> Settings:
         _split_csv(os.getenv("FS_AUTH_PUBLIC_RULES")) or DEFAULT_AUTH_PUBLIC_RULES
     )
     return Settings(
-        app_title=str(os.getenv("APP_TITLE", "Freedom Square API")).strip()
-        or "Freedom Square API",
+        app_title=str(os.getenv("APP_TITLE", "Civic Voice Lab API")).strip()
+        or "Civic Voice Lab API",
         cors_origins=cors_origins,
         cors_origin_regex=str(
             os.getenv("CORS_ORIGIN_REGEX", DEFAULT_CORS_ORIGIN_REGEX)

@@ -263,7 +263,7 @@ function AppShell_() {
                 <IconLayoutGrid size={18} />
               </ThemeIcon>
               <div>
-                <Text fw={700} className="brand__title">Freedom Square</Text>
+                <Text fw={700} className="brand__title">Civic Voice Lab</Text>
                 <Text size="xs" c="dimmed" className="brand__subtitle">Civic Engagement Suite</Text>
               </div>
             </Group>
@@ -385,17 +385,17 @@ function AppShell_() {
               <Accordion.Item value="about">
                 <Accordion.Control>
                   <Stack gap={2} align="center">
-                    <Text fw={600}>About Freedom Square</Text>
+                    <Text fw={600}>About Civic Voice Lab</Text>
                     <Text size="xs" c="dimmed">Platform overview &amp; capabilities</Text>
                   </Stack>
                 </Accordion.Control>
                 <Accordion.Panel>
                   <div className="platform-description">
-                    <h2>Freedom Square - Civic Engagement Suite</h2>
+                    <h2>Civic Voice Lab - Civic Engagement Suite</h2>
 
                     <h3>Executive Summary</h3>
-                    <p>Freedom Square is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
-                    <p>The platform helps organizations build stronger relationships with supporters, understand community priorities, coordinate campaigns, and make transparent, evidence-based decisions. By bringing together data, participation, and analytics, Freedom Square reduces reliance on multiple disconnected tools and creates a more efficient and democratic way of organizing communities.</p>
+                    <p>Civic Voice Lab is an integrated digital platform designed for political parties, civic movements, NGOs, and advocacy organizations. It combines community management, campaigning, public consultation, collective decision-making, and organizational intelligence in a single environment.</p>
+                    <p>The platform helps organizations build stronger relationships with supporters, understand community priorities, coordinate campaigns, and make transparent, evidence-based decisions. By bringing together data, participation, and analytics, Civic Voice Lab reduces reliance on multiple disconnected tools and creates a more efficient and democratic way of organizing communities.</p>
 
                     <hr />
 
@@ -419,7 +419,7 @@ function AppShell_() {
                     <hr />
 
                     <h3>Deliberation &amp; Collective Decision-Making</h3>
-                    <p>Freedom Square provides structured spaces for dialogue where participants can discuss issues, evaluate alternatives, and collaboratively develop solutions.</p>
+                    <p>Civic Voice Lab provides structured spaces for dialogue where participants can discuss issues, evaluate alternatives, and collaboratively develop solutions.</p>
                     <p>The module supports transparent and participatory governance by ensuring that organizational priorities can be traced back to real community input rather than top-down decision-making.</p>
 
                     <hr />
@@ -449,12 +449,12 @@ function AppShell_() {
                     <hr />
 
                     <h3>Expected Impact</h3>
-                    <p>Freedom Square strengthens democratic participation within organizations by enabling communities to actively shape priorities, policies, and campaigns. The platform promotes transparency, accountability, and evidence-based decision-making while helping organizations build stronger, more engaged supporter networks.</p>
-                    <p>By combining participation, campaigning, analytics, and AI-powered insights in a single solution, Freedom Square enables civic and political organizations to operate more effectively and democratically in the digital age.</p>
+                    <p>Civic Voice Lab strengthens democratic participation within organizations by enabling communities to actively shape priorities, policies, and campaigns. The platform promotes transparency, accountability, and evidence-based decision-making while helping organizations build stronger, more engaged supporter networks.</p>
+                    <p>By combining participation, campaigning, analytics, and AI-powered insights in a single solution, Civic Voice Lab enables civic and political organizations to operate more effectively and democratically in the digital age.</p>
 
                     <div className="platform-description__principle">
                       <p><strong>Core Principle</strong></p>
-                      <p><strong>People should not only receive information; they should actively shape decisions.</strong> Freedom Square transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
+                      <p><strong>People should not only receive information; they should actively shape decisions.</strong> Civic Voice Lab transforms supporters from passive audiences into active participants, creating organizations that are more transparent, accountable, and responsive to their communities.</p>
                     </div>
                   </div>
                 </Accordion.Panel>

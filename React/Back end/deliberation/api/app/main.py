@@ -77,7 +77,7 @@ def on_startup():
         app.state.db_bootstrap_error = str(exc)
         logger.exception("Deliberation startup: Neo4j initialization failed: %s", exc)
     if settings.auth_enabled and not settings.auth_secret_configured:
-        logger.warning("Freedom Square auth is enabled but no auth secret is configured.")
+        logger.warning("Civic Voice Lab auth is enabled but no auth secret is configured.")
 
 
 @app.on_event("shutdown")

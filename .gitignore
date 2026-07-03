@@ -1,6 +1,7 @@
 ﻿.env
 **/.env
 **/.env.local
+**/.env.demo
 **/.env.auth
 **/.env.auth.local
 .streamlit/secrets.toml

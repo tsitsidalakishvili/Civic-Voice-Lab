@@ -129,7 +129,7 @@ export function AdminPage({
   const [moderationStatus, setModerationStatus] = useState('')
   const [campaignMetrics, setCampaignMetrics] = useState(null)
   const [slackMessage, setSlackMessage] = useState(
-    'Freedom Square Network is connected to Slack.',
+    'Civic Voice Lab Network is connected to Slack.',
   )
   const [slackError, setSlackError] = useState('')
   const [clearConfirm, setClearConfirm] = useState('')
