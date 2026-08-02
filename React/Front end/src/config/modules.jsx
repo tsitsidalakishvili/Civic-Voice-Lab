@@ -70,7 +70,7 @@ export const buildModules = (t) => {
     {
       id: 'campaigns',
       label: 'Campaigns & Audience',
-      description: 'Discover audiences, plan campaigns, coordinate outreach, and track results.',
+      description: 'Match brands and campaigns to the creators who can amplify them, with reach projections.',
       Component: CampaignsAudienceWorkspace,
     },
     {
@@ -110,17 +110,13 @@ export const buildModuleSections = (t) => ({
   },
   campaigns: {
     title: 'Campaigns & Audience',
-    description: 'One workspace for audience intelligence, campaign planning, outreach, and results.',
-    flowTitle: 'Discover, plan, mobilize',
-    flowSummary: 'Use audience discovery to shape campaign strategy, then move directly into outreach and campaign execution.',
-    defaultTab: 'campaigns',
+    description: 'Match brands and campaigns to the creators who can amplify them, with reach projections.',
+    flowTitle: 'Analyze, match, project',
+    flowSummary: 'Enter a brand or campaign, get AI-ranked creator matches, then project reach, engagement, and clicks before you commit budget.',
+    defaultTab: 'match',
     sections: [
-      { label: 'Campaigns', type: 'tab', value: 'campaigns', hint: 'Plan, fund, execute, and monitor campaigns.' },
-      { label: 'Outreach', type: 'tab', value: 'outreach', hint: 'Invite people or saved segments into events and actions.' },
-      { label: 'Audience discovery', type: 'tab', value: 'audience-overview', hint: 'Run AI-assisted audience analysis from websites or documents.' },
-      { label: 'Segments', type: 'tab', value: 'audience-segments', hint: 'Review audience segments and choose targets for campaigns.' },
-      { label: 'Evidence', type: 'tab', value: 'audience-evidence', hint: 'Inspect source pages, clusters, and supporting evidence.' },
-      { label: 'Messaging', type: 'tab', value: 'audience-messaging', hint: 'Turn audience insights into campaign messages.' },
+      { label: 'Match', type: 'tab', value: 'match', hint: 'Enter a brand or campaign and get ranked creator matches with reach projections.' },
+      { label: 'Roster', type: 'tab', value: 'roster', hint: 'Browse, search, import, and export your creator roster.' },
     ],
   },
   deliberation: {
