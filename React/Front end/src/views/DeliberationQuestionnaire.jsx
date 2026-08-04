@@ -431,6 +431,7 @@ export function DeliberationQuestionnaire({
         },
       )
       setStatementDiscussionDraftById((prev) => ({ ...prev, [currentCommentId]: '' }))
+      setStatementDiscussionExpandedById((prev) => ({ ...prev, [currentCommentId]: true }))
       await loadStatementDiscussion(currentCommentId)
     } catch (err) {
       setStatementDiscussionErrorById((prev) => ({
@@ -764,46 +765,6 @@ export function DeliberationQuestionnaire({
               )}
             </div>
           </div>
-          {identityRequired ? (
-            <p className="muted">{discussionCopy.identityRequired}</p>
-          ) : null}
-          <div className="questionnaire-importance">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={importantFlag}
-                onChange={(event) => setImportantFlag(event.target.checked)}
-                disabled={!currentCommentId || pendingVote || votingDisabled}
-              />
-              {discussionCopy.importantFlag}
-            </label>
-          </div>
-          <div className="questionnaire-controls">
-            <button
-              className="swipe-button swipe-button--disagree"
-              type="button"
-              onClick={() => handleVote(currentCommentId, -1)}
-              disabled={!currentCommentId || pendingVote || votingDisabled}
-            >
-              {translate('questionnaire.disagree')}
-            </button>
-            <button
-              className="swipe-button swipe-button--pass"
-              type="button"
-              onClick={() => handleVote(currentCommentId, 0)}
-              disabled={!currentCommentId || pendingVote || votingDisabled}
-            >
-              {translate('questionnaire.pass')}
-            </button>
-            <button
-              className="swipe-button swipe-button--agree"
-              type="button"
-              onClick={() => handleVote(currentCommentId, 1)}
-              disabled={!currentCommentId || pendingVote || votingDisabled}
-            >
-              {translate('questionnaire.agree')}
-            </button>
-          </div>
           {currentCommentId ? (
             <div className="questionnaire-add">
               <div className="discussion-drawer-header">
@@ -819,11 +780,11 @@ export function DeliberationQuestionnaire({
                   {currentStatementDiscussion.length > 0 ? ` (${currentStatementDiscussion.length})` : ''}
                 </button>
               </div>
+              {currentStatementDiscussionError ? (
+                <div className="module-alert">{currentStatementDiscussionError}</div>
+              ) : null}
               {currentStatementDiscussionExpanded ? (
                 <div className="discussion-drawer-body">
-                  {currentStatementDiscussionError ? (
-                    <div className="module-alert">{currentStatementDiscussionError}</div>
-                  ) : null}
                   {currentStatementDiscussionLoading ? (
                     <p className="muted">{discussionCopy.commentsLoading}</p>
                   ) : currentStatementDiscussion.length === 0 ? (
@@ -878,43 +839,85 @@ export function DeliberationQuestionnaire({
                       ))}
                     </div>
                   )}
-                  <textarea
-                    className="textarea"
-                    value={currentStatementDiscussionDraft}
-                    onChange={(event) =>
-                      setStatementDiscussionDraftById((prev) => ({
-                        ...prev,
-                        [currentCommentId]: event.target.value,
-                      }))
-                    }
-                    placeholder={discussionCopy.addCommentPlaceholder}
-                  />
-                  <div className="statement-comment-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => loadStatementDiscussion(currentCommentId)}
-                      disabled={currentStatementDiscussionLoading}
-                    >
-                      {currentStatementDiscussionLoading
-                        ? discussionCopy.refreshingComments
-                        : discussionCopy.refreshComments}
-                    </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={handleSubmitStatementDiscussion}
-                      disabled={currentStatementDiscussionSaving}
-                    >
-                      {currentStatementDiscussionSaving
-                        ? discussionCopy.postingComment
-                        : discussionCopy.postComment}
-                    </button>
-                  </div>
                 </div>
               ) : null}
+              <textarea
+                className="textarea"
+                value={currentStatementDiscussionDraft}
+                onChange={(event) =>
+                  setStatementDiscussionDraftById((prev) => ({
+                    ...prev,
+                    [currentCommentId]: event.target.value,
+                  }))
+                }
+                placeholder={discussionCopy.addCommentPlaceholder}
+              />
+              <div className="statement-comment-actions">
+                {currentStatementDiscussionExpanded ? (
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => loadStatementDiscussion(currentCommentId)}
+                    disabled={currentStatementDiscussionLoading}
+                  >
+                    {currentStatementDiscussionLoading
+                      ? discussionCopy.refreshingComments
+                      : discussionCopy.refreshComments}
+                  </button>
+                ) : null}
+                <button
+                  className="button"
+                  type="button"
+                  onClick={handleSubmitStatementDiscussion}
+                  disabled={currentStatementDiscussionSaving}
+                >
+                  {currentStatementDiscussionSaving
+                    ? discussionCopy.postingComment
+                    : discussionCopy.postComment}
+                </button>
+              </div>
             </div>
           ) : null}
+          {identityRequired ? (
+            <p className="muted">{discussionCopy.identityRequired}</p>
+          ) : null}
+          <div className="questionnaire-importance">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={importantFlag}
+                onChange={(event) => setImportantFlag(event.target.checked)}
+                disabled={!currentCommentId || pendingVote || votingDisabled}
+              />
+              {discussionCopy.importantFlag}
+            </label>
+          </div>
+          <div className="questionnaire-controls">
+            <button
+              className="swipe-button swipe-button--disagree"
+              type="button"
+              onClick={() => handleVote(currentCommentId, -1)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.disagree')}
+            </button>
+            <button
+              className="swipe-button swipe-button--pass"
+              type="button"
+              onClick={() => handleVote(currentCommentId, 0)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.pass')}
+            </button>
+            <button
+              className="swipe-button swipe-button--agree"
+              type="button"
+              onClick={() => handleVote(currentCommentId, 1)}
+              disabled={!currentCommentId || pendingVote || votingDisabled}
+            >
+              {translate('questionnaire.agree')}
+            </button>
+          </div>
         </>
       )}
     </section>

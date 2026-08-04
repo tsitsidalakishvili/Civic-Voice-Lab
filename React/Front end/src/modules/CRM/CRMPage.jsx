@@ -12,6 +12,8 @@ import {
 } from '../../lib/inviteDistribution'
 import { CivicStatGrid, PageHeader } from '../../ui'
 import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
   IconBrandSlack,
   IconBrandWhatsapp,
   IconCircleCheck,
@@ -281,6 +283,9 @@ export function CRMPage({
   const [profileError, setProfileError] = useState('')
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
+  const [profileDeleting, setProfileDeleting] = useState(false)
+  const [peopleFullscreen, setPeopleFullscreen] = useState(false)
+  const [peopleDownloading, setPeopleDownloading] = useState(false)
   const [furryRows, setFurryRows] = useState([])
   const [furryError, setFurryError] = useState('')
   const [furryLoading, setFurryLoading] = useState(false)
@@ -1011,6 +1016,74 @@ export function CRMPage({
       setProfileError(err.message || 'Unable to save profile.')
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  const handleProfileDelete = async () => {
+    if (!selectedEmail || profileDeleting) return
+    const displayName =
+      [profileDraft?.firstName, profileDraft?.lastName].filter(Boolean).join(' ') ||
+      profileDraft?.email ||
+      selectedEmail
+    const confirmed = window.confirm(
+      `Delete ${displayName} from the CRM? This removes the person and their activity history permanently.`,
+    )
+    if (!confirmed) return
+    setProfileDeleting(true)
+    setProfileError('')
+    try {
+      await requestJson(`/crm/people/${encodeURIComponent(selectedEmail)}`, {
+        method: 'DELETE',
+      })
+      setSelectedEmail('')
+      setProfile(null)
+      setProfileDraft(null)
+      loadPeople()
+    } catch (err) {
+      setProfileError(err.message || 'Unable to delete person.')
+    } finally {
+      setProfileDeleting(false)
+    }
+  }
+
+  useEffect(() => {
+    document.body.classList.toggle('crm-people-is-expanded', peopleFullscreen)
+    if (!peopleFullscreen) {
+      return () => document.body.classList.remove('crm-people-is-expanded')
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setPeopleFullscreen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.classList.remove('crm-people-is-expanded')
+    }
+  }, [peopleFullscreen])
+
+  const handleDownloadPeople = async () => {
+    if (peopleDownloading) return
+    setPeopleDownloading(true)
+    setPeopleError('')
+    try {
+      const params = new URLSearchParams()
+      if (peopleGroup !== 'All') {
+        params.set('group', peopleGroup)
+      }
+      if (peopleQuery.trim()) {
+        params.set('q', peopleQuery.trim())
+      }
+      params.set('limit', '5000')
+      const rows = await getJson(`/crm/people/summary?${params.toString()}`, { cacheMs: 0 })
+      if (!Array.isArray(rows) || !rows.length) {
+        setPeopleError('No people to download for the current filters.')
+        return
+      }
+      downloadCsv('people_directory.csv', rows)
+    } catch (err) {
+      setPeopleError(err.message || 'Unable to download people.')
+    } finally {
+      setPeopleDownloading(false)
     }
   }
 
@@ -2143,7 +2216,12 @@ export function CRMPage({
               </aside>
               <div className="module-main">
                 {peopleError ? <div className="module-alert">{peopleError}</div> : null}
-              <div className="module-card module-card__wide panel panel--highlight" data-tour="network-people-directory">
+              <div
+                className={`module-card module-card__wide panel panel--highlight ${
+                  peopleFullscreen ? 'people-directory--expanded' : ''
+                }`}
+                data-tour="network-people-directory"
+              >
                 <div className="card-header">
                   <div>
                     <h3>People directory</h3>
@@ -2151,7 +2229,32 @@ export function CRMPage({
                       Search supporters and members from the Network.
                     </p>
                   </div>
-                  <div className="pill">Network</div>
+                  <div className="graph-frame__actions">
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={handleDownloadPeople}
+                      disabled={peopleDownloading}
+                      title="Download all people matching the current filters as CSV"
+                    >
+                      <IconDownload size={16} />
+                      {peopleDownloading ? 'Downloading...' : 'Download'}
+                    </button>
+                    <button
+                      className="map-filters__toggle map-filters__icon-toggle"
+                      type="button"
+                      onClick={() => setPeopleFullscreen((prev) => !prev)}
+                      aria-pressed={peopleFullscreen}
+                      aria-label={peopleFullscreen ? 'Exit full screen view' : 'Full screen view'}
+                      title={peopleFullscreen ? 'Exit full screen view' : 'Full screen view'}
+                    >
+                      {peopleFullscreen ? (
+                        <IconArrowsMinimize size={17} />
+                      ) : (
+                        <IconArrowsMaximize size={17} />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="table">
                 <div className="table-row table-row--people table-head">
@@ -2310,9 +2413,18 @@ export function CRMPage({
                       className="button"
                       type="button"
                       onClick={handleProfileSave}
-                      disabled={profileSaving}
+                      disabled={profileSaving || profileDeleting}
                     >
                       {profileSaving ? 'Saving...' : <IconCircleCheck size={17} />}
+                    </button>
+                    <button
+                      className="button-secondary button-danger"
+                      type="button"
+                      onClick={handleProfileDelete}
+                      disabled={profileSaving || profileDeleting}
+                      title="Delete this person"
+                    >
+                      {profileDeleting ? 'Deleting...' : <IconTrash size={17} />}
                     </button>
                   </div>
                 </div>

@@ -11,10 +11,11 @@ import {
   IconArrowsMinimize,
   IconChartDots,
   IconDatabase,
+  IconDownload,
   IconGitBranch,
   IconLink,
 } from '@tabler/icons-react'
-import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
+import { downloadFile, getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, Field, FormSection, InfoHint, StatusMessage } from '../../ui'
 
 const VIEWS = ['explorer', 'connectors']
@@ -351,6 +352,9 @@ export function DataHubPage({
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [selectedModuleId, setSelectedModuleId] = useState('crm')
   const [graphFullscreen, setGraphFullscreen] = useState(false)
+  const [databaseFullscreen, setDatabaseFullscreen] = useState(false)
+  const [downloading, setDownloading] = useState('')
+  const [downloadError, setDownloadError] = useState('')
 
   const applyView = (viewId) => {
     if (!viewId) return
@@ -491,6 +495,36 @@ export function DataHubPage({
       document.body.classList.remove('datahub-graph-is-expanded')
     }
   }, [graphFullscreen])
+
+  useEffect(() => {
+    document.body.classList.toggle('datahub-database-is-expanded', databaseFullscreen)
+    if (!databaseFullscreen) {
+      return () => document.body.classList.remove('datahub-database-is-expanded')
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setDatabaseFullscreen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.classList.remove('datahub-database-is-expanded')
+    }
+  }, [databaseFullscreen])
+
+  const handleDownloadDatabase = async (format) => {
+    setDownloading(format)
+    setDownloadError('')
+    try {
+      await downloadFile(
+        `/data-hub/export?format=${format}`,
+        format === 'csv' ? 'database-export.zip' : 'database-export.json',
+      )
+    } catch (err) {
+      setDownloadError(err?.message || 'Unable to download the database export.')
+    } finally {
+      setDownloading('')
+    }
+  }
 
   const labelOptions = useMemo(() => {
     const set = new Set(labelCounts.map((item) => item.label))
@@ -634,6 +668,7 @@ export function DataHubPage({
 
       <StatusMessage tone="error" message={error} />
       <StatusMessage tone="error" message={catalogError} />
+      <StatusMessage tone="error" message={downloadError} />
       <StatusMessage
         tone="info"
         message={loading ? 'Loading graph snapshot...' : ''}
@@ -704,6 +739,24 @@ export function DataHubPage({
                     disabled={loading}
                   >
                     {loading ? 'Refreshing...' : 'Refresh snapshot'}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleDownloadDatabase('json')}
+                    disabled={Boolean(downloading)}
+                  >
+                    <IconDownload size={16} />
+                    {downloading === 'json' ? 'Preparing JSON...' : 'Download JSON'}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => handleDownloadDatabase('csv')}
+                    disabled={Boolean(downloading)}
+                  >
+                    <IconDownload size={16} />
+                    {downloading === 'csv' ? 'Preparing CSV...' : 'Download CSV'}
                   </button>
                 </div>
               </div>
@@ -920,13 +973,46 @@ export function DataHubPage({
               ) : null}
 
               {nodes.length ? (
-                <div className="module-card module-card__wide">
+                <div
+                  className={`module-card module-card__wide database-frame ${
+                    databaseFullscreen ? 'database-frame--fullscreen' : ''
+                  }`}
+                >
                   <div className="card-header">
                     <div>
                       <h3>Node browser</h3>
                       <p className="muted">
                         Search and inspect node records loaded into the current Neo4j snapshot.
                       </p>
+                    </div>
+                    <div className="graph-frame__actions">
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => handleDownloadDatabase('json')}
+                        disabled={Boolean(downloading)}
+                      >
+                        <IconDownload size={16} />
+                        {downloading ? 'Preparing...' : 'Download'}
+                      </button>
+                      <button
+                        className="map-filters__toggle map-filters__icon-toggle"
+                        type="button"
+                        onClick={() => setDatabaseFullscreen((prev) => !prev)}
+                        aria-pressed={databaseFullscreen}
+                        aria-label={
+                          databaseFullscreen ? 'Exit full screen database view' : 'Full screen database view'
+                        }
+                        title={
+                          databaseFullscreen ? 'Exit full screen database view' : 'Full screen database view'
+                        }
+                      >
+                        {databaseFullscreen ? (
+                          <IconArrowsMinimize size={17} />
+                        ) : (
+                          <IconArrowsMaximize size={17} />
+                        )}
+                      </button>
                     </div>
                   </div>
                   <div className="filter-row">

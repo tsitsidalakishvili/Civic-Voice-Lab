@@ -1,11 +1,15 @@
 import csv
 import io
+import json
 import re
+import zipfile
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from .db import get_active_database, get_driver
@@ -755,6 +759,149 @@ async def upload_module_csv(
         createdNodes=len(rows),
         target="Neo4j",
         message=f"Imported {len(rows)} CSV rows into Neo4j for {module.module_label}.",
+    )
+
+
+EXPORT_MAX_NODES = 50000
+EXPORT_MAX_RELATIONSHIPS = 100000
+
+
+def _export_value(value):
+    """Serialize a Neo4j property for export without truncating strings."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_export_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _export_value(item) for key, item in value.items()}
+    return str(value)
+
+
+def _export_properties(properties: dict) -> dict:
+    safe = {}
+    for key, value in (properties or {}).items():
+        if key in SKIP_PROPERTY_KEYS:
+            continue
+        safe[key] = _export_value(value)
+    return safe
+
+
+def _load_export_records(session) -> tuple[list[dict], list[dict]]:
+    node_rows = _execute_read(
+        session,
+        """
+        MATCH (n)
+        RETURN id(n) AS nodeId, labels(n) AS labels, properties(n) AS props
+        ORDER BY nodeId
+        LIMIT $limit
+        """,
+        {"limit": EXPORT_MAX_NODES},
+    )
+    rel_rows = _execute_read(
+        session,
+        """
+        MATCH (n)-[r]->(m)
+        RETURN
+          id(r) AS relId,
+          id(n) AS sourceId,
+          id(m) AS targetId,
+          type(r) AS relType,
+          properties(r) AS props
+        ORDER BY relId
+        LIMIT $limit
+        """,
+        {"limit": EXPORT_MAX_RELATIONSHIPS},
+    )
+    nodes = [
+        {
+            "id": str(row.get("nodeId")),
+            "labels": list(row.get("labels") or []),
+            "properties": _export_properties(row.get("props") or {}),
+        }
+        for row in node_rows
+    ]
+    relationships = [
+        {
+            "id": str(row.get("relId")),
+            "source": str(row.get("sourceId")),
+            "target": str(row.get("targetId")),
+            "type": str(row.get("relType") or ""),
+            "properties": _export_properties(row.get("props") or {}),
+        }
+        for row in rel_rows
+    ]
+    return nodes, relationships
+
+
+def _export_csv_bytes(rows: list[dict], columns: list[str]) -> str:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=columns)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                key: json.dumps(value, ensure_ascii=False)
+                if isinstance(value, (dict, list))
+                else value
+                for key, value in row.items()
+            }
+        )
+    return buffer.getvalue()
+
+
+@router.get("/export")
+def export_database(format: str = Query("json", pattern="^(json|csv)$")):
+    driver = get_driver()
+    with _db_session(driver) as session:
+        nodes, relationships = _load_export_records(session)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+    if format == "csv":
+        node_rows = [
+            {"id": node["id"], "labels": ";".join(node["labels"]), "properties": node["properties"]}
+            for node in nodes
+        ]
+        rel_rows = [
+            {
+                "id": rel["id"],
+                "source": rel["source"],
+                "target": rel["target"],
+                "type": rel["type"],
+                "properties": rel["properties"],
+            }
+            for rel in relationships
+        ]
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            bundle.writestr(
+                "nodes.csv", _export_csv_bytes(node_rows, ["id", "labels", "properties"])
+            )
+            bundle.writestr(
+                "relationships.csv",
+                _export_csv_bytes(rel_rows, ["id", "source", "target", "type", "properties"]),
+            )
+        return Response(
+            content=archive.getvalue(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="database-export-{timestamp}.zip"'
+            },
+        )
+
+    payload = {
+        "exportedAt": datetime.now(timezone.utc).isoformat(),
+        "nodeCount": len(nodes),
+        "relationshipCount": len(relationships),
+        "nodes": nodes,
+        "relationships": relationships,
+    }
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="database-export-{timestamp}.json"'
+        },
     )
 
 

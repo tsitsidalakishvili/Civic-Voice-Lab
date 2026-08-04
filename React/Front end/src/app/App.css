@@ -1530,6 +1530,19 @@ body.datahub-graph-is-expanded {
   overflow: hidden;
 }
 
+body.crm-people-is-expanded .module-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.crm-people-is-expanded .module-sidebar {
+  display: none;
+}
+
+.people-directory--expanded .table {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
+
 body.datahub-graph-is-expanded .module-view {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -2764,6 +2777,16 @@ button.module-flow__step:hover {
   justify-content: center;
   gap: 6px;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.button-secondary.button-danger {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+.button-secondary.button-danger:hover {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .button-secondary:hover {
@@ -4712,6 +4735,17 @@ button.module-flow__step:hover {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100vh - 32px);
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.34);
+}
+
+.database-frame--fullscreen {
+  position: fixed;
+  inset: 16px;
+  z-index: 4200;
+  border-radius: 18px;
+  padding: 18px;
+  overflow-y: auto;
   max-height: calc(100vh - 32px);
   box-shadow: 0 28px 90px rgba(15, 23, 42, 0.34);
 }

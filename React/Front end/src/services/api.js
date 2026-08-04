@@ -112,6 +112,29 @@ export async function requestJson(path, { method = 'POST', payload, headers } = 
   return response.json()
 }
 
+export async function downloadFile(path, fallbackFileName = 'download') {
+  const url = buildUrl(path)
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const fileName = match ? match[1] : fallbackFileName
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+  return fileName
+}
+
 export async function requestForm(path, { method = 'POST', formData } = {}) {
   const url = buildUrl(path)
   if (String(method).toUpperCase() !== 'GET') {

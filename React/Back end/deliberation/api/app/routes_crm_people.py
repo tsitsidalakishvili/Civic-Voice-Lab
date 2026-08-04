@@ -1740,6 +1740,32 @@ def update_person_profile(identifier: str, payload: PersonProfileUpdate):
     return profile or updated
 
 
+@router.delete("/people/{identifier}")
+def delete_person(identifier: str):
+    existing = _load_profile(identifier)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Person not found")
+    driver = get_driver()
+    query = """
+    MATCH (p:Person)
+    WHERE p.email = $identifier
+       OR p.personId = $identifier
+       OR p.generatedId = $identifier
+       OR elementId(p) = $identifier
+    OPTIONAL MATCH (p)-[:IS_SUPPORTER]->(s:Supporter)
+    OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(a:Activity)
+    DETACH DELETE s, a, p
+    """
+    with _db_session(driver) as session:
+        _execute_write(session, query, {"identifier": identifier})
+    return {
+        "deleted": True,
+        "identifier": identifier,
+        "email": existing.get("email") or "",
+        "message": "Person removed from the CRM graph.",
+    }
+
+
 @router.post("/people", response_model=PersonProfileOut)
 def upsert_person(payload: PersonUpsert):
     email = _clean_text(payload.email)
