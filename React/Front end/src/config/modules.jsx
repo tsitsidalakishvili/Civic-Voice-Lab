@@ -70,7 +70,7 @@ export const buildModules = (t) => {
     {
       id: 'campaigns',
       label: 'Campaigns & Audience',
-      description: 'Match brands and campaigns to the creators who can amplify them, with reach projections.',
+      description: 'Match campaigns, issues, and causes to the messengers who can amplify them, with reach projections.',
       Component: CampaignsAudienceWorkspace,
     },
     {
@@ -110,13 +110,13 @@ export const buildModuleSections = (t) => ({
   },
   campaigns: {
     title: 'Campaigns & Audience',
-    description: 'Match brands and campaigns to the creators who can amplify them, with reach projections.',
+    description: 'Match campaigns, issues, and causes to the messengers who can amplify them, with reach projections.',
     flowTitle: 'Analyze, match, project',
-    flowSummary: 'Enter a brand or campaign, get AI-ranked creator matches, then project reach, engagement, and clicks before you commit budget.',
+    flowSummary: 'Enter a campaign, issue, or cause, get ranked messenger matches, then project reach and engagement before you mobilize.',
     defaultTab: 'match',
     sections: [
-      { label: 'Match', type: 'tab', value: 'match', hint: 'Enter a brand or campaign and get ranked creator matches with reach projections.' },
-      { label: 'Roster', type: 'tab', value: 'roster', hint: 'Browse, search, import, and export your creator roster.' },
+      { label: 'Match', type: 'tab', value: 'match', hint: 'Enter a campaign, issue, or cause and get ranked messenger matches with reach projections.' },
+      { label: 'Roster', type: 'tab', value: 'roster', hint: 'Browse, search, import, and export your messenger roster.' },
     ],
   },
   deliberation: {

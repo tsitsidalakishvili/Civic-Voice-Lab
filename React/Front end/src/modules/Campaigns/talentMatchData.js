@@ -76,18 +76,17 @@ function buildMatchMatrix(niches, groups) {
 
 export const MATCH_MATRIX = buildMatchMatrix(NICHES, NICHE_AFFINITY_GROUPS)
 
-// Recognition / budget tiers awarded by total reach (used as suggested partnership value).
-export const VOUCHER_TIERS = [
-  { min: 1_000_000, tier: 'Celebrity', value: '€1,200', tone: 'celebrity' },
-  { min: 500_000, tier: 'VIP', value: '€800', tone: 'vip' },
-  { min: 100_000, tier: 'Mass', value: '€500', tone: 'mass' },
-  { min: 10_000, tier: 'Micro', value: '€250', tone: 'micro' },
-  { min: 5_000, tier: 'Nano', value: '€150', tone: 'nano' },
+// Influence tiers by combined reach — how far a messenger's own voice carries a
+// campaign message. Neutral civic framing (no commercial partnership value).
+export const INFLUENCE_TIERS = [
+  { min: 1_000_000, tier: 'National', reach: 'Nationwide voice', tone: 'celebrity' },
+  { min: 500_000, tier: 'Major', reach: 'Major public voice', tone: 'vip' },
+  { min: 100_000, tier: 'Broad', reach: 'Broad audience', tone: 'mass' },
+  { min: 10_000, tier: 'Community', reach: 'Community reach', tone: 'micro' },
+  { min: 5_000, tier: 'Grassroots', reach: 'Grassroots reach', tone: 'nano' },
 ]
 
-export const VOUCHER_BRANDS = 'Remember · American Vintage · Funky Buddha · Harmont & Blaine · Captain Candy'
-
-// Seed roster — curated Georgian creators. Replaceable via CSV import at runtime.
+// Seed roster — curated Georgian voices/creators. Replaceable via CSV import at runtime.
 const SEED = [
   { name: 'Salome Gviniashvili', ig: 'https://www.instagram.com/salomegviniashvili/', igUser: 'salomegviniashvili', tt: 'https://www.tiktok.com/@salomegviniashviliii', ttUser: 'salomegviniashviliii', niche: 'entertainment', igF: 245000, ttF: 31800 },
   { name: 'Zura Khizanishvili', ig: 'https://www.instagram.com/zurakhizana/', igUser: 'zurakhizana', tt: null, ttUser: null, niche: 'entertainment', igF: 104000, ttF: 0 },
@@ -158,6 +157,12 @@ const SEED = [
   { name: 'Amiko Zarkua', ig: 'https://www.instagram.com/amikozarkua/', igUser: 'amikozarkua', tt: 'https://www.tiktok.com/@amikozarkuagames', ttUser: 'amikozarkuagames', niche: 'gaming', igF: 31000, ttF: 0 },
   { name: 'Shota Vlogger', ig: null, igUser: null, tt: 'https://www.tiktok.com/@shotavlogger', ttUser: 'shotavlogger', niche: 'gaming', igF: 0, ttF: 34000 },
   { name: 'Meri Darchia', ig: 'https://www.instagram.com/meriway1/', igUser: 'meriway1', tt: null, ttUser: null, niche: 'business', igF: 15000, ttF: 0 },
+
+  // ── Civic voices (politics / news / activism). Primarily active on X/Twitter;
+  // follower counts approximate (~Aug 2026). Entries without a sourced count are
+  // omitted here — handles verified, awaiting numbers.
+  { name: 'Salome Zourabichvili', x: 'https://x.com/Zourabichvili_S', xUser: 'Zourabichvili_S', niche: 'politics', xF: 132300 },
+  { name: 'Elene Khoshtaria', x: 'https://x.com/Helenkhosh', xUser: 'Helenkhosh', niche: 'politics', xF: 17300 },
 ]
 
 // ── pure helpers ──────────────────────────────────────────────
@@ -192,12 +197,14 @@ export function estimateEngagement(total) {
 export function enrichCreator(raw) {
   const igF = Number(raw.igF) || 0
   const ttF = Number(raw.ttF) || 0
-  const total = igF + ttF
-  const avgViews = Math.round(igF * 0.4 + ttF * 0.62) || Math.round(total * 0.35)
+  const xF = Number(raw.xF) || 0
+  const total = igF + ttF + xF
+  const avgViews = Math.round(igF * 0.4 + ttF * 0.62 + xF * 0.25) || Math.round(total * 0.35)
   return {
     ...raw,
     igF,
     ttF,
+    xF,
     total,
     avgViews,
     eng: raw.eng != null && raw.eng !== '' ? Number(raw.eng) : estimateEngagement(total),
@@ -209,8 +216,8 @@ export function seedRoster() {
   return SEED.map(enrichCreator)
 }
 
-export function voucherFor(total) {
-  return VOUCHER_TIERS.find((tier) => total >= tier.min) || null
+export function influenceTierFor(total) {
+  return INFLUENCE_TIERS.find((tier) => total >= tier.min) || null
 }
 
 const NICHE_KEYWORDS = {
@@ -226,14 +233,14 @@ const NICHE_KEYWORDS = {
   tech: ['tech', 'software', 'startup', 'app', ' ai', 'developer', 'gadget', 'saas', 'crypto', 'hardware', 'robot', 'code'],
   business: ['business', 'finance', 'bank', 'invest', 'entrepreneur', 'market', 'corporate', 'trade', 'economy', 'consult', 'fintech', 'startup'],
   education: ['education', 'school', 'university', 'course', 'learn', 'study', 'teacher', 'academy', 'tutor', 'language', 'exam', 'science'],
-  news: ['news', 'media', 'press', 'journal', 'report', 'broadcast', 'headline', 'newsroom'],
-  politics: ['politic', 'government', 'election', 'party', 'policy', 'parliament', 'civic', 'democracy', 'vote'],
-  social: ['social', 'activ', 'ngo', 'charity', 'rights', 'community', 'volunteer', 'equality', 'awareness', 'nonprofit', 'humanitarian'],
+  news: ['news', 'media', 'press', 'journal', 'report', 'broadcast', 'headline', 'newsroom', 'disinformation', 'propaganda'],
+  politics: ['politic', 'government', 'election', 'party', 'policy', 'parliament', 'civic', 'democracy', 'vote', 'reform', 'corruption', 'eu', 'europe', 'accession', 'sovereignty', 'opposition', 'referendum'],
+  social: ['social', 'activ', 'ngo', 'charity', 'rights', 'community', 'volunteer', 'equality', 'awareness', 'nonprofit', 'humanitarian', 'protest', 'justice', 'freedom', 'minorit', 'gender', 'diaspora'],
   health: ['health', 'medical', 'doctor', 'clinic', 'nutrition', 'wellness', 'psychology', 'therapy', 'mental', 'pharma', 'dental', 'medicine'],
   lifestyle: ['life', 'home', 'decor', 'digital', 'online', 'service', 'organic', 'vlog'],
 }
 
-// Infer a brand's niche from its name/URL by keyword hits.
+// Infer a campaign's issue/topic area from its name or description by keyword hits.
 export function inferNiche(input) {
   const s = String(input || '').toLowerCase()
   let best = 'lifestyle'
@@ -248,22 +255,22 @@ export function inferNiche(input) {
   return best
 }
 
-export function buildReason(brandNiche, brandName, creator) {
-  const nicheScore = (MATCH_MATRIX[brandNiche] || MATCH_MATRIX.lifestyle)[creator.niche] || 0
+export function buildReason(campaignTopic, campaignName, creator) {
+  const nicheScore = (MATCH_MATRIX[campaignTopic] || MATCH_MATRIX.lifestyle)[creator.niche] || 0
   const followers = formatCompact(creator.total)
   if (nicheScore >= 60) {
-    return `${creator.name} is a ${creator.niche} creator with ${followers} followers — a direct niche match for ${brandName}. Their ${creator.eng}% engagement rate means ${brandName}'s content reaches a highly active, relevant audience.`
+    return `${creator.name} is a ${creator.niche} voice with ${followers} followers — directly aligned with "${campaignName}". Their ${creator.eng}% engagement means the message reaches a highly active, on-topic audience.`
   }
   if (nicheScore >= 20) {
-    return `${creator.name}'s ${creator.niche} audience overlaps significantly with ${brandName}'s target demographic. With ${followers} followers and ${creator.eng}% engagement, they offer strong reach with good conversion potential.`
+    return `${creator.name}'s ${creator.niche} audience overlaps strongly with the audience for "${campaignName}". With ${followers} followers and ${creator.eng}% engagement, they can carry the message to adjacent, receptive communities.`
   }
-  return `${creator.name} brings broad reach (${followers} followers) across Instagram and TikTok. Their ${creator.niche} niche is not a direct match, but their scale makes them valuable for ${brandName}'s awareness campaigns.`
+  return `${creator.name} brings broad reach (${followers} followers) across their platforms. Their ${creator.niche} focus is not a direct topic match, but their scale makes them valuable for widening awareness of "${campaignName}".`
 }
 
-// Score every creator against a brand niche and return the top N matches.
-export function matchCreators(roster, brandNiche, brandName, count) {
+// Score every messenger against a campaign topic and return the top N matches.
+export function matchCreators(roster, campaignTopic, campaignName, count) {
   const scored = roster.map((creator) => {
-    const ns = (MATCH_MATRIX[brandNiche] || MATCH_MATRIX.lifestyle)[creator.niche] || 0
+    const ns = (MATCH_MATRIX[campaignTopic] || MATCH_MATRIX.lifestyle)[creator.niche] || 0
     const es = Math.min(creator.eng * 1.2, 12)
     const rs = Math.min(creator.total / 30000, 8)
     const raw = ns + es + rs
@@ -271,7 +278,7 @@ export function matchCreators(roster, brandNiche, brandName, count) {
       ns >= 60
         ? Math.min(Math.round(55 + raw * 0.52), 99)
         : Math.min(Math.round(15 + raw * 0.38), 57)
-    return { ...creator, score, reason: buildReason(brandNiche, brandName, creator) }
+    return { ...creator, score, reason: buildReason(campaignTopic, campaignName, creator) }
   })
   return scored.sort((a, b) => b.score - a.score).slice(0, count)
 }
@@ -290,10 +297,11 @@ export function projectCampaign(matches, formatKey) {
 export function rosterSummary(roster) {
   const total = roster.reduce((s, r) => s + r.total, 0)
   const withTikTok = roster.filter((r) => r.ttF > 0).length
+  const withX = roster.filter((r) => (r.xF || 0) > 0).length
   const avgEng = roster.length
     ? (roster.reduce((s, r) => s + Number(r.eng || 0), 0) / roster.length).toFixed(1)
     : '0.0'
-  return { count: roster.length, totalReach: total, withTikTok, avgEng }
+  return { count: roster.length, totalReach: total, withTikTok, withX, avgEng }
 }
 
 // ── follower-trend (stock-style arrows) ───────────────────────
@@ -362,7 +370,8 @@ function usernameFromUrl(url) {
 }
 
 // Map parsed CSV rows (array-of-arrays, first row = header) into enriched creators.
-// Expected columns: Name, Instagram, IG Followers, TikTok, TT Followers, Eng%, Niche
+// Expected columns: Name, Instagram, IG Followers, TikTok, TT Followers,
+// X/Twitter, X Followers, Eng%, Niche
 export function rowsToRoster(rows) {
   const out = []
   for (let i = 1; i < rows.length; i += 1) {
@@ -372,6 +381,7 @@ export function rowsToRoster(rows) {
     if (!name || name.length < 2) continue
     const ig = r[1] ? String(r[1]).trim() : null
     const tt = r[3] ? String(r[3]).trim() : null
+    const x = r[5] ? String(r[5]).trim() : null
     out.push(
       enrichCreator({
         name,
@@ -379,10 +389,13 @@ export function rowsToRoster(rows) {
         igUser: usernameFromUrl(ig),
         tt: tt || null,
         ttUser: usernameFromUrl(tt),
-        niche: r[6] ? String(r[6]).trim().toLowerCase() : inferNiche(name),
+        x: x || null,
+        xUser: usernameFromUrl(x),
+        niche: r[8] ? String(r[8]).trim().toLowerCase() : inferNiche(name),
         igF: parseFollowerCount(r[2]),
         ttF: parseFollowerCount(r[4]),
-        eng: r[5] !== undefined && r[5] !== '' ? parseFloat(r[5]) : undefined,
+        xF: parseFollowerCount(r[6]),
+        eng: r[7] !== undefined && r[7] !== '' ? parseFloat(r[7]) : undefined,
         real: false,
       }),
     )
@@ -392,13 +405,15 @@ export function rowsToRoster(rows) {
 
 // Serialize the roster back to CSV rows for export.
 export function rosterToRows(roster) {
-  const header = ['Name', 'Instagram', 'IG Followers', 'TikTok', 'TT Followers', 'Eng%', 'Niche', 'Total', 'Data']
+  const header = ['Name', 'Instagram', 'IG Followers', 'TikTok', 'TT Followers', 'X/Twitter', 'X Followers', 'Eng%', 'Niche', 'Total', 'Data']
   const body = roster.map((r) => [
     r.name,
     r.ig || '',
     r.igF || 0,
     r.tt || '',
     r.ttF || 0,
+    r.x || '',
+    r.xF || 0,
     r.eng,
     r.niche,
     r.total,

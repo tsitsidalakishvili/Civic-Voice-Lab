@@ -1,15 +1,15 @@
 import React, { useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
-import { IconBolt, IconBrandInstagram, IconBrandTiktok, IconChartDots, IconUsers } from '@tabler/icons-react'
+import { IconBolt, IconBrandInstagram, IconBrandTiktok, IconBrandX, IconChartDots, IconUsers } from '@tabler/icons-react'
 import { CivicStatGrid, StatusMessage } from '../../ui'
 import {
   CAMPAIGN_FORMATS,
   NICHES,
-  VOUCHER_BRANDS,
   buildSnapshot,
   computeTrend,
   formatCompact,
   inferNiche,
+  influenceTierFor,
   initials,
   matchCreators,
   projectCampaign,
@@ -17,7 +17,6 @@ import {
   rosterToRows,
   rowsToRoster,
   seedRoster,
-  voucherFor,
 } from './talentMatchData'
 import './talentmatch.css'
 
@@ -97,7 +96,7 @@ export function CampaignsAudienceWorkspace({
   const [pendingTab, setPendingTab] = useState(null)
 
   // Match tab state
-  const [brandInput, setBrandInput] = useState('')
+  const [campaignInput, setCampaignInput] = useState('')
   const [formatKey, setFormatKey] = useState('reel')
   const [numRecs, setNumRecs] = useState(6)
   const [analysis, setAnalysis] = useState(null)
@@ -122,10 +121,10 @@ export function CampaignsAudienceWorkspace({
 
   const pulseItems = useMemo(
     () => [
-      { label: 'Creators', value: String(summary.count), icon: <IconUsers size={18} />, color: 'civic' },
+      { label: 'Messengers', value: String(summary.count), icon: <IconUsers size={18} />, color: 'civic' },
       { label: 'Combined reach', value: formatCompact(summary.totalReach), icon: <IconChartDots size={18} />, color: 'blue' },
       { label: 'Avg engagement', value: `${summary.avgEng}%`, icon: <IconBolt size={18} />, color: 'orange' },
-      { label: 'On TikTok', value: String(summary.withTikTok), icon: <IconBrandTiktok size={18} />, color: 'grape' },
+      { label: 'On X / TikTok', value: String(summary.withX + summary.withTikTok), icon: <IconBrandX size={18} />, color: 'grape' },
     ],
     [summary],
   )
@@ -139,9 +138,9 @@ export function CampaignsAudienceWorkspace({
   }, [roster, filterNiche, search])
 
   const runMatch = () => {
-    const input = brandInput.trim()
+    const input = campaignInput.trim()
     if (!input) {
-      setMatchError('Enter a brand name or website URL to analyze.')
+      setMatchError('Enter a campaign, issue, or cause to analyze.')
       return
     }
     setMatchError('')
@@ -149,10 +148,10 @@ export function CampaignsAudienceWorkspace({
     const matches = matchCreators(roster, niche, input, numRecs)
     const top = matches[0]
     const note = top
-      ? `Detected niche: ${niche}. Strongest match is ${top.name} (${top.score}% fit, ${formatCompact(
+      ? `Detected issue area: ${niche}. Strongest messenger is ${top.name} (${top.score}% fit, ${formatCompact(
           top.total,
-        )} reach). Matching runs locally on your roster — connect an AI backend for live brand research.`
-      : `Detected niche: ${niche}. No creators in the current roster to match — import a roster first.`
+        )} reach). Matching runs locally on your roster — connect an AI backend for live issue research.`
+      : `Detected issue area: ${niche}. No messengers in the current roster to match — import a roster first.`
     setAnalysis({ brandName: input, niche, matches, formatKey, note })
   }
 
@@ -167,13 +166,13 @@ export function CampaignsAudienceWorkspace({
         try {
           const next = rowsToRoster(result.data)
           if (!next.length) {
-            setImportStatus({ tone: 'error', message: 'No rows found. Expected columns: Name, Instagram, IG Followers, TikTok, TT Followers, Eng%, Niche.' })
+            setImportStatus({ tone: 'error', message: 'No rows found. Expected columns: Name, Instagram, IG Followers, TikTok, TT Followers, X/Twitter, X Followers, Eng%, Niche.' })
             return
           }
           setRoster(next)
           setFilterNiche('all')
           setSearch('')
-          setImportStatus({ tone: 'success', message: `Imported ${next.length} creators.` })
+          setImportStatus({ tone: 'success', message: `Imported ${next.length} messengers.` })
         } catch (err) {
           setImportStatus({ tone: 'error', message: `Import failed: ${err.message}` })
         }
@@ -189,7 +188,7 @@ export function CampaignsAudienceWorkspace({
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'creator-roster.csv'
+    link.download = 'messenger-roster.csv'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -224,21 +223,21 @@ export function CampaignsAudienceWorkspace({
       <div className="tm-layout">
         <aside className="module-card tm-rail">
           <div>
-            <h3>Find creators for your brand</h3>
+            <h3>Find messengers for your campaign</h3>
             <p className="muted" style={{ fontSize: 12.5 }}>
-              Enter a brand name or URL. We infer the niche and rank the best-matched creators with reach projections.
+              Enter a campaign, issue, or cause. We infer the issue area and rank the messengers best placed to amplify it, with reach projections.
             </p>
           </div>
 
           <div className="tm-field">
-            <label className="tm-field-label" htmlFor="tm-brand">Brand name or website URL</label>
+            <label className="tm-field-label" htmlFor="tm-brand">Campaign, issue, or cause</label>
             <input
               id="tm-brand"
               className="tm-input"
               type="text"
-              placeholder="e.g. Remember  or  remember.ge"
-              value={brandInput}
-              onChange={(e) => setBrandInput(e.target.value)}
+              placeholder="e.g. EU integration  ·  healthcare reform  ·  get-out-the-vote"
+              value={campaignInput}
+              onChange={(e) => setCampaignInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') runMatch()
               }}
@@ -246,7 +245,7 @@ export function CampaignsAudienceWorkspace({
           </div>
 
           <div className="tm-field">
-            <label className="tm-field-label" htmlFor="tm-format">Campaign format</label>
+            <label className="tm-field-label" htmlFor="tm-format">Content format</label>
             <select id="tm-format" className="tm-select" value={formatKey} onChange={(e) => setFormatKey(e.target.value)}>
               {FORMAT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -268,7 +267,7 @@ export function CampaignsAudienceWorkspace({
 
           {analysis ? (
             <div className="tm-ai-box">
-              <div className="tm-ai-box-label">Brand analysis</div>
+              <div className="tm-ai-box-label">Campaign analysis</div>
               <div>{analysis.note}</div>
             </div>
           ) : null}
@@ -286,7 +285,7 @@ export function CampaignsAudienceWorkspace({
             <div className="tm-empty">
               <div className="tm-empty-icon">◎</div>
               <div className="tm-empty-title">No analysis yet</div>
-              <div className="tm-empty-sub">Enter a brand name or URL and click Analyze to get matched creators with reach projections.</div>
+              <div className="tm-empty-sub">Enter a campaign, issue, or cause and click Analyze to get matched messengers with reach projections.</div>
             </div>
           ) : (
             <>
@@ -294,7 +293,7 @@ export function CampaignsAudienceWorkspace({
                 <span className="tm-results-brand">{analysis.brandName}</span>
                 <span className={`tm-niche tm-niche-${analysis.niche}`}>{analysis.niche}</span>
                 <span className="tm-results-meta">
-                  {projection.format.label} · {analysis.matches.length} creators
+                  {projection.format.label} · {analysis.matches.length} messengers
                 </span>
               </div>
 
@@ -321,10 +320,10 @@ export function CampaignsAudienceWorkspace({
                 Engagement = followers × eng% × {projection.format.eng}. Clicks = {(projection.format.click * 100).toFixed(0)}% of engagements.
               </div>
 
-              <div className="tm-sec-label">Best-matched creators</div>
+              <div className="tm-sec-label">Best-matched messengers</div>
               <div className="tm-inf-grid">
                 {analysis.matches.map((creator, i) => {
-                  const voucher = voucherFor(creator.total)
+                  const voucher = influenceTierFor(creator.total)
                   return (
                     <div key={creator.name} className={`tm-inf-card ${i < 2 ? 'top' : ''}`}>
                       {i < 2 ? <div className="tm-top-badge">Top pick</div> : null}
@@ -359,19 +358,21 @@ export function CampaignsAudienceWorkspace({
                       <div className="tm-plat-row">
                         {creator.igF ? <span>IG {formatCompact(creator.igF)}</span> : null}
                         {creator.ttF ? <span>TT {formatCompact(creator.ttF)}</span> : null}
+                        {creator.xF ? <span>X {formatCompact(creator.xF)}</span> : null}
                         <span style={{ marginLeft: 'auto' }}>{creator.eng}% eng</span>
                       </div>
                       <div className="tm-links">
                         {creator.ig ? <a className="tm-link-btn" href={creator.ig} target="_blank" rel="noreferrer">Instagram</a> : null}
                         {creator.tt ? <a className="tm-link-btn" href={creator.tt} target="_blank" rel="noreferrer">TikTok</a> : null}
+                        {creator.x ? <a className="tm-link-btn" href={creator.x} target="_blank" rel="noreferrer">X / Twitter</a> : null}
                       </div>
                       {voucher ? (
                         <div className="tm-voucher">
                           <div>
-                            <div className="tm-voucher-tier">{voucher.tier} tier</div>
-                            <div className="tm-voucher-brands">{VOUCHER_BRANDS}</div>
+                            <div className="tm-voucher-tier">{voucher.tier} voice</div>
+                            <div className="tm-voucher-brands">{voucher.reach}</div>
                           </div>
-                          <div className="tm-voucher-value">{voucher.value}</div>
+                          <div className="tm-voucher-value">{formatCompact(creator.total)}</div>
                         </div>
                       ) : null}
                     </div>
@@ -392,8 +393,8 @@ export function CampaignsAudienceWorkspace({
       <div className="module-card">
         <div className="card-header">
           <div>
-            <h3>Creator roster</h3>
-            <p className="muted">{filteredRoster.length} of {roster.length} creators</p>
+            <h3>Messenger roster</h3>
+            <p className="muted">{filteredRoster.length} of {roster.length} messengers</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="button-secondary" type="button" onClick={handleImportClick}>Import CSV</button>
@@ -435,7 +436,7 @@ export function CampaignsAudienceWorkspace({
             className="tm-search"
             style={{ marginLeft: 'auto' }}
             type="text"
-            placeholder="Search creators…"
+            placeholder="Search messengers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -445,12 +446,13 @@ export function CampaignsAudienceWorkspace({
           <table className="tm-table">
             <thead>
               <tr>
-                <th>Creator</th>
-                <th>Niche</th>
+                <th>Messenger</th>
+                <th>Topic</th>
                 <th>Total</th>
                 <th>Trend</th>
                 <th>Instagram</th>
                 <th>TikTok</th>
+                <th>X</th>
                 <th>Eng%</th>
                 <th>Tier</th>
                 <th>Data</th>
@@ -459,7 +461,7 @@ export function CampaignsAudienceWorkspace({
             </thead>
             <tbody>
               {filteredRoster.map((r) => {
-                const voucher = voucherFor(r.total)
+                const voucher = influenceTierFor(r.total)
                 return (
                   <tr key={r.name}>
                     <td>
@@ -473,8 +475,9 @@ export function CampaignsAudienceWorkspace({
                     <td><TrendCell trend={computeTrend(r, snapshots)} /></td>
                     <td>{r.igF ? formatCompact(r.igF) : '—'}</td>
                     <td>{r.ttF ? formatCompact(r.ttF) : '—'}</td>
+                    <td>{r.xF ? formatCompact(r.xF) : '—'}</td>
                     <td>{r.eng}%</td>
-                    <td>{voucher ? `${voucher.tier} ${voucher.value}` : '—'}</td>
+                    <td>{voucher ? voucher.tier : '—'}</td>
                     <td><span className={`tm-data-tag ${r.real ? 'tm-data-real' : 'tm-data-est'}`}>{r.real ? 'REAL' : 'est'}</span></td>
                     <td>
                       {r.ig ? (
@@ -485,6 +488,11 @@ export function CampaignsAudienceWorkspace({
                       {r.tt ? (
                         <a className="tm-tlink tm-tlink-icon" href={r.tt} target="_blank" rel="noreferrer" aria-label={`${r.name} on TikTok`} title="TikTok">
                           <IconBrandTiktok size={16} stroke={1.8} />
+                        </a>
+                      ) : null}
+                      {r.x ? (
+                        <a className="tm-tlink tm-tlink-icon" href={r.x} target="_blank" rel="noreferrer" aria-label={`${r.name} on X / Twitter`} title="X / Twitter">
+                          <IconBrandX size={16} stroke={1.8} />
                         </a>
                       ) : null}
                     </td>
@@ -520,7 +528,7 @@ export function CampaignsAudienceWorkspace({
       {showIntro ? (
         <div className="module-card section-intro">
           <h3>Campaigns &amp; Audience</h3>
-          <p className="muted">Match brands and campaigns to the creators who can amplify them, with live reach projections.</p>
+          <p className="muted">Match campaigns, issues, and causes to the messengers who can amplify them, with reach projections.</p>
         </div>
       ) : null}
 

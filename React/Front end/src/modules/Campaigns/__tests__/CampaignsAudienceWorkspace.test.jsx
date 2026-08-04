@@ -7,17 +7,17 @@ import { CampaignsAudienceWorkspace } from '../CampaignsAudienceWorkspace.jsx'
 describe('CampaignsAudienceWorkspace', () => {
   it('renders the match view with the config rail', () => {
     renderWithProviders(<CampaignsAudienceWorkspace t={(key) => key} />)
-    expect(screen.getByText('Find creators for your brand')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/remember\.ge/i)).toBeInTheDocument()
+    expect(screen.getByText('Find messengers for your campaign')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/EU integration/i)).toBeInTheDocument()
   })
 
-  it('produces ranked matches and projections after analyzing a brand', () => {
+  it('produces ranked matches and projections after analyzing a campaign', () => {
     renderWithProviders(<CampaignsAudienceWorkspace t={(key) => key} />)
-    fireEvent.change(screen.getByPlaceholderText(/remember\.ge/i), {
-      target: { value: 'Remember' },
+    fireEvent.change(screen.getByPlaceholderText(/EU integration/i), {
+      target: { value: 'healthcare reform' },
     })
     fireEvent.click(screen.getByRole('button', { name: /analyze & match/i }))
-    expect(screen.getByText('Best-matched creators')).toBeInTheDocument()
+    expect(screen.getByText('Best-matched messengers')).toBeInTheDocument()
     expect(screen.getByText('Estimated reach')).toBeInTheDocument()
   })
 
@@ -25,7 +25,7 @@ describe('CampaignsAudienceWorkspace', () => {
     renderWithProviders(
       <CampaignsAudienceWorkspace t={(key) => key} activeTabOverride="roster" />,
     )
-    expect(screen.getByText('Creator roster')).toBeInTheDocument()
+    expect(screen.getByText('Messenger roster')).toBeInTheDocument()
     expect(screen.getByText('Roster pulse')).toBeInTheDocument()
   })
 })
