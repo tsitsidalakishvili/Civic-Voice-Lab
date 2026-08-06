@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from ..core.auth import router as platform_router
 from ..routes import router as deliberation_router
 from ..routes_audience_discovery import router as audience_router
+from ..routes_chat import router as chat_router
 from ..routes_crm import router as crm_router
 from ..routes_data_hub import router as data_hub_router
 from ..routes_deliberation_extra import router as delib_extra_router
@@ -21,3 +22,4 @@ router.include_router(
     audience_router, prefix="/audience-discovery", tags=["audience-discovery"]
 )
 router.include_router(data_hub_router, prefix="/data-hub", tags=["data-hub"])
+router.include_router(chat_router, prefix="/data-chat", tags=["data-chat"])

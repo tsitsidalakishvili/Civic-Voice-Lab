@@ -34,6 +34,8 @@ DEFAULT_AUTH_PUBLIC_RULES = (
     "*:/openapi.json",
     "*:/redoc",
     "*:/platform/auth/status",
+    "GET:/platform/access/status",
+    "POST:/platform/access/verify",
     "POST:/platform/translate",
     "GET:/reports/public/*",
     "GET:/crm/events/detail",
@@ -92,6 +94,7 @@ class Settings:
     auth_api_key: str
     auth_header_name: str
     auth_public_rules: tuple[str, ...]
+    access_allowed_emails: tuple[str, ...]
     translation_enabled: bool
     translation_en_ka_model: str
     translation_ka_en_model: str
@@ -104,6 +107,16 @@ class Settings:
         if self.auth_mode == "api_key":
             return bool(self.auth_api_key)
         return bool(self.auth_token)
+
+    @property
+    def access_gate_enabled(self) -> bool:
+        return bool(self.access_allowed_emails)
+
+    def is_email_allowed(self, email: str) -> bool:
+        candidate = str(email or "").strip().lower()
+        if not candidate:
+            return False
+        return candidate in self.access_allowed_emails
 
 
 @lru_cache(maxsize=1)
@@ -130,6 +143,9 @@ def get_settings() -> Settings:
         auth_header_name=str(os.getenv("FS_AUTH_HEADER_NAME", "X-FS-API-Key")).strip()
         or "X-FS-API-Key",
         auth_public_rules=auth_public_rules,
+        access_allowed_emails=tuple(
+            email.lower() for email in _split_csv(os.getenv("FS_ALLOWED_EMAILS"))
+        ),
         translation_enabled=_env_bool("FS_TRANSLATION_ENABLED", default=True),
         translation_en_ka_model=str(
             os.getenv(

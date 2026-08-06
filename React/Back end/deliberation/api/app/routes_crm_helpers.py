@@ -683,6 +683,7 @@ def _load_supporter_summary_df() -> pd.DataFrame:
       coalesce(p.email, '') AS email,
           p.firstName AS firstName,
           p.lastName AS lastName,
+          coalesce(p.phone, '') AS phone,
           coalesce(p.gender, 'Unspecified') AS gender,
           coalesce(p.timeAvailability, 'Unspecified') AS timeAvailability,
           p.age AS age,

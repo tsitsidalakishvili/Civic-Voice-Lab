@@ -978,11 +978,29 @@ export function AdminPage({
                 <div className="table-row empty">No feedback entries.</div>
               )}
               {feedback.map((row) => (
-                <div className="table-row" key={row.feedbackId}>
-                  <span>{row.page}</span>
-                  <span>{row.name}</span>
-                  <span>{row.email}</span>
-                  <span>{row.emailStatus}</span>
+                <div className="feedback-log__entry" key={row.feedbackId}>
+                  <div className="table-row">
+                    <span>{row.page}</span>
+                    <span>{row.name}</span>
+                    <span>{row.email}</span>
+                    <span>{row.emailStatus}</span>
+                  </div>
+                  {row.message ? (
+                    <p className="muted feedback-log__message">{row.message}</p>
+                  ) : null}
+                  {row.screenshot ? (
+                    <a
+                      href={row.screenshot}
+                      download={`feedback-${row.feedbackId}.png`}
+                      title="Click to download the screenshot"
+                    >
+                      <img
+                        className="feedback-log__screenshot"
+                        src={row.screenshot}
+                        alt={`Screenshot for feedback from ${row.name || 'anonymous'}`}
+                      />
+                    </a>
+                  ) : null}
                 </div>
               ))}
             </div>

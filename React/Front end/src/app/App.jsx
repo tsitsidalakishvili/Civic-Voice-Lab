@@ -18,6 +18,7 @@ import { Spotlight, spotlight } from '@mantine/spotlight'
 import {
   IconArrowRight,
   IconBulb,
+  IconDatabaseSearch,
   IconLanguage,
   IconLayoutGrid,
   IconMessage2,
@@ -27,11 +28,15 @@ import { AppProvider, useApp } from '@/context/AppContext'
 import { ThemeToggle } from '@/components/ThemeToggle/ThemeToggle'
 import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from '@/config/modules'
 import { FeedbackDrawer } from '@/components/FeedbackDrawer'
+import { DataChatDrawer } from '@/components/DataChatDrawer'
 import { PlatformWalkthrough } from '@/components/PlatformWalkthrough'
 import { PublicEventRegistration } from '@/views/PublicEventRegistration'
 import { PublicSupporterSignup } from '@/views/PublicSupporterSignup'
 import { DeliberationQuestionnaire } from '@/views/DeliberationQuestionnaire'
 import { DeliberationPublicReport } from '@/views/DeliberationPublicReport'
+import { PlatformAccessGate } from '@/views/PlatformAccessGate'
+import { clearStoredAccessEmail, getStoredAccessEmail } from '@/services/accessGate'
+import { getJson, requestJson } from '@/services/api'
 import { PublicCampaignPage } from '@/modules'
 import { parseStoredList } from '@/utils/deck'
 import { PageHeader } from '@/ui'
@@ -64,6 +69,49 @@ function AppShell_() {
   const isPublicView =
     isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport || isSupporterSignup
 
+  const [accessChecked, setAccessChecked] = useState(false)
+  const [accessGranted, setAccessGranted] = useState(false)
+
+  useEffect(() => {
+    if (isPublicView) return undefined
+    let mounted = true
+    const checkAccess = async () => {
+      try {
+        const status = await getJson('/platform/access/status', { cacheMs: 0 })
+        if (!mounted) return
+        if (!status?.enabled) {
+          setAccessGranted(true)
+          setAccessChecked(true)
+          return
+        }
+        const stored = getStoredAccessEmail()
+        if (stored) {
+          const result = await requestJson('/platform/access/verify', {
+            payload: { email: stored },
+          })
+          if (!mounted) return
+          if (result?.allowed) {
+            setAccessGranted(true)
+            setAccessChecked(true)
+            return
+          }
+          clearStoredAccessEmail()
+        }
+        setAccessGranted(false)
+        setAccessChecked(true)
+      } catch {
+        // Backend unreachable: let the app render so pages can surface their own errors.
+        if (!mounted) return
+        setAccessGranted(true)
+        setAccessChecked(true)
+      }
+    }
+    checkAccess()
+    return () => {
+      mounted = false
+    }
+  }, [isPublicView])
+
   const modules = useMemo(() => buildModules(t), [t])
   const MODULE_SECTIONS = useMemo(() => buildModuleSections(t), [t])
   const hubModules = useMemo(
@@ -81,6 +129,7 @@ function AppShell_() {
   )
   const [moduleTabs, setModuleTabs] = useState({})
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const initialUrlSync = useRef(true)
   const activeModule = modules.find((m) => m.id === activeModuleId)
   const ActiveComponent = activeModule?.Component
@@ -241,6 +290,14 @@ function AppShell_() {
         onLanguageChange={setLanguage}
       />
     )
+  }
+
+  if (!accessChecked) {
+    return null
+  }
+
+  if (!accessGranted) {
+    return <PlatformAccessGate onGranted={() => setAccessGranted(true)} />
   }
 
   return (
@@ -539,12 +596,27 @@ function AppShell_() {
           <IconMessage2 size={20} />
         </ActionIcon>
       </Affix>
+      <Affix position={{ bottom: 80, right: 24 }}>
+        <ActionIcon
+          size="xl"
+          radius="xl"
+          variant="filled"
+          color="civic"
+          onClick={() => setChatOpen((prev) => !prev)}
+          aria-label="Ask your data"
+          title="Ask your data"
+          data-tour="data-chat"
+        >
+          <IconDatabaseSearch size={20} />
+        </ActionIcon>
+      </Affix>
       <FeedbackDrawer
         opened={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}
         t={t}
         activeModuleLabel={activeModule?.label}
       />
+      <DataChatDrawer opened={chatOpen} onClose={() => setChatOpen(false)} />
     </AppShell>
   )
 }

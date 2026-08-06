@@ -659,14 +659,34 @@ export function CRMPage({
         return person.fullName || person.email || ''
       case 'email':
         return person.email || ''
+      case 'phone':
+        return person.phone || ''
       case 'group':
         return person.group || ''
+      case 'gender':
+        return person.gender || ''
+      case 'age':
+        return parseNumber(person.age) ?? null
+      case 'availability':
+        return person.timeAvailability || ''
+      case 'education':
+        return person.educationLevel || ''
+      case 'skills':
+        return parseNumber(person.skillCount) ?? null
+      case 'effortHours':
+        return parseNumber(person.effortHours) ?? null
       case 'effort':
         return parseNumber(person.effortScore ?? person.effortHours) ?? null
       case 'events':
         return parseNumber(person.eventAttendCount) ?? null
+      case 'joins':
+        return parseNumber(person.joinCount) ?? null
+      case 'tasks':
+        return parseNumber(person.tasksCompleted) ?? null
       case 'referrals':
         return parseNumber(person.referralCount) ?? null
+      case 'donations':
+        return parseNumber(person.donationTotal) ?? null
       case 'rating': {
         const ratingValue = parseNumber(person.rating ?? person.ratingStars)
         return ratingValue ?? null
@@ -2256,14 +2276,24 @@ export function CRMPage({
                     </button>
                   </div>
                 </div>
-                <div className="table">
+                <div className="table table--scroll">
                 <div className="table-row table-row--people table-head">
                   {renderPeopleSortButton('Name', 'name')}
                   {renderPeopleSortButton('Email', 'email')}
+                  {renderPeopleSortButton('Phone', 'phone')}
                   {renderPeopleSortButton('Group', 'group')}
+                  {renderPeopleSortButton('Gender', 'gender')}
+                  {renderPeopleSortButton('Age', 'age')}
+                  {renderPeopleSortButton('Availability', 'availability')}
+                  {renderPeopleSortButton('Education', 'education')}
+                  {renderPeopleSortButton('Skills', 'skills')}
+                  {renderPeopleSortButton('Hours', 'effortHours')}
                   {renderPeopleSortButton('Effort', 'effort')}
                   {renderPeopleSortButton('Events', 'events')}
+                  {renderPeopleSortButton('Joins', 'joins')}
+                  {renderPeopleSortButton('Tasks', 'tasks')}
                   {renderPeopleSortButton('Referrals', 'referrals')}
+                  {renderPeopleSortButton('Donations', 'donations')}
                   {renderPeopleSortButton('Rating', 'rating')}
                 </div>
                 {sortedPeople.length === 0 && !peopleLoading && (
@@ -2278,10 +2308,20 @@ export function CRMPage({
                     >
                       <span>{person.fullName || person.email}</span>
                       <span>{person.email || person.personId || '?'}</span>
+                      <span>{person.phone || '-'}</span>
                       <span>{person.group}</span>
+                      <span>{person.gender || '-'}</span>
+                      <span>{person.age ?? '-'}</span>
+                      <span>{person.timeAvailability || '-'}</span>
+                      <span>{person.educationLevel || '-'}</span>
+                      <span title={person.skillsLabel || ''}>{person.skillCount ?? '-'}</span>
+                      <span>{person.effortHours ?? '-'}</span>
                       <span>{person.effortScore ?? '-'}</span>
                       <span>{person.eventAttendCount ?? '-'}</span>
+                      <span>{person.joinCount ?? '-'}</span>
+                      <span>{person.tasksCompleted ?? '-'}</span>
                       <span>{person.referralCount ?? '-'}</span>
+                      <span>{person.donationTotal ?? '-'}</span>
                       <span>{person.ratingStars || '-'}</span>
                     </button>
                   ))}

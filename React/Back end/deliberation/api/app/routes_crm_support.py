@@ -3,7 +3,9 @@ CRM support endpoints that are not yet domain-specific enough for the split
 people/tasks/events/campaigns modules.
 """
 
+import base64
 import os
+import re
 import smtplib
 from email.message import EmailMessage
 from typing import List, Optional, Tuple
@@ -86,7 +88,37 @@ def _feedback_email_configured():
     return bool(smtp_host and (feedback_from or smtp_user or feedback_to))
 
 
-def _send_smtp_email(to_email: str, subject: str, message: str, reply_to: Optional[str] = None):
+MAX_SCREENSHOT_DATA_URL_CHARS = 4_000_000
+_SCREENSHOT_DATA_URL_RE = re.compile(
+    r"^data:image/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/=\s]+)$"
+)
+
+
+def _parse_screenshot_data_url(value: str):
+    """Return (mime_subtype, raw_bytes) for a valid image data URL, else None."""
+    text = str(value or "").strip()
+    if not text or len(text) > MAX_SCREENSHOT_DATA_URL_CHARS:
+        return None
+    match = _SCREENSHOT_DATA_URL_RE.match(text)
+    if not match:
+        return None
+    subtype = "jpeg" if match.group(1) == "jpg" else match.group(1)
+    try:
+        payload = base64.b64decode(match.group(2), validate=False)
+    except Exception:
+        return None
+    if not payload:
+        return None
+    return subtype, payload
+
+
+def _send_smtp_email(
+    to_email: str,
+    subject: str,
+    message: str,
+    reply_to: Optional[str] = None,
+    attachment: Optional[tuple] = None,
+):
     if not _feedback_email_configured():
         return False, "not_configured", None
     target_email = _clean_text(to_email)
@@ -113,6 +145,14 @@ def _send_smtp_email(to_email: str, subject: str, message: str, reply_to: Option
     if reply_to:
         msg["Reply-To"] = reply_to
     msg.set_content(message)
+    if attachment:
+        file_name, mime_subtype, payload = attachment
+        msg.add_attachment(
+            payload,
+            maintype="image",
+            subtype=mime_subtype,
+            filename=file_name,
+        )
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
@@ -128,8 +168,14 @@ def _send_smtp_email(to_email: str, subject: str, message: str, reply_to: Option
         return False, "failed", str(exc)
 
 
-def _send_feedback_email(name: str, email: str, message: str, page: str):
+def _send_feedback_email(name: str, email: str, message: str, page: str, screenshot: str = ""):
     feedback_to = str(os.getenv("FEEDBACK_EMAIL_TO") or "").strip()
+    attachment = None
+    parsed = _parse_screenshot_data_url(screenshot)
+    if parsed:
+        subtype, payload = parsed
+        extension = "jpg" if subtype == "jpeg" else subtype
+        attachment = (f"feedback-screenshot.{extension}", subtype, payload)
     return _send_smtp_email(
         feedback_to,
         f"Feedback ({page or 'app'})",
@@ -138,11 +184,13 @@ def _send_feedback_email(name: str, email: str, message: str, page: str):
                 f"Name: {name or 'Anonymous'}",
                 f"Email: {email or 'Not provided'}",
                 f"Page: {page or 'Unknown'}",
+                f"Screenshot: {'attached' if attachment else 'none'}",
                 "",
                 message,
             ]
         ),
         email or None,
+        attachment=attachment,
     )
 
 
@@ -155,6 +203,7 @@ def _create_feedback_entry(
     channel: str,
     email_status: str,
     email_error: str,
+    screenshot: str = "",
 ):
     driver = get_driver()
     with _db_session(driver) as session:
@@ -170,6 +219,7 @@ def _create_feedback_entry(
               channel: $channel,
               emailStatus: $emailStatus,
               emailError: $emailError,
+              screenshot: $screenshot,
               createdAt: datetime()
             })
             """,
@@ -181,6 +231,7 @@ def _create_feedback_entry(
                 "channel": channel,
                 "emailStatus": email_status,
                 "emailError": email_error,
+                "screenshot": screenshot,
             },
         )
 
@@ -383,6 +434,7 @@ def list_feedback_entries(limit: int = Query(300, ge=1, le=2000)):
           coalesce(f.emailStatus, '') AS emailStatus,
           coalesce(f.emailError, '') AS emailError,
           coalesce(f.message, '') AS message,
+          coalesce(f.screenshot, '') AS screenshot,
           toString(f.createdAt) AS createdAt
         ORDER BY f.createdAt DESC
         LIMIT $limit
@@ -419,8 +471,10 @@ def create_feedback(payload: dict):
     email = _clean_text(payload.get("email"))
     page = _clean_text(payload.get("page")) or "App"
     channel = _clean_text(payload.get("channel")) or "sidebar_feedback"
+    screenshot_raw = str(payload.get("screenshot") or "").strip()
+    screenshot = screenshot_raw if _parse_screenshot_data_url(screenshot_raw) else ""
 
-    _, email_status, email_error = _send_feedback_email(name, email, message, page)
+    _, email_status, email_error = _send_feedback_email(name, email, message, page, screenshot)
     _create_feedback_entry(
         name=name or "",
         email=email or "",
@@ -429,6 +483,7 @@ def create_feedback(payload: dict):
         channel=channel,
         email_status=email_status,
         email_error=email_error or "",
+        screenshot=screenshot,
     )
     return {
         "ok": True,

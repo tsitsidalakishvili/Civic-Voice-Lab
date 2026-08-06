@@ -33,6 +33,7 @@ SKIP_PROPERTY_KEYS = {
     "content",
     "vector",
     "binary",
+    "screenshot",
 }
 
 

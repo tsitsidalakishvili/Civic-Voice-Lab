@@ -3,6 +3,7 @@ from fnmatch import fnmatch
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import Settings, get_settings
@@ -92,6 +93,25 @@ class OptionalAuthMiddleware(BaseHTTPMiddleware):
         request.state.auth_enabled = settings.auth_enabled
         request.state.auth_mode = settings.auth_mode if settings.auth_enabled else None
         return await call_next(request)
+
+
+class AccessVerifyIn(BaseModel):
+    email: str = ""
+
+
+@router.get("/platform/access/status")
+def get_access_status():
+    settings = get_settings()
+    return {"enabled": settings.access_gate_enabled}
+
+
+@router.post("/platform/access/verify")
+def verify_access_email(payload: AccessVerifyIn):
+    settings = get_settings()
+    if not settings.access_gate_enabled:
+        return {"allowed": True, "enabled": False}
+    email = str(payload.email or "").strip().lower()
+    return {"allowed": settings.is_email_allowed(email), "enabled": True}
 
 
 @router.get("/platform/auth/status")
