@@ -597,18 +597,18 @@ function AppShell_() {
         </ActionIcon>
       </Affix>
       <Affix position={{ bottom: 80, right: 24 }}>
-        <ActionIcon
-          size="xl"
+        <Button
+          className="data-chat-fab"
           radius="xl"
-          variant="filled"
+          size="md"
           color="civic"
+          leftSection={<IconDatabaseSearch size={18} />}
           onClick={() => setChatOpen((prev) => !prev)}
           aria-label="Ask your data"
-          title="Ask your data"
           data-tour="data-chat"
         >
-          <IconDatabaseSearch size={20} />
-        </ActionIcon>
+          Ask your data
+        </Button>
       </Affix>
       <FeedbackDrawer
         opened={feedbackOpen}

@@ -105,6 +105,14 @@ class PersonProfileUpdate(BaseModel):
     agreesWithManifesto: Optional[bool] = None
     interestedInMembership: Optional[bool] = None
     facebookGroupMember: Optional[bool] = None
+    profession: Optional[str] = None
+    socialMedia: Optional[str] = None
+    wasPartyMember: Optional[bool] = None
+    partyDetails: Optional[str] = None
+    howToHelp: Optional[str] = None
+    additionalComments: Optional[str] = None
+    personalId: Optional[str] = None
+    dateOfBirth: Optional[str] = None
 
 
 class PersonUpsert(BaseModel):
@@ -1715,6 +1723,18 @@ def update_person_profile(identifier: str, payload: PersonProfileUpdate):
         "facebookGroupMember": payload.facebookGroupMember
         if payload.facebookGroupMember is not None
         else existing.get("facebookGroupMember"),
+        "profession": payload.profession if payload.profession is not None else existing.get("profession"),
+        "socialMedia": payload.socialMedia if payload.socialMedia is not None else existing.get("socialMedia"),
+        "wasPartyMember": payload.wasPartyMember
+        if payload.wasPartyMember is not None
+        else existing.get("wasPartyMember"),
+        "partyDetails": payload.partyDetails if payload.partyDetails is not None else existing.get("partyDetails"),
+        "howToHelp": payload.howToHelp if payload.howToHelp is not None else existing.get("howToHelp"),
+        "additionalComments": payload.additionalComments
+        if payload.additionalComments is not None
+        else existing.get("additionalComments"),
+        "personalId": payload.personalId if payload.personalId is not None else existing.get("personalId"),
+        "dateOfBirth": payload.dateOfBirth if payload.dateOfBirth is not None else existing.get("dateOfBirth"),
     }
     driver = get_driver()
     query = """
@@ -1732,7 +1752,15 @@ def update_person_profile(identifier: str, payload: PersonProfileUpdate):
         p.about = $about,
         p.agreesWithManifesto = $agreesWithManifesto,
         p.interestedInMembership = $interestedInMembership,
-        p.facebookGroupMember = $facebookGroupMember
+        p.facebookGroupMember = $facebookGroupMember,
+        p.profession = $profession,
+        p.socialMedia = $socialMedia,
+        p.wasPartyMember = $wasPartyMember,
+        p.partyDetails = $partyDetails,
+        p.howToHelp = $howToHelp,
+        p.additionalComments = $additionalComments,
+        p.personalId = $personalId,
+        p.dateOfBirth = $dateOfBirth
     """
     with _db_session(driver) as session:
         _execute_write(session, query, {"identifier": identifier, **updated})

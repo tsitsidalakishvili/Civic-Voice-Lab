@@ -684,6 +684,8 @@ def _load_supporter_summary_df() -> pd.DataFrame:
           p.firstName AS firstName,
           p.lastName AS lastName,
           coalesce(p.phone, '') AS phone,
+          coalesce(p.profession, '') AS profession,
+          coalesce(p.interestedInMembership, false) AS interestedInMembership,
           coalesce(p.gender, 'Unspecified') AS gender,
           coalesce(p.timeAvailability, 'Unspecified') AS timeAvailability,
           p.age AS age,

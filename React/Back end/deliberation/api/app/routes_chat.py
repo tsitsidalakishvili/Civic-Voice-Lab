@@ -51,6 +51,10 @@ _schema_cache: dict = {"schema": "", "loaded_at": 0.0}
 class ChatAskIn(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     language: Optional[str] = ""
+    api_key: Optional[str] = Field(alias="apiKey", default="")
+
+    class Config:
+        populate_by_name = True
 
 
 class ChatAskOut(BaseModel):
@@ -74,12 +78,15 @@ def _db_session(driver):
     return driver.session(database=get_active_database())
 
 
-def _llm_config():
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+def _llm_config(override_key: str = ""):
+    api_key = str(override_key or "").strip() or os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="Data chat is not configured: OPENAI_API_KEY is missing.",
+            detail=(
+                "Data chat is not configured: add your OpenAI API key in the chat panel "
+                "or set OPENAI_API_KEY on the server."
+            ),
         )
     api_url = (
         os.getenv("OPENAI_CHAT_COMPLETIONS_URL", "").strip()
@@ -261,7 +268,7 @@ def ask_database(payload: ChatAskIn):
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is empty.")
-    api_url, api_key, model = _llm_config()
+    api_url, api_key, model = _llm_config(payload.api_key or "")
 
     driver = get_driver()
     with _db_session(driver) as session:

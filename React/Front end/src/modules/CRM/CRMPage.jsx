@@ -661,6 +661,10 @@ export function CRMPage({
         return person.email || ''
       case 'phone':
         return person.phone || ''
+      case 'profession':
+        return person.profession || ''
+      case 'membership':
+        return person.interestedInMembership ? 1 : 0
       case 'group':
         return person.group || ''
       case 'gender':
@@ -1025,6 +1029,14 @@ export function CRMPage({
         agreesWithManifesto: !!profileDraft.agreesWithManifesto,
         interestedInMembership: !!profileDraft.interestedInMembership,
         facebookGroupMember: !!profileDraft.facebookGroupMember,
+        profession: profileDraft.profession || '',
+        socialMedia: profileDraft.socialMedia || '',
+        wasPartyMember: !!profileDraft.wasPartyMember,
+        partyDetails: profileDraft.partyDetails || '',
+        howToHelp: profileDraft.howToHelp || '',
+        additionalComments: profileDraft.additionalComments || '',
+        personalId: profileDraft.personalId || '',
+        dateOfBirth: profileDraft.dateOfBirth || '',
       }
       const updated = await requestJson(`/crm/people/${encodeURIComponent(selectedEmail)}`, {
         method: 'PATCH',
@@ -2281,6 +2293,8 @@ export function CRMPage({
                   {renderPeopleSortButton('Name', 'name')}
                   {renderPeopleSortButton('Email', 'email')}
                   {renderPeopleSortButton('Phone', 'phone')}
+                  {renderPeopleSortButton('Profession', 'profession')}
+                  {renderPeopleSortButton('Future member', 'membership')}
                   {renderPeopleSortButton('Group', 'group')}
                   {renderPeopleSortButton('Gender', 'gender')}
                   {renderPeopleSortButton('Age', 'age')}
@@ -2309,6 +2323,8 @@ export function CRMPage({
                       <span>{person.fullName || person.email}</span>
                       <span>{person.email || person.personId || '?'}</span>
                       <span>{person.phone || '-'}</span>
+                      <span title={person.profession || ''}>{person.profession || '-'}</span>
+                      <span>{person.interestedInMembership ? 'Yes' : '-'}</span>
                       <span>{person.group}</span>
                       <span>{person.gender || '-'}</span>
                       <span>{person.age ?? '-'}</span>
@@ -2401,6 +2417,14 @@ export function CRMPage({
                         updateProfileField('timeAvailability', event.target.value)
                       }
                     >
+                      {profileDraft.timeAvailability &&
+                      !['Unspecified', 'Weekends', 'Evenings', 'Full-time', 'Ad-hoc'].includes(
+                        profileDraft.timeAvailability,
+                      ) ? (
+                        <option value={profileDraft.timeAvailability}>
+                          {profileDraft.timeAvailability}
+                        </option>
+                      ) : null}
                       <option value="Unspecified">Unspecified</option>
                       <option value="Weekends">Weekends</option>
                       <option value="Evenings">Evenings</option>
@@ -2408,15 +2432,107 @@ export function CRMPage({
                       <option value="Ad-hoc">Ad-hoc</option>
                     </select>
                   </div>
+                    <div>
+                      <label className="label">Date of birth</label>
+                      <input
+                        className="input"
+                        value={profileDraft.dateOfBirth || ''}
+                        onChange={(event) => updateProfileField('dateOfBirth', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Personal ID (პ/ნ)</label>
+                      <input
+                        className="input"
+                        value={profileDraft.personalId || ''}
+                        onChange={(event) => updateProfileField('personalId', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Profession / workplace</label>
+                      <input
+                        className="input"
+                        value={profileDraft.profession || ''}
+                        onChange={(event) => updateProfileField('profession', event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Social media</label>
+                      <input
+                        className="input"
+                        value={profileDraft.socialMedia || ''}
+                        onChange={(event) => updateProfileField('socialMedia', event.target.value)}
+                      />
+                    </div>
+                    <div className="profile-span">
+                      <label className="label">Party history (მიუთითეთ კონკრეტულად)</label>
+                      <input
+                        className="input"
+                        value={profileDraft.partyDetails || ''}
+                        onChange={(event) => updateProfileField('partyDetails', event.target.value)}
+                      />
+                    </div>
                   <div className="profile-span">
-                    <label className="label">Notes</label>
+                    <label className="label">About / why they joined</label>
                     <textarea
                       className="textarea"
                       value={profileDraft.about || ''}
                       onChange={(event) => updateProfileField('about', event.target.value)}
                     />
                   </div>
+                  <div className="profile-span">
+                    <label className="label">How they will help</label>
+                    <textarea
+                      className="textarea"
+                      value={profileDraft.howToHelp || ''}
+                      onChange={(event) => updateProfileField('howToHelp', event.target.value)}
+                    />
+                  </div>
+                  <div className="profile-span">
+                    <label className="label">Additional comments</label>
+                    <textarea
+                      className="textarea"
+                      value={profileDraft.additionalComments || ''}
+                      onChange={(event) =>
+                        updateProfileField('additionalComments', event.target.value)
+                      }
+                    />
+                  </div>
+                  {(profile?.topicsOfInterest?.length ||
+                    profile?.involvementAreas?.length ||
+                    profile?.skills?.length) ? (
+                    <div className="profile-span">
+                      <label className="label">Interests & involvement (from signup)</label>
+                      <div className="cluster-tags">
+                        {(profile?.topicsOfInterest || []).map((topic) => (
+                          <span className="cluster-tag" key={`topic-${topic}`}>
+                            {topic}
+                          </span>
+                        ))}
+                        {(profile?.involvementAreas || []).map((area) => (
+                          <span className="cluster-tag" key={`area-${area}`}>
+                            {area}
+                          </span>
+                        ))}
+                        {(profile?.skills || []).map((skill) => (
+                          <span className="cluster-tag" key={`skill-${skill}`}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="profile-span profile-checks">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={!!profileDraft.wasPartyMember}
+                        onChange={(event) =>
+                          updateProfileField('wasPartyMember', event.target.checked)
+                        }
+                      />
+                      Former party member
+                    </label>
                     <label>
                       <input
                         type="checkbox"

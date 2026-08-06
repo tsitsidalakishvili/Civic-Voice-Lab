@@ -1530,11 +1530,31 @@ body.datahub-graph-is-expanded {
   overflow: hidden;
 }
 
+.data-chat-fab {
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.35);
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.data-chat-fab:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+  transform: translateY(-1px);
+}
+
 .data-chat {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 12px;
   height: calc(100vh - 92px);
+}
+
+.data-chat__settings {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.data-chat__settings .mantine-PasswordInput-root {
+  width: 100%;
 }
 
 .data-chat__intro {
@@ -3021,9 +3041,16 @@ button.module-flow__step:hover {
 
 .table-row--people {
   grid-template-columns:
-    minmax(150px, 1.4fr) minmax(190px, 1.6fr) minmax(110px, 1fr) 90px 90px 56px
-    minmax(105px, 1fr) minmax(105px, 1fr) 60px 64px 64px 64px 60px 60px 84px 92px 88px;
-  min-width: 1620px;
+    minmax(150px, 1.4fr) minmax(190px, 1.6fr) minmax(110px, 1fr) minmax(130px, 1.1fr) 96px
+    90px 90px 56px minmax(105px, 1fr) minmax(105px, 1fr) 60px 64px 64px 64px 60px 60px
+    84px 92px 88px;
+  min-width: 1880px;
+}
+
+.table-row--people span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-row--map {
