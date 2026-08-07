@@ -20,6 +20,11 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_title)
 
+# Middleware is added inside-out by Starlette. Authentication must be registered
+# first and CORS last so even fail-closed 401/403 responses carry the exact
+# allowed-origin headers required by the separate Vercel frontend.
+app.add_middleware(OptionalAuthMiddleware)
+app.add_middleware(FieldMaskingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -36,8 +41,6 @@ app.add_middleware(
         "Idempotency-Key",
     ],
 )
-app.add_middleware(FieldMaskingMiddleware)
-app.add_middleware(OptionalAuthMiddleware)
 
 app.include_router(api_router)
 

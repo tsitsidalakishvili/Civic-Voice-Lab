@@ -3,6 +3,7 @@ import hashlib
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from starlette.requests import Request
@@ -59,6 +60,13 @@ class PasswordAuthTests(unittest.TestCase):
         with patch.dict(os.environ, self.env, clear=True):
             get_settings.cache_clear()
             validate_auth_startup(get_settings())
+
+    def test_cors_is_outermost_for_fail_closed_responses(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+        self.assertLess(
+            source.index("app.add_middleware(OptionalAuthMiddleware)"),
+            source.index("CORSMiddleware,"),
+        )
 
     def test_wrong_origin_is_rejected(self):
         with patch.dict(os.environ, self.env, clear=True):
