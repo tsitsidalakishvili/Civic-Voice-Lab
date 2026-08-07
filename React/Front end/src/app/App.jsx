@@ -327,6 +327,7 @@ function AppShell_() {
         state={accessState}
         message={accessError}
         onRetry={accessState === 'unavailable' ? retryAccess : undefined}
+        onAuthenticated={() => window.location.reload()}
       />
     )
   }

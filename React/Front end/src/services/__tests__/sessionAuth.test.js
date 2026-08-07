@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { buildLoginUrl, safeReturnPath } from '../sessionAuth'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { loginWithCredentials, safeReturnPath } from '../sessionAuth'
 import { validateProductionApiOrigin } from '../../config/runtime'
 
 describe('safeReturnPath', () => {
@@ -13,17 +13,25 @@ describe('safeReturnPath', () => {
   )
 })
 
-describe('Google Workspace login', () => {
-  it('always sends the Google provider and a safe relative returnTo', () => {
-    const login = new URL(buildLoginUrl('/due-diligence?case=synthetic'))
-    expect(login.pathname).toBe('/auth/login')
-    expect(login.searchParams.get('provider')).toBe('google')
-    expect(login.searchParams.get('returnTo')).toBe('/due-diligence?case=synthetic')
+describe('temporary staff login', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('posts credentials with browser-managed cookies', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ authenticated: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    await loginWithCredentials('temporary-user', 'strong-password')
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/auth\/login$/), expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      body: JSON.stringify({ username: 'temporary-user', password: 'strong-password' }),
+    }))
   })
 
-  it('does not forward an external return target', () => {
-    const login = new URL(buildLoginUrl('https://example.invalid/escape'))
-    expect(login.searchParams.get('returnTo')).toBe('/')
+  it('returns a generic error for rejected credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+    await expect(loginWithCredentials('wrong-user', 'wrong-password')).rejects.toThrow(
+      'The username or password is incorrect.',
+    )
   })
 })
 

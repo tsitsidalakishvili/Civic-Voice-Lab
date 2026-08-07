@@ -3,6 +3,7 @@ import importlib.util
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -40,7 +41,11 @@ DEFAULT_OIDC_PUBLIC_RULES = DEFAULT_AUTH_PUBLIC_RULES + (
     "POST:/platform/access/verify",
 )
 
-SUPPORTED_AUTH_MODES = {"bearer", "api_key", "oidc"}
+DEFAULT_PASSWORD_PUBLIC_RULES = DEFAULT_AUTH_PUBLIC_RULES + (
+    "POST:/auth/login",
+)
+
+SUPPORTED_AUTH_MODES = {"bearer", "api_key", "oidc", "password"}
 GOOGLE_OIDC_ISSUER = "https://accounts.google.com"
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
@@ -116,6 +121,9 @@ class Settings:
     oidc_entra_tenant_id: str
     oidc_entra_allow_guests: bool
     oidc_allowed_emails_json: str
+    shared_username: str
+    shared_password_hash: str
+    shared_credential_expires_at: str
     frontend_origin: str
     session_secret: str
     session_cookie_name: str
@@ -140,6 +148,8 @@ class Settings:
 
     @property
     def auth_secret_configured(self) -> bool:
+        if self.auth_mode == "password":
+            return bool(self.shared_username and self.shared_password_hash)
         if self.auth_mode == "oidc" and not self.auth_emergency_bearer_gate:
             return self.oidc_configured
         if self.auth_mode == "api_key":
@@ -190,14 +200,20 @@ def get_settings() -> Settings:
     auth_mode = str(os.getenv("FS_AUTH_MODE", "bearer")).strip().lower() or "bearer"
     if auth_mode not in SUPPORTED_AUTH_MODES:
         raise ValueError(
-            "FS_AUTH_MODE must be one of bearer, api_key, or oidc; invalid modes never fall back."
+            "FS_AUTH_MODE must be one of bearer, api_key, oidc, or password; invalid modes never fall back."
         )
     frontend_origin = str(os.getenv("FS_FRONTEND_ORIGIN", "")).strip().rstrip("/")
-    if auth_mode == "oidc" and frontend_origin:
+    if auth_mode in {"oidc", "password"} and frontend_origin:
         cors_origins = (frontend_origin,)
     auth_public_rules = (
         _split_csv(os.getenv("FS_AUTH_PUBLIC_RULES"))
-        or (DEFAULT_OIDC_PUBLIC_RULES if auth_mode == "oidc" else DEFAULT_AUTH_PUBLIC_RULES)
+        or (
+            DEFAULT_OIDC_PUBLIC_RULES
+            if auth_mode == "oidc"
+            else DEFAULT_PASSWORD_PUBLIC_RULES
+            if auth_mode == "password"
+            else DEFAULT_AUTH_PUBLIC_RULES
+        )
     )
     session_cookie_samesite = str(
         os.getenv("FS_SESSION_COOKIE_SAMESITE", "lax")
@@ -241,6 +257,11 @@ def get_settings() -> Settings:
         ),
         oidc_allowed_emails_json=str(
             os.getenv("FS_ALLOWED_EMAILS_JSON", "")
+        ).strip(),
+        shared_username=str(os.getenv("FS_SHARED_USERNAME", "")).strip(),
+        shared_password_hash=str(os.getenv("FS_SHARED_PASSWORD_HASH", "")).strip(),
+        shared_credential_expires_at=str(
+            os.getenv("FS_SHARED_CREDENTIAL_EXPIRES_AT", "")
         ).strip(),
         frontend_origin=frontend_origin,
         session_secret=str(os.getenv("FS_SESSION_SECRET", "")).strip(),
@@ -313,6 +334,61 @@ def validate_auth_startup(settings: Settings | None = None) -> None:
     if mode == "api_key":
         if not current.auth_api_key:
             raise RuntimeError("FS_AUTH_API_KEY is required when API-key authentication is enabled.")
+        return
+    if mode == "password":
+        required = {
+            "FS_SHARED_USERNAME": current.shared_username,
+            "FS_SHARED_PASSWORD_HASH": current.shared_password_hash,
+            "FS_SHARED_CREDENTIAL_EXPIRES_AT": current.shared_credential_expires_at,
+            "FS_SESSION_SECRET": current.session_secret,
+            "FS_FRONTEND_ORIGIN": current.frontend_origin,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise RuntimeError(
+                "Password authentication configuration is incomplete: "
+                + ", ".join(sorted(missing))
+            )
+        if len(current.shared_username) < 8 or len(current.shared_username) > 128:
+            raise RuntimeError("FS_SHARED_USERNAME must contain 8 to 128 characters.")
+        parts = current.shared_password_hash.split("$")
+        if len(parts) != 4 or parts[0] != "pbkdf2_sha256":
+            raise RuntimeError("FS_SHARED_PASSWORD_HASH must use the supported PBKDF2 format.")
+        try:
+            iterations = int(parts[1])
+            expires_at = datetime.fromisoformat(
+                current.shared_credential_expires_at.replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("Shared credential security parameters are invalid.") from exc
+        if iterations < 600_000:
+            raise RuntimeError("FS_SHARED_PASSWORD_HASH must use at least 600000 iterations.")
+        if expires_at.tzinfo is None:
+            raise RuntimeError("FS_SHARED_CREDENTIAL_EXPIRES_AT must include a timezone.")
+        if expires_at.astimezone(timezone.utc) <= datetime.now(timezone.utc):
+            raise RuntimeError("The shared credential has expired.")
+        if len(current.session_secret) < 32:
+            raise RuntimeError("FS_SESSION_SECRET must contain at least 32 characters.")
+        if current.cors_origins != (current.frontend_origin,):
+            raise RuntimeError("Password-mode CORS must contain only the exact FS_FRONTEND_ORIGIN.")
+        frontend = urlparse(current.frontend_origin)
+        local_frontend = frontend.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (
+            frontend.scheme not in ({"http", "https"} if local_frontend else {"https"})
+            or not frontend.netloc
+            or frontend.path not in {"", "/"}
+            or frontend.params
+            or frontend.query
+            or frontend.fragment
+            or frontend.username
+            or frontend.password
+            or "*" in frontend.netloc
+        ):
+            raise RuntimeError("FS_FRONTEND_ORIGIN must be one exact secure origin.")
+        if current.session_cookie_samesite == "none" and not current.session_cookie_secure:
+            raise RuntimeError("SameSite=None requires a Secure session cookie.")
+        if current.session_cookie_name.startswith("__Host-") and not current.session_cookie_secure:
+            raise RuntimeError("__Host- session cookies must be Secure.")
         return
     if current.auth_mode != "oidc":
         raise RuntimeError("Unsupported authentication mode.")

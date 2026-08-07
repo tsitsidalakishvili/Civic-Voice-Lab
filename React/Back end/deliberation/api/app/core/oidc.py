@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 from urllib.parse import urlencode
@@ -10,9 +11,11 @@ from urllib.parse import urlencode
 import requests
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 
 from .auth_store import (
     authorize_and_bind_allowlist,
+    authorize_shared_credential,
     consume_oidc_transaction,
     create_auth_session,
     create_oidc_transaction,
@@ -26,6 +29,11 @@ from .errors import CONTRACT_VERSION, error_response
 from .rate_limit import rate_limiter
 
 router = APIRouter(tags=["authentication"])
+
+
+class PasswordLoginIn(BaseModel):
+    username: str = ""
+    password: str = ""
 
 
 def _request_id(request: Request) -> str:
@@ -51,6 +59,120 @@ def _return_to(value: str | None) -> str:
 
 def _provider_enabled(settings: Settings, provider: str) -> bool:
     return settings.auth_mode == "oidc" and provider == settings.oidc_provider
+
+
+def _verify_shared_password(settings: Settings, password: str) -> bool:
+    try:
+        algorithm, iterations_text, salt_text, expected_text = (
+            settings.shared_password_hash.split("$", 3)
+        )
+        if algorithm != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations_text)
+        salt = base64.urlsafe_b64decode(salt_text + "=" * (-len(salt_text) % 4))
+        expected = base64.urlsafe_b64decode(
+            expected_text + "=" * (-len(expected_text) % 4)
+        )
+        derived = hashlib.pbkdf2_hmac(
+            "sha256", str(password or "").encode("utf-8"), salt, iterations
+        )
+        return iterations >= 600_000 and secrets.compare_digest(derived, expected)
+    except (TypeError, ValueError):
+        return False
+
+
+@router.post("/auth/login")
+def password_login(request: Request, payload: PasswordLoginIn):
+    settings = get_settings()
+    request_id = _request_id(request)
+    if settings.auth_mode != "password" or not settings.auth_secret_configured:
+        return error_response(
+            503,
+            "PASSWORD_AUTH_NOT_CONFIGURED",
+            "Staff sign-in is not configured.",
+            request_id=request_id,
+        )
+    origin = str(request.headers.get("Origin") or "").strip().rstrip("/")
+    if not origin or origin != settings.frontend_origin:
+        return error_response(
+            403,
+            "ORIGIN_FORBIDDEN",
+            "The request origin is not permitted.",
+            request_id=request_id,
+        )
+    ip = _request_ip(request)
+    allowed, retry_after = rate_limiter.allow(
+        f"password-login:{ip}", limit=5, window_seconds=900
+    )
+    if not allowed:
+        return error_response(
+            429,
+            "RATE_LIMITED",
+            "Too many login attempts. Try again later.",
+            request_id=request_id,
+            retryable=True,
+            headers={"Retry-After": str(retry_after)},
+        )
+    expires_at = datetime.fromisoformat(
+        settings.shared_credential_expires_at.replace("Z", "+00:00")
+    ).astimezone(timezone.utc)
+    username_ok = secrets.compare_digest(
+        str(payload.username or ""), settings.shared_username
+    )
+    password_ok = _verify_shared_password(settings, payload.password)
+    if expires_at <= datetime.now(timezone.utc) or not (username_ok and password_ok):
+        record_auth_audit(
+            settings,
+            "login_failed",
+            outcome="denied",
+            provider="password",
+            request_id=request_id,
+            ip_address=ip,
+            user_agent=request.headers.get("User-Agent", ""),
+            reason_code="INVALID_OR_EXPIRED_CREDENTIAL",
+        )
+        return error_response(
+            401,
+            "AUTH_INVALID",
+            "The username or password is incorrect.",
+            request_id=request_id,
+        )
+    principal = authorize_shared_credential(settings)
+    if principal is None:
+        return error_response(
+            503,
+            "AUTH_STORE_UNAVAILABLE",
+            "Staff sign-in is temporarily unavailable.",
+            request_id=request_id,
+            retryable=True,
+        )
+    raw_session_id, _, _ = create_auth_session(settings, principal)
+    record_auth_audit(
+        settings,
+        "login_succeeded",
+        outcome="success",
+        provider="password",
+        issuer="fs:shared-credential",
+        subject=str(principal.get("subject") or ""),
+        allowlist_id=str(principal.get("allowlistId") or ""),
+        request_id=request_id,
+        ip_address=ip,
+        user_agent=request.headers.get("User-Agent", ""),
+    )
+    response = JSONResponse(
+        status_code=200,
+        content={"contractVersion": CONTRACT_VERSION, "authenticated": True},
+    )
+    response.set_cookie(
+        settings.session_cookie_name,
+        raw_session_id,
+        max_age=settings.session_absolute_hours * 3600,
+        secure=settings.session_cookie_secure,
+        httponly=True,
+        samesite=settings.session_cookie_samesite,
+        path="/",
+    )
+    return response
 
 
 @lru_cache(maxsize=8)

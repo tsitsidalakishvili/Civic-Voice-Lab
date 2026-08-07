@@ -91,7 +91,7 @@ def validate_request_auth(request: Request, settings: Settings | None = None) ->
         return None
     if current_settings.effective_auth_mode == "api_key":
         return _validate_api_key(request, current_settings)
-    if current_settings.effective_auth_mode == "oidc":
+    if current_settings.effective_auth_mode in {"oidc", "password"}:
         return None
     return _validate_bearer_token(request, current_settings)
 
@@ -267,7 +267,7 @@ class OptionalAuthMiddleware(BaseHTTPMiddleware):
         request.state.auth_mode = settings.effective_auth_mode if settings.auth_enabled else None
         if not settings.auth_enabled or is_public_request(request, settings):
             return await call_next(request)
-        if settings.effective_auth_mode != "oidc":
+        if settings.effective_auth_mode not in {"oidc", "password"}:
             failure = validate_request_auth(request, settings)
             if failure is not None:
                 return failure
@@ -386,6 +386,7 @@ def get_auth_status():
         "header_name": settings.auth_header_name if settings.effective_auth_mode == "api_key" else None,
         "public_rule_count": len(settings.auth_public_rules),
         "organizationLogin": settings.auth_mode == "oidc" and not settings.auth_emergency_bearer_gate,
+        "passwordLogin": settings.auth_mode == "password",
         "emergencyBearerGate": settings.auth_emergency_bearer_gate,
     }
 

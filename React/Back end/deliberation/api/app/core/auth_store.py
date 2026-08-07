@@ -321,6 +321,38 @@ def authorize_and_bind_allowlist(
     return rows[0] if rows else None
 
 
+def authorize_shared_credential(settings: Settings) -> dict[str, Any] | None:
+    """Create or refresh the single temporary shared principal without storing credentials."""
+    username_hash = keyed_hash(settings, "shared-username", settings.shared_username)
+    entry_key = keyed_hash(settings, "allowlist-entry", f"password:{username_hash}")
+    rows = _write(
+        """
+        MERGE (entry:AuthAllowlistEntry {entryKey: $entryKey})
+        ON CREATE SET entry.allowlistId = $allowlistId,
+                      entry.emailHash = '', entry.normalizedEmail = '',
+                      entry.provider = 'password', entry.issuer = 'fs:shared-credential',
+                      entry.subject = $subject, entry.createdAt = datetime(),
+                      entry.addedAt = datetime(), entry.addedBy = 'server-config',
+                      entry.version = 1, entry.status = 'active'
+        SET entry.roles = ['admin'], entry.caseScopes = ['*'],
+            entry.purposeScopes = ['*'], entry.validUntil = datetime($validUntil),
+            entry.reason = 'temporary-shared-credential', entry.updatedAt = datetime()
+        RETURN entry.allowlistId AS allowlistId, '' AS email,
+               entry.provider AS provider, entry.issuer AS issuer,
+               entry.subject AS subject, entry.roles AS roles,
+               entry.caseScopes AS caseScopes, entry.purposeScopes AS purposeScopes,
+               entry.version AS version
+        """,
+        {
+            "entryKey": entry_key,
+            "allowlistId": str(uuid4()),
+            "subject": username_hash,
+            "validUntil": settings.shared_credential_expires_at,
+        },
+    )
+    return rows[0] if rows else None
+
+
 def create_auth_session(
     settings: Settings, principal: dict[str, Any]
 ) -> tuple[str, str, dict[str, Any]]:

@@ -14,15 +14,21 @@ export function safeReturnPath(value, fallback = '/') {
   }
 }
 
-export function buildLoginUrl(returnTo) {
+export async function loginWithCredentials(username, password) {
   const runtime = getRuntimeConfig()
   const base = runtime.apiBaseUrl.replace(/\/$/, '')
-  const query = new URLSearchParams({ returnTo: safeReturnPath(returnTo) })
-  query.set('provider', 'google')
-  return `${base}/auth/login?${query}`
-}
-
-export function beginOrganizationLogin(returnTo) {
-  const current = `${window.location.pathname}${window.location.search}`
-  window.location.assign(buildLoginUrl(returnTo || current))
+  const response = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!response.ok) {
+    const error = new Error(response.status === 429
+      ? 'Too many attempts. Wait before trying again.'
+      : 'The username or password is incorrect.')
+    error.status = response.status
+    throw error
+  }
+  return response.json()
 }

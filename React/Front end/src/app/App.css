@@ -1746,6 +1746,25 @@ body.datahub-graph-is-expanded {
   margin: 0;
 }
 
+.access-gate__form {
+  display: grid;
+  gap: 12px;
+}
+
+.access-gate__form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.access-gate__form input {
+  width: 100%;
+  border: 1px solid var(--border, #d5e3f1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
 body.crm-people-is-expanded .module-layout {
   grid-template-columns: minmax(0, 1fr);
 }
