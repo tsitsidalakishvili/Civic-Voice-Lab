@@ -145,11 +145,11 @@ def close_driver():
     _active_target = None
 
 
-def _execute_write(session, query):
+def _execute_write(session, query, params=None):
     if hasattr(session, "execute_write"):
-        session.execute_write(lambda tx: tx.run(query))
+        session.execute_write(lambda tx: tx.run(query, params or {}))
     else:
-        session.write_transaction(lambda tx: tx.run(query))
+        session.write_transaction(lambda tx: tx.run(query, params or {}))
 
 
 def init_constraints():
@@ -249,6 +249,51 @@ def init_compliance_backfill():
     with driver.session(database=get_active_database()) as session:
         for query in queries:
             _execute_write(session, query)
+
+
+def init_approved_processing_purposes():
+    """Idempotently install processing purposes explicitly approved by the owner."""
+    driver = get_driver()
+    query = """
+    MERGE (purpose:ProcessingPurpose {purposeVersionId: $purposeVersionId})
+    ON CREATE SET purpose.createdAt = datetime(), purpose.createdBy = $actorId
+    SET purpose.purposeId = $purposeId,
+        purpose.version = 1,
+        purpose.name = $name,
+        purpose.workflow = $workflow,
+        purpose.lawfulBasisArticle5 = $lawfulBasis,
+        purpose.status = 'active',
+        purpose.owner = $owner,
+        purpose.counselDecision = 'approved',
+        purpose.approvalAuthority = 'organization-owner',
+        purpose.updatedAt = datetime()
+    MERGE (event:ComplianceAuditEvent {eventId: $eventId})
+    ON CREATE SET event.eventType = 'purpose_configured',
+                  event.actorId = $actorId,
+                  event.actorProvider = 'release-owner-approval',
+                  event.resourceType = 'ProcessingPurpose',
+                  event.resourceId = $purposeVersionId,
+                  event.purposeId = $purposeId,
+                  event.outcome = 'success',
+                  event.fieldNames = [],
+                  event.reasonCode = 'OWNER_APPROVED',
+                  event.requestId = $eventId,
+                  event.ipHash = '',
+                  event.userAgentHash = '',
+                  event.createdAt = datetime()
+    """
+    params = {
+        "purposeVersionId": "dd-investigation:v1",
+        "purposeId": "dd-investigation",
+        "name": "Internal due-diligence investigations",
+        "workflow": "due-diligence",
+        "lawfulBasis": "Owner-approved internal due-diligence risk assessment",
+        "owner": "Freedom Square",
+        "actorId": "release-owner",
+        "eventId": "purpose-approval:dd-investigation:v1",
+    }
+    with driver.session(database=get_active_database()) as session:
+        _execute_write(session, query, params)
 
 
 def db_health() -> dict:

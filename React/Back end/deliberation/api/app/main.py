@@ -11,7 +11,13 @@ from .core.auth import OptionalAuthMiddleware
 from .core.config import get_settings, validate_auth_startup
 from .core.env import load_backend_env
 from .core.field_masking import FieldMaskingMiddleware
-from .db import close_driver, db_health, init_compliance_backfill, init_constraints
+from .db import (
+    close_driver,
+    db_health,
+    init_approved_processing_purposes,
+    init_compliance_backfill,
+    init_constraints,
+)
 
 logger = logging.getLogger(__name__)
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -86,6 +92,7 @@ def on_startup():
     try:
         init_constraints()
         init_compliance_backfill()
+        init_approved_processing_purposes()
         app.state.db_bootstrap_ok = True
     except Exception as exc:
         app.state.db_bootstrap_ok = False
