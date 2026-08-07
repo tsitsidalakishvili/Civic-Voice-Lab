@@ -12,6 +12,15 @@ const authListeners = new Set()
 let cacheGeneration = 0
 let csrfToken = ''
 
+const DUE_DILIGENCE_PURPOSE_ID = 'dd-investigation'
+
+function purposeHeaders(path) {
+  const normalizedPath = `/${String(path || '').replace(/^\/+/, '')}`
+  return (normalizedPath === '/due-diligence' || normalizedPath.startsWith('/due-diligence/'))
+    ? { 'X-FS-Purpose-Id': DUE_DILIGENCE_PURPOSE_ID }
+    : {}
+}
+
 function buildUrl(path) {
   const base = getApiBaseUrl()
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
@@ -104,6 +113,7 @@ export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefre
 
   const pendingRequest = fetch(url, {
     credentials: 'include',
+    headers: purposeHeaders(path),
   })
     .then(async (response) => {
       await requireOk(response)
@@ -138,6 +148,7 @@ export async function requestJson(path, { method = 'POST', payload, headers } = 
     headers: {
       'Content-Type': 'application/json',
       ...(csrfToken ? { 'X-FS-CSRF': csrfToken } : {}),
+      ...purposeHeaders(path),
       ...(headers || {}),
     },
     body: payload === undefined ? null : JSON.stringify(payload),
@@ -151,6 +162,7 @@ export async function downloadFile(path, fallbackFileName = 'download') {
   const url = buildUrl(path)
   const response = await fetch(url, {
     credentials: 'include',
+    headers: purposeHeaders(path),
   })
   await requireOk(response)
   const disposition = response.headers.get('Content-Disposition') || ''
@@ -176,7 +188,10 @@ export async function requestForm(path, { method = 'POST', formData } = {}) {
   const response = await fetch(url, {
     method,
     credentials: 'include',
-    headers: csrfToken ? { 'X-FS-CSRF': csrfToken } : {},
+    headers: {
+      ...(csrfToken ? { 'X-FS-CSRF': csrfToken } : {}),
+      ...purposeHeaders(path),
+    },
     body: formData,
   })
   await requireOk(response)

@@ -11,8 +11,25 @@ describe('session API transport', () => {
   it('includes cookie credentials without authorization tokens', async () => {
     fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
     await getJson('/auth/me', { cacheMs: 0 })
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/me'), { credentials: 'include' })
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/me'), {
+      credentials: 'include',
+      headers: {},
+    })
     expect(JSON.stringify(fetch.mock.calls)).not.toMatch(/authorization|bearer|api.?key/i)
+  })
+
+  it('attaches the approved purpose only to due-diligence requests', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await getJson('/due-diligence/cases', { cacheMs: 0 })
+    await getJson('/auth/me', { cacheMs: 0 })
+
+    expect(fetch.mock.calls[0][1].headers).toEqual({
+      'X-FS-Purpose-Id': 'dd-investigation',
+    })
+    expect(fetch.mock.calls[1][1].headers).toEqual({})
   })
 
   it('adds the session CSRF token to mutations', async () => {
