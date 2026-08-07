@@ -8,6 +8,7 @@ from ..routes_crm import router as crm_router
 from ..routes_data_hub import router as data_hub_router
 from ..routes_deliberation_extra import router as delib_extra_router
 from ..routes_due_diligence import router as due_diligence_router
+from ..investigation_ftm import router as investigation_ftm_router
 from ..routes_translation import router as translation_router
 
 router = APIRouter()
@@ -18,6 +19,7 @@ router.include_router(deliberation_router)
 router.include_router(delib_extra_router, prefix="/deliberation", tags=["deliberation"])
 router.include_router(crm_router, prefix="/crm", tags=["crm"])
 router.include_router(due_diligence_router, prefix="/due-diligence", tags=["due-diligence"])
+router.include_router(investigation_ftm_router, prefix="/due-diligence", tags=["due-diligence-investigation"])
 router.include_router(
     audience_router, prefix="/audience-discovery", tags=["audience-discovery"]
 )

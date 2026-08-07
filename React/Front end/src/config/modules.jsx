@@ -132,18 +132,21 @@ export const buildModuleSections = (t) => ({
       { label: t('nav.deliberation.insights'), type: 'tab', value: 'insights', hint: t('nav.deliberation.insightsHint') },
     ],
   },
-  'due-diligence': {
-    title: t('module.dueDiligence'),
-    description: t('module.dueDiligence.desc'),
-    flowTitle: t('nav.dd.flowTitle'),
-    flowSummary: t('nav.dd.flowSummary'),
-    defaultTab: 'overview',
-    sections: [
-      { label: 'Case', type: 'tab', value: 'overview', hint: 'Create or edit the due diligence case.' },
-      { label: 'Run DD', type: 'tab', value: 'checks', hint: 'Run Wikipedia, OpenSanctions, and configured Georgian media sources.' },
-      { label: 'Report', type: 'tab', value: 'reports', hint: 'Review saved evidence, AI synthesis, and PDF reports.' },
-    ],
-  },
+    'due-diligence': {
+      title: t('module.dueDiligence'),
+      description: t('module.dueDiligence.desc'),
+      flowTitle: 'Sources → entities → findings',
+      flowSummary: 'Integrate sourced data, resolve identities, trace evidence paths, and publish defensible findings.',
+      defaultTab: 'sources',
+      sections: [
+        { label: '1. Sources', type: 'tab', value: 'sources', hint: 'Register and inspect datasets and provenance.' },
+        { label: '2. Entities', type: 'tab', value: 'entities', hint: 'Review normalized entities and statements.' },
+        { label: '3. Resolve', type: 'tab', value: 'resolve', hint: 'Accept, reject, or defer identity candidates.' },
+        { label: '4. Follow the money', type: 'tab', value: 'follow-the-money', hint: 'Run path questions on the evidence graph.' },
+        { label: '5. Findings', type: 'tab', value: 'findings', hint: 'Review hypotheses and preserve evidence.' },
+        { label: '6. Publish', type: 'tab', value: 'publish', hint: 'Publish accepted findings with provenance.' },
+      ],
+    },
   'data-hub': {
     title: t('module.dataHub'),
     description: t('module.dataHub.desc'),

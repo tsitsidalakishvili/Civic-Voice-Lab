@@ -10,3 +10,7 @@ reportlab
 requests
 PyPDF2
 beautifulsoup4
+followthemoney>=4.10,<5; sys_platform != "win32"
+rigour>=2.3,<3; sys_platform != "win32"
+nomenklatura>=4.13,<5; sys_platform != "win32"
+datapatch>=1.2,<2; sys_platform != "win32"

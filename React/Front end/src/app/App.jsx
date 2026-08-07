@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Accordion,
   ActionIcon,
   Affix,
   AppShell,
   Badge,
   Button,
   Card,
+  Collapse,
   Group,
   Stack,
   Text,
@@ -18,6 +18,8 @@ import { Spotlight, spotlight } from '@mantine/spotlight'
 import {
   IconArrowRight,
   IconBulb,
+  IconChevronDown,
+  IconChevronUp,
   IconDatabaseSearch,
   IconLanguage,
   IconLayoutGrid,
@@ -28,7 +30,7 @@ import { AppProvider, useApp } from '@/context/AppContext'
 import { ThemeToggle } from '@/components/ThemeToggle/ThemeToggle'
 import { buildModules, buildModuleSections, HUB_MODULE_IDS, renderModuleIcon } from '@/config/modules'
 import { FeedbackDrawer } from '@/components/FeedbackDrawer'
-import { DataChatDrawer } from '@/components/DataChatDrawer'
+import { DataChatPanel } from '@/components/DataChatDrawer'
 import { PlatformWalkthrough } from '@/components/PlatformWalkthrough'
 import { PublicEventRegistration } from '@/views/PublicEventRegistration'
 import { PublicSupporterSignup } from '@/views/PublicSupporterSignup'
@@ -198,6 +200,9 @@ function AppShell_() {
   const handleModuleTabChange = useCallback((moduleId, tabValue) => {
     if (!moduleId || !tabValue) return
     setModuleTabs((prev) => ({ ...prev, [moduleId]: tabValue }))
+    if (moduleId === 'due-diligence') {
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+    }
   }, [])
 
   const handleWalkthroughModuleChange = useCallback((moduleId) => {
@@ -517,6 +522,49 @@ function AppShell_() {
                 </Accordion.Panel>
               </Accordion.Item>
             </Accordion>
+            <Card
+              className="data-chat-landing-card"
+              data-tour="data-chat-workspace"
+              onClick={() => setChatOpen((prev) => !prev)}
+              role="button"
+              tabIndex={0}
+              aria-expanded={chatOpen}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setChatOpen((prev) => !prev)
+                }
+              }}
+            >
+              <Group justify="space-between" align="center" wrap="wrap" gap="lg">
+                <Group align="center" gap="md" wrap="nowrap">
+                  <ThemeIcon variant="light" color="civic" size={48} radius="md">
+                    <IconDatabaseSearch size={24} />
+                  </ThemeIcon>
+                  <div>
+                    <Text fw={700} size="lg">Ask your data</Text>
+                    <Text size="sm" c="dimmed">
+                      Chat with your connected data today, with more AI-powered data tools coming here over time.
+                    </Text>
+                  </div>
+                </Group>
+                <Button
+                  variant={chatOpen ? 'light' : 'filled'}
+                  rightSection={chatOpen ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setChatOpen((prev) => !prev)
+                  }}
+                >
+                  {chatOpen ? 'Close data chat' : 'Open data chat'}
+                </Button>
+              </Group>
+            </Card>
+            <Collapse in={chatOpen}>
+              <Card className="data-chat-inline-panel" data-tour="data-chat">
+                <DataChatPanel />
+              </Card>
+            </Collapse>
           </Stack>
         ) : (
           <div className="module-view">
@@ -560,13 +608,15 @@ function AppShell_() {
               ) : null}
             </aside>
             <div className="module-panel" data-tour="module-content">
-              <PageHeader
-                className="page-header--hero"
-                data-tour="module-header"
-                title={pageTitle}
-                description={pageDescription}
-                eyebrow={pageEyebrow}
-              />
+              {activeModuleId !== 'due-diligence' ? (
+                <PageHeader
+                  className="page-header--hero"
+                  data-tour="module-header"
+                  title={pageTitle}
+                  description={pageDescription}
+                  eyebrow={pageEyebrow}
+                />
+              ) : null}
               {ActiveComponent ? (
                 <ActiveComponent
                   t={t}
@@ -596,27 +646,12 @@ function AppShell_() {
           <IconMessage2 size={20} />
         </ActionIcon>
       </Affix>
-      <Affix position={{ bottom: 80, right: 24 }}>
-        <Button
-          className="data-chat-fab"
-          radius="xl"
-          size="md"
-          color="civic"
-          leftSection={<IconDatabaseSearch size={18} />}
-          onClick={() => setChatOpen((prev) => !prev)}
-          aria-label="Ask your data"
-          data-tour="data-chat"
-        >
-          Ask your data
-        </Button>
-      </Affix>
       <FeedbackDrawer
         opened={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}
         t={t}
         activeModuleLabel={activeModule?.label}
       />
-      <DataChatDrawer opened={chatOpen} onClose={() => setChatOpen(false)} />
     </AppShell>
   )
 }

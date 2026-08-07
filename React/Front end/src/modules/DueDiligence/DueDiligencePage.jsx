@@ -1,10 +1,81 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Group, RingProgress, Text } from '@mantine/core'
-import { IconAlertTriangle, IconFileSearch, IconShieldCheck, IconUsers } from '@tabler/icons-react'
+import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconBuilding,
+  IconCheck,
+  IconClock,
+  IconFileSearch,
+  IconPlayerPlay,
+  IconPlus,
+  IconRefresh,
+  IconShieldCheck,
+  IconUser,
+  IconUsers,
+} from '@tabler/icons-react'
 import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, InfoBox } from '../../ui'
 import { DdAnalysisResultPanels } from './DdAnalysisResultPanels.jsx'
 import { normalizeStoredReportToAnalysisResult } from './duediligenceNormalize.js'
+import { InvestigationGraph } from './InvestigationGraph.jsx'
+import { FollowTheMoneyWorkspace } from './FollowTheMoneyWorkspace.jsx'
+
+const PRIMARY_REPORT_SECTIONS = [
+  'executive summary',
+  'source coverage',
+  'risk assessment',
+  'key findings',
+  'recommended actions',
+  'limitations',
+]
+
+function ReportSection({ section, index }) {
+  const heading = section.heading || `Section ${index + 1}`
+  const isPrimary = PRIMARY_REPORT_SECTIONS.some((label) => heading.toLowerCase().includes(label))
+  const content = (
+    <div>
+      {(section.paragraphs || []).map((paragraph, paragraphIndex) => (
+        <p key={`${heading}-p-${paragraphIndex}`}>{paragraph}</p>
+      ))}
+      {section.bullets?.length ? (
+        <ul className="compact-list">
+          {section.bullets.map((item, bulletIndex) => (
+            <li key={`${heading}-b-${bulletIndex}`}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
+      {section.evidenceRefs?.length ? (
+        <p className="dd-evidence-refs">Evidence: {section.evidenceRefs.join(', ')}</p>
+      ) : null}
+    </div>
+  )
+
+  if (!isPrimary) {
+    return (
+      <details className="dd-report-section dd-report-section--supporting">
+        <summary>
+          <span className="dd-report-section__number">{String(index + 1).padStart(2, '0')}</span>
+          <span>
+            <strong>{heading}</strong>
+            <small>Supporting dossier detail</small>
+          </span>
+        </summary>
+        <div className="dd-report-section__body">{content}</div>
+      </details>
+    )
+  }
+
+  return (
+    <section className="dd-report-section">
+      <span className="dd-report-section__number">{String(index + 1).padStart(2, '0')}</span>
+      <div>
+        <h3>{heading}</h3>
+        {content}
+      </div>
+    </section>
+  )
+}
 
 export function DueDiligencePage({
   t,
@@ -128,6 +199,26 @@ export function DueDiligencePage({
   const [selectedHistoryReportId, setSelectedHistoryReportId] = useState('')
   const [archivedReportLoading, setArchivedReportLoading] = useState(false)
   const [reportLoadError, setReportLoadError] = useState('')
+
+  const workflowSteps = [
+    { id: 'sources', label: 'Sources', detail: 'Add datasets' },
+    { id: 'entities', label: 'Entities', detail: 'Normalize records' },
+    { id: 'resolve', label: 'Resolve', detail: 'Review identities' },
+    { id: 'follow-the-money', label: 'Follow the money', detail: 'Trace paths' },
+    { id: 'findings', label: 'Findings', detail: 'Review hypotheses' },
+    { id: 'publish', label: 'Publish', detail: 'Defensible output' },
+  ]
+
+  const formatDateTime = (value) => {
+    if (!value) return 'Not yet'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return new Intl.DateTimeFormat('en', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date)
+  }
 
   useEffect(() => {
     if (activeTabOverride && activeTabOverride !== activeTab) {
@@ -1285,15 +1376,83 @@ export function DueDiligencePage({
     ],
     [competitorMatches.length, crmMatches.length, reportHistory.length, summary?.competitors],
   )
+  const activeWorkflowIndex = Math.max(
+    0,
+    workflowSteps.findIndex((step) => step.id === activeTab),
+  )
 
   return (
-    <section className="module">
-      <div className={showTabs ? 'module-layout' : 'module-layout module-layout--stacked'}>
-        <aside className="module-sidebar">
-          <div className="sidebar-card">
-            <h3>Start a new case</h3>
-            <p className="muted">Capture the subject and assign ownership.</p>
-            <div className="filter-row">
+    <section className="module dd-workspace">
+      <div className="dd-command-bar">
+        <div className="dd-command-bar__identity">
+          <span className="dd-subject-mark">
+            {subjectType === 'Organization' ? <IconBuilding size={22} /> : <IconUser size={22} />}
+          </span>
+          <div>
+            <span className="dd-eyebrow">Investigation workspace</span>
+            <h2>{activeCaseId ? getCaseDisplayName(activeCase) || subjectName : 'Due diligence queue'}</h2>
+            <p>
+              {activeCaseId
+                ? `${caseStatus} · ${caseOwner || 'Unassigned'} · Last updated ${formatDateTime(activeCase?.updatedAt || activeCase?.createdAt)}`
+                : 'Select a case to continue or start a new investigation.'}
+            </p>
+          </div>
+        </div>
+        <div className="dd-command-bar__actions">
+          <label className="dd-case-select">
+            <span>Active case</span>
+            <select value={activeCaseId} onChange={(event) => handleSelectCase(event.target.value)}>
+              <option value="">Select a case…</option>
+              {cases.map((item) => (
+                <option key={item.caseId} value={item.caseId}>
+                  {getCaseDisplayName(item) || 'Untitled case'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button-secondary dd-new-case-button"
+            type="button"
+            onClick={() => {
+              handleClearCase()
+              applyActiveTab('sources')
+            }}
+          >
+            <IconPlus size={16} />
+            New case
+          </button>
+        </div>
+      </div>
+
+      <nav className="dd-workflow" aria-label="Due diligence workflow">
+        {workflowSteps.map((step, index) => {
+          const isActive = step.id === activeTab
+          const isComplete = index < activeWorkflowIndex
+          return (
+            <button
+              key={step.id}
+              type="button"
+              className={`dd-workflow__step${isActive ? ' is-active' : ''}${isComplete ? ' is-complete' : ''}`}
+              onClick={() => applyActiveTab(step.id)}
+            >
+              <span className="dd-workflow__number">{isComplete ? <IconCheck size={14} /> : index + 1}</span>
+              <span>
+                <strong>{step.label}</strong>
+                <small>{step.detail}</small>
+              </span>
+            </button>
+          )
+        })}
+      </nav>
+
+      <div className="dd-workspace__body">
+        {activeTab === 'overview' ? (
+        <aside className="dd-case-rail">
+          <div className="sidebar-card dd-intake-card">
+            <span className="dd-card-kicker">New investigation</span>
+            <h3>Open a case</h3>
+            <p className="muted">Create one durable record for the subject, evidence, and decision.</p>
+            <div className="dd-case-form">
               <input
                 className="input"
                 placeholder="Georgian name"
@@ -1326,30 +1485,26 @@ export function DueDiligencePage({
                 onClick={handleCreateCase}
                 disabled={caseCreating}
               >
-                {caseCreating ? 'Creating...' : 'Create case'}
+                {caseCreating ? 'Creating…' : 'Create and open case'}
               </button>
             </div>
             {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
           </div>
 
-          <div className="sidebar-card">
+          <div className="sidebar-card dd-case-list-card">
             <div className="card-header">
               <div>
-                <h3>Cases</h3>
-                <p className="muted">Select a case to open the workspace.</p>
+                <span className="dd-card-kicker">Portfolio</span>
+                <h3>Recent cases</h3>
+                <p className="muted">Continue an investigation from its last saved state.</p>
               </div>
-              <button className="button-secondary" type="button" onClick={loadCases}>
+              <button className="button-secondary dd-icon-button" type="button" onClick={loadCases}>
+                <IconRefresh size={15} />
                 Refresh
               </button>
             </div>
             {casesError ? <div className="module-alert">{casesError}</div> : null}
-            <div className="table">
-              <div className="table-row table-head">
-                <span>Subject</span>
-                <span>Status</span>
-                <span>Risk</span>
-                <span>Updated</span>
-              </div>
+            <div className="dd-case-list">
               {casesLoading ? (
                 <div className="table-row empty">Loading cases...</div>
               ) : cases.length === 0 ? (
@@ -1357,27 +1512,30 @@ export function DueDiligencePage({
               ) : (
                 cases.map((row) => (
                   <button
-                    className={`table-row table-row__button${
+                    className={`dd-case-row${
                       activeCaseId === row.caseId ? ' is-active' : ''
                     }`}
                     type="button"
                     key={row.caseId}
                     onClick={() => handleSelectCase(row.caseId)}
                   >
-                    <span>
+                    <span className="dd-case-row__subject">
                       {getCaseDisplayName(row) || '-'}
                       {getCaseSecondaryName(row) ? (
                         <small className="muted">{getCaseSecondaryName(row)}</small>
                       ) : null}
                     </span>
-                    <span>{row.status || 'Draft'}</span>
-                    <span>{row.lastRiskLevel || '-'}</span>
-                    <span>{row.updatedAt || row.createdAt || '-'}</span>
+                    <span className="dd-status-chip">{row.status || 'Draft'}</span>
+                    <span className={`dd-risk-chip is-${String(row.lastRiskLevel || 'unknown').toLowerCase()}`}>
+                      {row.lastRiskLevel || 'Unrated'}
+                    </span>
+                    <span className="dd-case-row__date"><IconClock size={13} /> {formatDateTime(row.updatedAt || row.createdAt)}</span>
+                    <IconArrowRight className="dd-case-row__arrow" size={17} />
                   </button>
                 ))
               )}
             </div>
-            <div className="module-footer">
+            <div className="dd-case-list__footer">
               <span>
                 {activeCaseId
                   ? `Active case: ${getCaseDisplayName(activeCase) || '-'}`
@@ -1394,13 +1552,14 @@ export function DueDiligencePage({
             </div>
           </div>
         </aside>
+        ) : null}
 
-        <div className="module-main">
-          <CivicStatGrid
+        <div className="dd-workspace__main">
+          {activeTab === 'overview' ? <CivicStatGrid
             title="Risk intelligence pulse"
             description="Signals across watchlist, network matches, and internal checks."
             items={duePulseStats}
-          />
+          /> : null}
 
           {showIntro ? (
             <div className="module-card module-card__wide section-intro">
@@ -1416,7 +1575,7 @@ export function DueDiligencePage({
 
           {error ? <div className="module-alert">{error}</div> : null}
 
-          <details className="dashboard-detail">
+          {activeTab === 'overview' ? <details className="dashboard-detail dd-pipeline-stats">
             <summary>Risk pipeline stats</summary>
             <div className="dashboard-detail__body">
               <div className="module-header__meta">
@@ -1434,14 +1593,17 @@ export function DueDiligencePage({
                 </div>
               </div>
             </div>
-          </details>
+          </details> : null}
 
           {showTabs ? (
             <div className="subtabs">
               {[
-                { id: 'overview', label: 'Case' },
-                { id: 'checks', label: 'Run DD' },
-                { id: 'reports', label: 'Report' },
+                { id: 'sources', label: 'Sources' },
+                { id: 'entities', label: 'Entities' },
+                { id: 'resolve', label: 'Resolve' },
+                { id: 'follow-the-money', label: 'Follow the money' },
+                { id: 'findings', label: 'Findings' },
+                { id: 'publish', label: 'Publish' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1455,19 +1617,17 @@ export function DueDiligencePage({
             </div>
           ) : null}
 
-          {activeCaseId ? (
-            <div className="module-alert module-alert--success">
-              Active case: {getCaseDisplayName(activeCase) || '-'} - {caseStatus}
-            </div>
-          ) : (
-            <div className="module-alert">
-              Select a case to begin. Create a new case in the left panel if needed.
-            </div>
-          )}
+          {workflowSteps.some((step) => step.id === activeTab) ? (
+            <FollowTheMoneyWorkspace
+              caseId={activeCaseId}
+              activeStage={activeTab}
+              reportId={analysisResult?.reportId || selectedHistoryReportId}
+            />
+          ) : null}
 
           {activeTab === 'overview' && (
             <div className="stack">
-              <Card className="module-card module-card__wide">
+              <Card className="module-card module-card__wide dd-pipeline-card">
                 <Group justify="space-between" align="center" wrap="wrap">
                   <div>
                     <Text fw={600}>Analysis pipeline</Text>
@@ -1490,11 +1650,12 @@ export function DueDiligencePage({
               </Card>
 
               {activeCaseId ? (
-                <div className="module-card">
+                  <div className="module-card dd-case-profile">
                   <div className="card-header">
                     <div>
-                      <h3>Profile</h3>
-                      <p className="muted">Profile identity, case status, and latest DD signal.</p>
+                        <span className="dd-card-kicker">Case record</span>
+                        <h3>Subject and ownership</h3>
+                        <p className="muted">Keep the identity used for source matching precise and reviewable.</p>
                     </div>
                   </div>
                   <div className="metric-row">
@@ -1531,7 +1692,7 @@ export function DueDiligencePage({
                     <span>Last report</span>
                     <strong>{activeCase?.lastReportAt || '-'}</strong>
                   </div>
-                  <div className="filter-row">
+                  <div className="dd-profile-form">
                     <input
                       className="input"
                       placeholder="Georgian name"
@@ -1605,6 +1766,14 @@ export function DueDiligencePage({
                     >
                       Delete
                     </button>
+                    <button
+                      className="button dd-next-step"
+                      type="button"
+                      onClick={() => applyActiveTab('checks')}
+                    >
+                      Continue to investigation
+                      <IconArrowRight size={16} />
+                    </button>
                   </div>
                   {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
                 </div>
@@ -1613,13 +1782,14 @@ export function DueDiligencePage({
           )}
 
           {activeTab === 'checks' && (
-            <div className="stack">
-              <div className="module-card module-card__wide section-intro">
+            <div className="stack dd-investigation">
+              <div className="module-card module-card__wide dd-investigation-hero">
                 <div className="card-header">
                   <div>
-                    <h3>Checks</h3>
+                    <span className="dd-card-kicker">Step 2 · Investigation</span>
+                    <h3>Build the evidence record</h3>
                     <p className="muted">
-                      Confirm the subject, scan internal records, then run public-source checks.
+                      Confirm identity once, then collect internal signals and public-source evidence in one run.
                     </p>
                   </div>
                 </div>
@@ -1628,12 +1798,12 @@ export function DueDiligencePage({
                     Select a case to run checks. Running analysis can auto-create a draft case.
                   </div>
                 ) : null}
-                <InfoBox
-                  title="Quick steps"
-                  summary="1) Confirm subject  2) Check internal records  3) Run public-source analysis"
-                  hint="Internal checks scan Network + watchlist. Public-source analysis pulls Wikidata, OpenSanctions, GDELT, and Netgazeti fallback where available."
-                />
-                <div className="filter-row">
+                <div className="dd-investigation-steps">
+                  <span><strong>01</strong> Confirm subject</span>
+                  <span><strong>02</strong> Review internal matches</span>
+                  <span><strong>03</strong> Run source scan</span>
+                </div>
+                <div className="dd-subject-control">
                   <input
                     className="input"
                     placeholder="Enter person or organization"
@@ -1685,9 +1855,11 @@ export function DueDiligencePage({
                 </p>
               </div>
 
-              <div className="module-card module-card__wide">
+              <div className="dd-investigation-grid">
+              <div className="module-card module-card__wide dd-signal-card">
                 <div className="card-header">
                   <div>
+                    <span className="dd-card-kicker">Internal intelligence</span>
                     <h3>Internal checks</h3>
                     <p className="muted">Network + watchlist match signals.</p>
                   </div>
@@ -1751,24 +1923,26 @@ export function DueDiligencePage({
                 </details>
               </div>
 
-              <div className="module-card module-card__wide">
+              <div className="module-card module-card__wide dd-scan-card">
                 <div className="card-header">
                   <div>
-                    <h3>Run due diligence</h3>
+                    <span className="dd-card-kicker">Public-source collection</span>
+                    <h3>Run the investigation</h3>
                     <p className="muted">
                       One scan checks the configured sources and stores evidence on this case.
                     </p>
                   </div>
                   <div className="pill">Configured</div>
                 </div>
-                <div className="filter-row">
+                <div className="dd-source-chips">
                   {['Wikipedia', 'OpenSanctions', 'Netgazeti', 'Publika', 'Interpressnews', 'Asset declarations'].map((source) => (
-                    <span className="pill" key={source}>{source}</span>
+                    <span className="dd-source-chip" key={source}><IconCheck size={13} /> {source}</span>
                   ))}
                 </div>
                 <div className="filter-row">
-                  <button className="button" type="button" onClick={handleRunAnalysis} disabled={analysisLoading || mediaLoading}>
-                    {analysisLoading || mediaLoading ? 'Running...' : 'Run DD scan'}
+                  <button className="button dd-run-button" type="button" onClick={handleRunAnalysis} disabled={analysisLoading || mediaLoading}>
+                    <IconPlayerPlay size={17} />
+                    {analysisLoading || mediaLoading ? 'Investigation running…' : 'Run investigation'}
                   </button>
                 </div>
                 {analysisError ? <div className="module-alert">{analysisError}</div> : null}
@@ -1811,6 +1985,7 @@ export function DueDiligencePage({
                     Georgian media: {mediaResult.mentions?.length ?? 0} mentions fetched, {mediaResult.storedCount ?? 0} stored.
                   </div>
                 ) : null}
+              </div>
               </div>
             </div>
           )}
@@ -2008,13 +2183,26 @@ export function DueDiligencePage({
               </div>
             </div>
           )}
+          {activeTab === 'graph' && (
+            <InvestigationGraph
+              caseId={activeCaseId}
+              reportId={analysisResult?.reportId || selectedHistoryReportId}
+            />
+          )}
+
           {activeTab === 'reports' && (
-            <div className="stack">
-              <div className="module-card module-card__wide section-intro">
+            <div className="stack dd-reports">
+              <div className="module-card module-card__wide dd-report-hero">
                 <div className="card-header">
                   <div>
-                    <h3>Reports</h3>
-                    <p className="muted">Open saved reports, inspect source evidence, and download PDFs.</p>
+                    <span className="dd-card-kicker">Step 3 · Intelligence report</span>
+                    <h3>Turn evidence into a decision brief</h3>
+                    <p className="muted">Lead with verified findings, keep source detail auditable, and move caveats out of the main reading path.</p>
+                  </div>
+                  <div className={`dd-risk-orb is-${String(analysisResult?.summary?.risk_level || activeCase?.lastRiskLevel || 'unknown').toLowerCase()}`}>
+                    <span>Risk</span>
+                    <strong>{analysisResult?.summary?.risk_level || activeCase?.lastRiskLevel || 'Unrated'}</strong>
+                    <small>{analysisResult?.summary?.risk_score ?? '—'}/100</small>
                   </div>
                 </div>
                 {!activeCaseId && !subjectName.trim() ? (
@@ -2044,15 +2232,16 @@ export function DueDiligencePage({
                 </div>
               ) : null}
 
-              <div className="module-card module-card__wide">
+              <div className="module-card module-card__wide dd-report-builder">
                 <div className="card-header">
                   <div>
-                    <h3>AI synthesized report</h3>
+                    <span className="dd-card-kicker">Analyst brief</span>
+                    <h3>Generate structured synthesis</h3>
                     <p className="muted">
                       Combine Wikidata, OpenSanctions, news, and media scan evidence into a topic-based analyst brief.
                     </p>
                   </div>
-                  <div className="pill">AI layer</div>
+                  <div className="pill">Evidence-grounded AI</div>
                 </div>
                 <div className="filter-row">
                   <button
@@ -2061,7 +2250,7 @@ export function DueDiligencePage({
                     onClick={handleGenerateAiReport}
                     disabled={aiReportLoading || (!analysisResult && !mediaResult)}
                   >
-                    {aiReportLoading ? 'Generating...' : 'Generate AI report'}
+                    {aiReportLoading ? 'Building report…' : aiReport ? 'Regenerate report' : 'Generate report'}
                   </button>
                 </div>
                 {!analysisResult && !mediaResult ? (
@@ -2069,43 +2258,43 @@ export function DueDiligencePage({
                 ) : null}
                 {aiReportError ? <div className="module-alert">{aiReportError}</div> : null}
                 {aiReport ? (
-                  <div className="stack">
-                    <div className="module-alert module-alert--success">
+                  <article className="dd-report-document">
+                    <div className="dd-report-document__masthead">
+                      <div>
+                        <span className="dd-card-kicker">Internal review · {aiReport.topic}</span>
+                        <h2>{aiReport.reportTitle || `Due Diligence Report: ${aiReport.subject}`}</h2>
+                        <p>{aiReport.mode?.startsWith?.('ai:') ? 'AI-assisted synthesis' : 'Structured synthesis'} for <strong>{aiReport.subject}</strong></p>
+                      </div>
+                      {analysisResult?.reportId ? (
+                        <a
+                          className="button-secondary"
+                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Download PDF
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="module-alert module-alert--success dd-report-status">
                       {aiReport.mode?.startsWith?.('ai:') ? 'AI-generated' : 'Structured'} report for{' '}
                       <strong>{aiReport.subject}</strong> on <strong>{aiReport.topic}</strong>
                     </div>
                     {aiReport.warnings?.length ? (
                       <div className="module-alert">
-                        {aiReport.warnings.map((warning, idx) => (
+                        {[...new Set(aiReport.warnings)].map((warning, idx) => (
                           <div key={`${warning}-${idx}`}>{warning}</div>
                         ))}
                       </div>
                     ) : null}
                     {aiReport.sections?.length ? (
-                      <div className="stack">
-                        <div>
-                          <h3>{aiReport.reportTitle || `Due Diligence Report: ${aiReport.subject}`}</h3>
-                          <p className="muted">
-                            {[aiReport.classification, aiReport.topic].filter(Boolean).join(' - ')}
-                          </p>
-                        </div>
+                      <div className="dd-report-sections">
                         {aiReport.sections.map((section, idx) => (
-                          <section className="module-card" key={`${section.heading || 'section'}-${idx}`}>
-                            <h4>{section.heading || `Section ${idx + 1}`}</h4>
-                            {(section.paragraphs || []).map((paragraph, pIdx) => (
-                              <p key={`${section.heading || idx}-p-${pIdx}`}>{paragraph}</p>
-                            ))}
-                            {section.bullets?.length ? (
-                              <ul className="compact-list">
-                                {section.bullets.map((item, bIdx) => (
-                                  <li key={`${section.heading || idx}-b-${bIdx}`}>{item}</li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            {section.evidenceRefs?.length ? (
-                              <p className="muted">Evidence: {section.evidenceRefs.join(', ')}</p>
-                            ) : null}
-                          </section>
+                          <ReportSection
+                            key={`${section.heading || 'section'}-${idx}`}
+                            section={section}
+                            index={idx}
+                          />
                         ))}
                       </div>
                     ) : (
@@ -2134,6 +2323,11 @@ export function DueDiligencePage({
                         </div>
                       </>
                     )}
+                    <details className="dd-evidence-register">
+                      <summary>
+                        Evidence register ({((aiReport.evidenceTable?.length ? aiReport.evidenceTable : aiReport.evidence) || []).length})
+                        <small>Open source-level detail</small>
+                      </summary>
                     <div className="table">
                       <div className="table-row table-head">
                         <span>ID / Evidence</span>
@@ -2161,8 +2355,9 @@ export function DueDiligencePage({
                         ))
                       )}
                     </div>
-                    <div className="module-grid">
-                      <div className="module-card">
+                    </details>
+                    {!aiReport.sections?.length ? <div className="dd-report-actions-grid">
+                      <div className="dd-action-panel">
                         <h4>Recommended actions</h4>
                         <ul className="compact-list">
                           {(aiReport.recommendedActions || []).map((item, idx) => (
@@ -2170,7 +2365,7 @@ export function DueDiligencePage({
                           ))}
                         </ul>
                       </div>
-                      <div className="module-card">
+                      <div className="dd-action-panel dd-action-panel--muted">
                         <h4>Limitations</h4>
                         <ul className="compact-list">
                           {((aiReport.limitations?.length ? aiReport.limitations : aiReport.caveats) || []).map((item, idx) => (
@@ -2178,75 +2373,58 @@ export function DueDiligencePage({
                           ))}
                         </ul>
                       </div>
-                    </div>
-                  </div>
+                    </div> : null}
+                  </article>
                 ) : null}
               </div>
 
               {analysisResult ? (
-                <div className="module-card module-card__wide">
-                  <div className="card-header">
-                    <div>
-                      <h3>{selectedHistoryReportId ? 'Report detail' : 'Latest analysis detail'}</h3>
-                      <p className="muted">
-                        {selectedHistoryReportId
-                          ? 'Loaded from history (GET /reports/:id).'
-                          : 'Sources and evidence from the most recent run.'}
-                      </p>
-                    </div>
-                  </div>
+                <details className="dashboard-detail dd-source-audit">
+                  <summary>{selectedHistoryReportId ? 'Saved report source audit' : 'Latest source audit'}</summary>
+                  <div className="dashboard-detail__body">
                   <DdAnalysisResultPanels
                     analysisResult={analysisResult}
                     showViewFullSourcesButton={false}
                     showSourceDetails
                   />
-                </div>
+                  </div>
+                </details>
               ) : null}
 
               {activeCaseId || subjectName.trim() ? (
-                <details className="dashboard-detail" open>
-                  <summary>Report history ({reportHistory.length})</summary>
+                <details className="dashboard-detail dd-report-history" open={!aiReport}>
+                  <summary>Previous reports ({reportHistory.length})</summary>
                   <div className="dashboard-detail__body">
-                    <div className="table">
-                      <div className="table-row table-head">
-                        <span>Created</span>
-                        <span>Risk</span>
-                        <span>Total hits</span>
-                        <span>Sources</span>
-                        <span>Open</span>
-                        <span>PDF</span>
-                      </div>
+                    <div className="dd-history-list">
                       {historyLoading ? (
                         <div className="table-row empty">Loading report history...</div>
                       ) : reportHistory.length === 0 ? (
                         <div className="table-row empty">No prior reports for this case or subject.</div>
                       ) : (
                         reportHistory.map((row) => (
-                          <div className="table-row" key={row.reportId}>
-                            <span>{row.createdAt || '-'}</span>
-                            <span>{row.riskLevel || '-'}</span>
-                            <span>{row.totalHits ?? 0}</span>
-                            <span>{(row.sources || []).join(', ') || '-'}</span>
-                            <span>
+                          <article className="dd-history-row" key={row.reportId}>
+                            <div className="dd-history-row__date"><IconClock size={15} /> {formatDateTime(row.createdAt)}</div>
+                            <span className={`dd-risk-chip is-${String(row.riskLevel || 'unknown').toLowerCase()}`}>{row.riskLevel || 'Unrated'}</span>
+                            <div className="dd-history-row__summary"><strong>{row.totalHits ?? 0} findings</strong><small>{(row.sources || []).join(', ') || 'No sources listed'}</small></div>
+                            <div className="dd-history-row__actions">
                               <button
                                 type="button"
                                 className="button-secondary"
                                 onClick={() => handleOpenReportFromHistory(row.reportId)}
                                 disabled={archivedReportLoading}
                               >
-                                {archivedReportLoading ? 'Loading...' : 'Open'}
+                                {archivedReportLoading ? 'Loading…' : 'Review'}
                               </button>
-                            </span>
-                            <span>
                               <a
+                                className="button-secondary"
                                 href={`${getApiBaseUrl()}/due-diligence/reports/${row.reportId}/pdf`}
                                 target="_blank"
                                 rel="noreferrer"
                               >
                                 PDF
                               </a>
-                            </span>
-                          </div>
+                            </div>
+                          </article>
                         ))
                       )}
                     </div>
@@ -2257,13 +2435,14 @@ export function DueDiligencePage({
           )}
 
           {activeTab === 'decision' && (
-            <div className="module-card">
-              <h3>Decision</h3>
-              <p className="muted">Record the case outcome after reviewing profile, media, and report evidence.</p>
+            <div className="module-card dd-decision-card">
+              <span className="dd-card-kicker">Step 4 · Decision</span>
+              <h3>Record a defensible outcome</h3>
+              <p className="muted">Choose the disposition only after reviewing findings, evidence quality, and unresolved limitations.</p>
               {!activeCaseId ? (
                 <div className="module-alert">Select a case to record a decision.</div>
               ) : null}
-              <div className="filter-row">
+              <div className="dd-decision-form">
                 <select
                   className="select"
                   value={decisionOutcome}

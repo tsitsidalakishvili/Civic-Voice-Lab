@@ -1,4 +1,5 @@
 import html as html_lib
+import hashlib
 import io
 import json
 import os
@@ -22,6 +23,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .db import get_active_database, get_driver
+from .investigation_ftm import _relationship_schema, persist_investigation_projection
+from .investigation_reuse import ftm_schema_metadata, infer_ftm_property_type, validate_ftm_entity
 
 router = APIRouter()
 
@@ -115,6 +118,94 @@ class DueDiligenceDecisionOut(BaseModel):
     rationale: Optional[str] = ""
     decided_at: Optional[str] = Field(alias="decidedAt", default=None)
     decided_by: Optional[str] = Field(alias="decidedBy", default=None)
+
+
+class InvestigationGraphEnrichRequest(BaseModel):
+    report_id: Optional[str] = Field(default=None, alias="reportId")
+
+
+class InvestigationRelationshipCreate(BaseModel):
+    from_entity_id: Optional[str] = Field(default=None, alias="fromEntityId")
+    target_name: str = Field(min_length=1, alias="targetName")
+    target_type: str = Field(default="Person", alias="targetType")
+    relationship_type: str = Field(min_length=1, alias="relationshipType")
+    source_name: str = Field(min_length=1, alias="sourceName")
+    source_url: Optional[str] = Field(default="", alias="sourceUrl")
+    evidence_note: str = Field(min_length=1, alias="evidenceNote")
+    confidence: float = Field(default=0.8, ge=0, le=1)
+    verification_status: str = Field(default="analyst-added", alias="verificationStatus")
+
+
+class InvestigationImportSource(BaseModel):
+    name: str = Field(min_length=1)
+    url: Optional[str] = ""
+    source_type: str = Field(default="Imported dataset", alias="sourceType")
+    publisher: Optional[str] = ""
+    license: Optional[str] = ""
+    jurisdiction: Optional[str] = ""
+    description: Optional[str] = ""
+    ingestion_mode: str = Field(default="bulk-api", alias="ingestionMode")
+
+
+class InvestigationImportEntity(BaseModel):
+    external_id: str = Field(min_length=1, alias="externalId")
+    name: str = Field(min_length=1)
+    entity_type: str = Field(min_length=1, alias="entityType")
+    entity_role: Optional[str] = Field(default="", alias="entityRole")
+    description: Optional[str] = ""
+    existing_entity_id: Optional[str] = Field(default=None, alias="existingEntityId")
+    properties: Dict[str, Any] = Field(default_factory=dict)
+
+
+class InvestigationImportEvidence(BaseModel):
+    title: str = Field(min_length=1)
+    source_url: Optional[str] = Field(default="", alias="sourceUrl")
+    published_at: Optional[str] = Field(default="", alias="publishedAt")
+    note: str = Field(min_length=1)
+
+
+class InvestigationImportRelationship(BaseModel):
+    from_external_id: str = Field(min_length=1, alias="fromExternalId")
+    to_external_id: str = Field(min_length=1, alias="toExternalId")
+    relationship_type: str = Field(min_length=1, alias="relationshipType")
+    confidence: float = Field(default=0.8, ge=0, le=1)
+    verification_status: str = Field(default="source-stated", alias="verificationStatus")
+    details: Optional[str] = ""
+    properties: Dict[str, Any] = Field(default_factory=dict)
+    evidence: InvestigationImportEvidence
+
+
+class InvestigationGraphImportRequest(BaseModel):
+    source: InvestigationImportSource
+    entities: List[InvestigationImportEntity] = Field(min_length=1, max_length=500)
+    relationships: List[InvestigationImportRelationship] = Field(default_factory=list, max_length=1000)
+
+
+class FollowTheMoneyImportDataset(BaseModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    url: Optional[str] = ""
+    publisher: Optional[str] = ""
+    license: Optional[str] = ""
+    jurisdiction: Optional[str] = ""
+    description: Optional[str] = ""
+
+
+class FollowTheMoneyImportEntity(BaseModel):
+    id: str = Field(min_length=1)
+    schema_name: str = Field(min_length=1, alias="schema")
+    properties: Dict[str, Any] = Field(default_factory=dict)
+    datasets: List[str] = Field(default_factory=list)
+    referents: List[str] = Field(default_factory=list)
+    existing_entity_id: Optional[str] = Field(default=None, alias="existingEntityId")
+    first_seen: Optional[str] = Field(default="", alias="firstSeen")
+    last_seen: Optional[str] = Field(default="", alias="lastSeen")
+    last_change: Optional[str] = Field(default="", alias="lastChange")
+
+
+class FollowTheMoneyGraphImportRequest(BaseModel):
+    dataset: FollowTheMoneyImportDataset
+    entities: List[FollowTheMoneyImportEntity] = Field(min_length=1, max_length=2500)
 
 
 class DueDiligenceAnalysisRequest(BaseModel):
@@ -1736,6 +1827,999 @@ def _store_dd_report(
     return row.get("reportId"), row.get("createdAt")
 
 
+def _investigation_id(prefix: str, *parts: object) -> str:
+    material = "|".join(_clean_decl_text(part).casefold() for part in parts if part is not None)
+    return f"{prefix}-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:24]}"
+
+
+def _birth_year(value: object) -> str:
+    matches = re.findall(r"(?:19|20)\d{2}", str(value or ""))
+    return matches[-1] if matches else ""
+
+
+def _safe_investigation_properties(values: Dict[str, Any]) -> Dict[str, object]:
+    reserved = {
+        "entityId",
+        "name",
+        "entityType",
+        "entityRole",
+        "isRoot",
+        "createdAt",
+        "updatedAt",
+    }
+    output: Dict[str, object] = {}
+    for raw_key, raw_value in (values or {}).items():
+        key = str(raw_key or "").strip()
+        if not key or key in reserved or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", key):
+            continue
+        if isinstance(raw_value, (str, int, float, bool)):
+            output[key] = raw_value[:4000] if isinstance(raw_value, str) else raw_value
+            continue
+        if isinstance(raw_value, list):
+            clean_list = [
+                item[:1000] if isinstance(item, str) else item
+                for item in raw_value[:100]
+                if isinstance(item, (str, int, float, bool))
+            ]
+            if clean_list:
+                output[key] = clean_list
+    return output
+
+
+def _graph_entity(
+    entities: Dict[str, Dict[str, object]],
+    *,
+    name: object,
+    entity_type: str,
+    identity: Optional[object] = None,
+    entity_id: Optional[str] = None,
+    **properties: object,
+) -> Optional[str]:
+    clean_name = _clean_decl_text(name)
+    if not clean_name:
+        return None
+    resolved_id = entity_id or _investigation_id(
+        "entity", entity_type, identity if identity is not None else clean_name
+    )
+    row = entities.setdefault(
+        resolved_id,
+        {
+            "entityId": resolved_id,
+            "name": clean_name,
+            "entityType": entity_type,
+        },
+    )
+    row["name"] = clean_name
+    row["entityType"] = entity_type
+    for key, value in properties.items():
+        if value is None or value == "":
+            continue
+        row[key] = value
+    return resolved_id
+
+
+def _graph_source(
+    sources: Dict[str, Dict[str, object]],
+    *,
+    name: object,
+    url: object = "",
+    source_type: str = "Public source",
+    **properties: object,
+) -> str:
+    clean_name = _clean_decl_text(name) or "Unspecified source"
+    source_id = _investigation_id("source", clean_name)
+    row = sources.setdefault(
+        source_id,
+        {
+            "sourceId": source_id,
+            "name": clean_name,
+            "sourceType": source_type,
+        },
+    )
+    clean_url = _clean_decl_text(url)
+    if clean_url and not row.get("url"):
+        row["url"] = clean_url
+    for key, value in properties.items():
+        if value not in (None, ""):
+            row[key] = value
+    return source_id
+
+
+def _graph_evidence(
+    evidence: Dict[str, Dict[str, object]],
+    *,
+    source_id: str,
+    source_name: object,
+    title: object,
+    source_url: object = "",
+    evidence_type: str = "Source record",
+    published_at: object = "",
+    note: object = "",
+    identity: Optional[object] = None,
+    report_id: Optional[str] = None,
+) -> str:
+    clean_title = _clean_decl_text(title) or "Evidence record"
+    clean_url = _clean_decl_text(source_url)
+    evidence_id = _investigation_id(
+        "evidence", source_id, identity if identity is not None else clean_url or clean_title
+    )
+    row = evidence.setdefault(
+        evidence_id,
+        {
+            "evidenceId": evidence_id,
+            "sourceId": source_id,
+            "sourceName": _clean_decl_text(source_name),
+            "title": clean_title,
+            "evidenceType": evidence_type,
+        },
+    )
+    for key, value in {
+        "sourceUrl": clean_url,
+        "publishedAt": _clean_decl_text(published_at),
+        "note": _clean_decl_text(note),
+        "reportId": report_id,
+    }.items():
+        if value:
+            row[key] = value
+    return evidence_id
+
+
+def _graph_link(
+    links: Dict[str, Dict[str, object]],
+    *,
+    case_id: str,
+    from_id: Optional[str],
+    to_id: Optional[str],
+    relationship_type: object,
+    evidence_ids: Optional[List[str]] = None,
+    confidence: float = 0.8,
+    verification_status: str = "source-stated",
+    details: object = "",
+    relationship_id: Optional[str] = None,
+    properties: Optional[Dict[str, Any]] = None,
+    ftm_schema: Optional[str] = None,
+) -> Optional[str]:
+    if not from_id or not to_id or from_id == to_id:
+        return None
+    clean_type = _clean_decl_text(relationship_type) or "Connected to"
+    resolved_relationship_id = relationship_id or _investigation_id(
+        "link", case_id, from_id, to_id, clean_type
+    )
+    row = links.setdefault(
+        resolved_relationship_id,
+        {
+            "relationshipId": resolved_relationship_id,
+            "fromEntityId": from_id,
+            "toEntityId": to_id,
+            "relationshipType": clean_type,
+            "schema": ftm_schema or _relationship_schema(clean_type),
+            "confidence": max(0.0, min(float(confidence), 1.0)),
+            "verificationStatus": verification_status,
+            "details": _clean_decl_text(details),
+            "evidenceIds": [],
+            "properties": {},
+        },
+    )
+    if ftm_schema:
+        row["ftmSchema"] = ftm_schema
+    if properties:
+        row["properties"].update(_safe_investigation_properties(properties))
+    for evidence_id in evidence_ids or []:
+        if evidence_id and evidence_id not in row["evidenceIds"]:
+            row["evidenceIds"].append(evidence_id)
+    return resolved_relationship_id
+
+
+def _case_and_report_for_graph(
+    case_id: str, report_id: Optional[str] = None
+) -> Tuple[Dict[str, object], Dict[str, object]]:
+    driver = get_driver()
+    query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    OPTIONAL MATCH (c)-[:HAS_DD_REPORT]->(candidate:DueDiligenceReport)
+    WHERE $reportId IS NULL OR candidate.reportId = $reportId
+    WITH c, candidate ORDER BY candidate.createdAt DESC
+    WITH c, collect(candidate)[0] AS report
+    RETURN
+      c.caseId AS caseId,
+      c.subject AS subject,
+      c.subjectGeorgian AS subjectGeorgian,
+      c.subjectEnglish AS subjectEnglish,
+      c.subjectType AS subjectType,
+      report.reportId AS reportId,
+      coalesce(report.payloadJson, '{}') AS payloadJson
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(
+            session, query, {"caseId": case_id, "reportId": report_id}
+        )
+    row = records[0].data() if records else None
+    if not row:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if report_id and not row.get("reportId"):
+        raise HTTPException(status_code=404, detail="Report not found for this case")
+    try:
+        payload = json.loads(row.get("payloadJson") or "{}")
+    except (TypeError, ValueError):
+        payload = {}
+    case_row = {
+        "caseId": row.get("caseId"),
+        "subject": row.get("subject"),
+        "subjectGeorgian": row.get("subjectGeorgian"),
+        "subjectEnglish": row.get("subjectEnglish"),
+        "subjectType": row.get("subjectType"),
+    }
+    return case_row, {"reportId": row.get("reportId"), "payload": payload}
+
+
+def _build_investigation_graph_bundle(
+    case_row: Dict[str, object], report: Dict[str, object]
+) -> Dict[str, object]:
+    case_id = str(case_row.get("caseId") or "")
+    report_id = str(report.get("reportId") or "") or None
+    payload = report.get("payload") if isinstance(report.get("payload"), dict) else {}
+    entities: Dict[str, Dict[str, object]] = {}
+    links: Dict[str, Dict[str, object]] = {}
+    sources: Dict[str, Dict[str, object]] = {}
+    evidence: Dict[str, Dict[str, object]] = {}
+
+    subject_name = (
+        case_row.get("subjectGeorgian")
+        or case_row.get("subjectEnglish")
+        or case_row.get("subject")
+        or payload.get("subject")
+        or "Case subject"
+    )
+    aliases = []
+    for alias in [
+        case_row.get("subject"),
+        case_row.get("subjectGeorgian"),
+        case_row.get("subjectEnglish"),
+        payload.get("subject"),
+    ]:
+        clean_alias = _clean_decl_text(alias)
+        if clean_alias and clean_alias not in aliases:
+            aliases.append(clean_alias)
+    root_id = _graph_entity(
+        entities,
+        name=subject_name,
+        entity_type=str(case_row.get("subjectType") or "Person"),
+        entity_id=_investigation_id("case-subject", case_id),
+        isRoot=True,
+        aliases=aliases,
+        entityRole="Public official" if str(case_row.get("subjectType") or "Person") == "Person" else "Case subject",
+        description="Primary subject of the due-diligence case",
+    )
+
+    person_ids: Dict[str, str] = {}
+    if root_id:
+        for alias in aliases:
+            person_ids[alias.casefold()] = root_id
+
+    def resolve_person(row: Dict[str, Any], fallback_to_root: bool = True) -> Optional[str]:
+        name = _decl_person_name(row)
+        if not name:
+            return root_id if fallback_to_root else None
+        known = person_ids.get(name.casefold())
+        if known:
+            return known
+        person_id = _graph_entity(
+            entities,
+            name=name,
+            entity_type="Person",
+            identity=f"{name}|{_birth_year(row.get('BirthDate'))}",
+            birthYear=_birth_year(row.get("BirthDate")),
+            description="Person named in a public asset declaration",
+            entityRole="Associated person",
+        )
+        if person_id:
+            person_ids[name.casefold()] = person_id
+        return person_id
+
+    declaration_source_id = _graph_source(
+        sources,
+        name="Georgian Asset Declarations",
+        url="https://declaration.acb.gov.ge/",
+        source_type="Official registry",
+    )
+    declarations = payload.get("declarations") if isinstance(payload, dict) else []
+    for declaration in declarations or []:
+        if not isinstance(declaration, dict):
+            continue
+        raw = declaration.get("raw") if isinstance(declaration.get("raw"), dict) else {}
+        declaration_id = str(declaration.get("id") or raw.get("Id") or "declaration")
+        source_url = declaration.get("sourceUrl") or _declaration_source_url(raw)
+        submitted = declaration.get("declarationSubmitDate") or raw.get("DeclarationSubmitDate")
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=declaration_source_id,
+            source_name="Georgian Asset Declarations",
+            title=f"Asset declaration: {declaration.get('name') or subject_name}",
+            source_url=source_url,
+            evidence_type="Official declaration",
+            published_at=submitted,
+            note="Public declaration record; each relationship remains traceable to this filing.",
+            identity=declaration_id,
+            report_id=report_id,
+        )
+
+        for family_row in _as_list(raw.get("FamilyMembers")):
+            if not isinstance(family_row, dict):
+                continue
+            family_name = _decl_person_name(family_row, "FirstName", "LastName")
+            family_id = _graph_entity(
+                entities,
+                name=family_name,
+                entity_type="Person",
+                identity=f"{family_name}|{_birth_year(family_row.get('BirthDate'))}",
+                birthYear=_birth_year(family_row.get("BirthDate")),
+                entityRole="Relative",
+                description="Relative named in a public asset declaration",
+            )
+            if family_id and family_name:
+                person_ids[family_name.casefold()] = family_id
+            relation = _decl_pick(
+                family_row, "Relationship", "RelationName", "Relation"
+            ) or "Relative"
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=root_id,
+                to_id=family_id,
+                relationship_type=f"Family: {relation}",
+                evidence_ids=[evidence_id],
+                confidence=0.98,
+                verification_status="source-stated",
+                details="Relationship stated in an official asset declaration.",
+            )
+
+        for property_row in _as_list(raw.get("Properties")) + _as_list(raw.get("MovableProperties")):
+            if not isinstance(property_row, dict):
+                continue
+            owner_id = resolve_person(property_row)
+            asset_type = _decl_pick(property_row, "PropertyType", "Type", "Kind") or "Declared asset"
+            address = _decl_pick(property_row, "Address", "Location", "Details", "Description")
+            acquired = _decl_pick(property_row, "PurchaseDate", "RegisterDate", "PurchaseYear")
+            asset_name = " · ".join(value for value in [asset_type, address] if value)[:180]
+            asset_id = _graph_entity(
+                entities,
+                name=asset_name,
+                entity_type="Asset",
+                identity=f"{owner_id}|{asset_type}|{address}|{acquired}",
+                description="Asset disclosed in an official declaration",
+                entityRole="Declared asset",
+                address=address,
+                acquiredAt=acquired,
+            )
+            details = "; ".join(
+                value
+                for value in [
+                    f"share {_decl_pick(property_row, 'Share', 'Part')}" if _decl_pick(property_row, "Share", "Part") else "",
+                    f"area {_decl_pick(property_row, 'Area', 'Square', 'LandArea')}" if _decl_pick(property_row, "Area", "Square", "LandArea") else "",
+                    _decl_money(property_row, "Price", "Amount"),
+                ]
+                if value
+            )
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=owner_id,
+                to_id=asset_id,
+                relationship_type="Declared ownership",
+                evidence_ids=[evidence_id],
+                confidence=0.98,
+                verification_status="source-stated",
+                details=details,
+            )
+            address_id = _graph_entity(
+                entities,
+                name=address,
+                entity_type="Address",
+                identity=address,
+                entityRole="Declared address",
+                description="Address stated in an official asset declaration",
+            )
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=asset_id,
+                to_id=address_id,
+                relationship_type="Located at",
+                evidence_ids=[evidence_id],
+                confidence=0.96,
+                verification_status="source-stated",
+            )
+
+        for job_row in _as_list(raw.get("Jobs")):
+            if not isinstance(job_row, dict):
+                continue
+            owner_id = resolve_person(job_row)
+            organization = _decl_pick(job_row, "Organisation", "Organization")
+            organization_id = _graph_entity(
+                entities,
+                name=organization,
+                entity_type="Organization",
+                identity=organization,
+                entityRole="Institution or employer",
+                description="Organization named in a declared employment record",
+            )
+            role = _decl_pick(job_row, "Position") or "Position"
+            period = " – ".join(
+                value for value in [_decl_pick(job_row, "StartDate"), _decl_pick(job_row, "EndDate")] if value
+            )
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=owner_id,
+                to_id=organization_id,
+                relationship_type=f"Held position: {role}",
+                evidence_ids=[evidence_id],
+                confidence=0.98,
+                verification_status="source-stated",
+                details="; ".join(value for value in [period, _decl_money(job_row, "Amount")] if value),
+            )
+
+        enterprise_rows = (
+            _as_list(raw.get("Enterprice"))
+            + _as_list(raw.get("Enterprise"))
+            + _as_list(raw.get("LinkedEnterprice"))
+            + _as_list(raw.get("LinkedEnterprise"))
+        )
+        for enterprise_row in enterprise_rows:
+            if not isinstance(enterprise_row, dict):
+                continue
+            owner_id = resolve_person(enterprise_row)
+            company_name = _decl_pick(enterprise_row, "Name", "EnterpriseName", "Organisation", "Organization")
+            company_id = _graph_entity(
+                entities,
+                name=company_name,
+                entity_type="Organization",
+                identity=company_name,
+                entityRole="Legal entity",
+                description="Business interest named in an official declaration",
+            )
+            role = _decl_pick(enterprise_row, "PartnershipFormName", "Role", "Position")
+            share = _decl_pick(enterprise_row, "Share", "SharePct")
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=owner_id,
+                to_id=company_id,
+                relationship_type="Declared business interest",
+                evidence_ids=[evidence_id],
+                confidence=0.96,
+                verification_status="source-stated",
+                details="; ".join(value for value in [role, f"share {share}" if share else ""] if value),
+            )
+
+        for contract_row in _as_list(raw.get("Contracts")):
+            if not isinstance(contract_row, dict):
+                continue
+            owner_id = resolve_person(contract_row)
+            subject = _decl_pick(contract_row, "Subject", "ContractType") or "Declared contract"
+            agency = _decl_pick(contract_row, "Agency", "Organisation", "Organization")
+            start_date = _decl_pick(contract_row, "StartDate")
+            contract_id = _graph_entity(
+                entities,
+                name=subject[:180],
+                entity_type="Contract",
+                identity=f"{owner_id}|{subject}|{agency}|{start_date}",
+                entityRole="Declared agreement",
+                description="Contract disclosed in an official declaration",
+            )
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=owner_id,
+                to_id=contract_id,
+                relationship_type="Party to declared contract",
+                evidence_ids=[evidence_id],
+                confidence=0.96,
+                verification_status="source-stated",
+                details=_decl_money(contract_row, "Amount", "Income"),
+            )
+            agency_id = _graph_entity(
+                entities,
+                name=agency,
+                entity_type="Organization",
+                identity=agency,
+                entityRole="Contracting agency",
+                description="Agency named in a declared contract",
+            )
+            _graph_link(
+                links,
+                case_id=case_id,
+                from_id=contract_id,
+                to_id=agency_id,
+                relationship_type="Contract counterparty",
+                evidence_ids=[evidence_id],
+                confidence=0.9,
+                verification_status="source-stated",
+            )
+
+    def add_article(item: Dict[str, Any], fallback_source: str) -> None:
+        title = _clean_decl_text(item.get("title"))
+        url = _clean_decl_text(item.get("url"))
+        if not title and not url:
+            return
+        source_name = _clean_decl_text(item.get("source")) or fallback_source
+        source_id = _graph_source(sources, name=source_name, url=url, source_type="Media")
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=source_id,
+            source_name=source_name,
+            title=title or url,
+            source_url=url,
+            evidence_type="Media article",
+            published_at=item.get("publishedAt") or item.get("published_at"),
+            note=item.get("snippet") or "Article captured during subject monitoring.",
+            identity=url or title,
+            report_id=report_id,
+        )
+        article_id = _graph_entity(
+            entities,
+            name=title or url,
+            entity_type="Article",
+            identity=url or title,
+            entityRole="Source document",
+            description=source_name,
+            sourceUrl=url,
+        )
+        _graph_link(
+            links,
+            case_id=case_id,
+            from_id=root_id,
+            to_id=article_id,
+            relationship_type="Mentioned in article",
+            evidence_ids=[evidence_id],
+            confidence=0.72,
+            verification_status="candidate-match",
+            details="Open the source and verify that the mention refers to the case subject.",
+        )
+
+    for article in (payload.get("news") or []):
+        if isinstance(article, dict):
+            add_article(article, "News source")
+    media_payload = payload.get("media") if isinstance(payload.get("media"), dict) else {}
+    for article in (media_payload.get("mentions") or []):
+        if isinstance(article, dict):
+            add_article(article, "Georgian media")
+
+    for screening in (payload.get("opensanctions") or []):
+        if not isinstance(screening, dict):
+            continue
+        source_id = _graph_source(
+            sources,
+            name="OpenSanctions",
+            url="https://www.opensanctions.org/",
+            source_type="Screening database",
+        )
+        title = screening.get("name") or screening.get("id") or "Screening result"
+        screening_url = screening.get("url") or ""
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=source_id,
+            source_name="OpenSanctions",
+            title=f"Candidate screening match: {title}",
+            source_url=screening_url,
+            evidence_type="Screening result",
+            note="Candidate match only; identity must be verified by an analyst.",
+            identity=screening.get("id") or screening_url or title,
+            report_id=report_id,
+        )
+        screening_id = _graph_entity(
+            entities,
+            name=title,
+            entity_type="Screening record",
+            identity=screening.get("id") or title,
+            entityRole="Candidate identity record",
+            description=", ".join(screening.get("topics") or screening.get("datasets") or []),
+            sourceUrl=screening_url,
+        )
+        score = _safe_float(screening.get("score"))
+        confidence = (score / 100.0 if score is not None and score > 1 else score) if score is not None else 0.5
+        _graph_link(
+            links,
+            case_id=case_id,
+            from_id=root_id,
+            to_id=screening_id,
+            relationship_type="Candidate screening match",
+            evidence_ids=[evidence_id],
+            confidence=confidence,
+            verification_status="candidate-match",
+            details="A screening hit is not a confirmed identity or finding of wrongdoing.",
+        )
+
+    for configured_source in payload.get("sources") or []:
+        _graph_source(sources, name=configured_source)
+
+    return {
+        "caseId": case_id,
+        "rootEntityId": root_id,
+        "reportId": report_id,
+        "entities": list(entities.values()),
+        "relationships": list(links.values()),
+        "sources": list(sources.values()),
+        "evidence": list(evidence.values()),
+    }
+
+
+def _persist_investigation_graph_bundle(bundle: Dict[str, object]) -> None:
+    driver = get_driver()
+    case_id = bundle.get("caseId")
+    entity_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    UNWIND $entities AS entity
+    MERGE (n:InvestigationEntity {entityId: entity.entityId})
+    ON CREATE SET n.createdAt = datetime()
+    SET n += entity, n.updatedAt = datetime()
+    SET n.canonicalEntityId = coalesce(n.canonicalEntityId, n.entityId)
+    MERGE (c)-[:HAS_INVESTIGATION_ENTITY]->(n)
+    WITH DISTINCT c
+    MATCH (root:InvestigationEntity {entityId: $rootEntityId})
+    MERGE (c)-[:INVESTIGATES]->(root)
+    """
+    source_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    UNWIND $sources AS source
+    MERGE (s:InvestigationDataSource {sourceId: source.sourceId})
+    ON CREATE SET s.createdAt = datetime()
+    SET s += source, s.updatedAt = datetime()
+    MERGE (c)-[:USES_INVESTIGATION_SOURCE]->(s)
+    """
+    evidence_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    UNWIND $evidence AS item
+    MATCH (s:InvestigationDataSource {sourceId: item.sourceId})
+    MERGE (e:InvestigationEvidence {evidenceId: item.evidenceId})
+    ON CREATE SET e.createdAt = datetime()
+    SET e += item, e.updatedAt = datetime()
+    MERGE (c)-[:USES_INVESTIGATION_EVIDENCE]->(e)
+    MERGE (e)-[:FROM_SOURCE]->(s)
+    """
+    relationship_query = """
+    UNWIND $relationships AS item
+    MATCH (sourceNode:InvestigationEntity {entityId: item.fromEntityId})
+    MATCH (targetNode:InvestigationEntity {entityId: item.toEntityId})
+    MERGE (sourceNode)-[link:INVESTIGATION_LINK {caseId: $caseId, relationshipId: item.relationshipId}]->(targetNode)
+    ON CREATE SET link.createdAt = datetime()
+    SET link.relationshipType = item.relationshipType,
+        link.schema = item.schema,
+        link.ftmSchema = coalesce(item.ftmSchema, link.ftmSchema),
+        link.confidence = item.confidence,
+        link.verificationStatus = item.verificationStatus,
+        link.details = item.details,
+        link.lastSeenAt = datetime(),
+        link.evidenceIds = reduce(
+          collected = [], evidenceId IN coalesce(link.evidenceIds, []) + coalesce(item.evidenceIds, []) |
+          CASE WHEN evidenceId IN collected THEN collected ELSE collected + [evidenceId] END
+        )
+    SET link += coalesce(item.properties, {})
+    """
+    params = {
+        "caseId": case_id,
+        "rootEntityId": bundle.get("rootEntityId"),
+        "entities": bundle.get("entities") or [],
+        "sources": bundle.get("sources") or [],
+        "evidence": bundle.get("evidence") or [],
+        "relationships": bundle.get("relationships") or [],
+    }
+    with _db_session(driver) as session:
+        _execute_write(session, entity_query, params)
+        if params["sources"]:
+            _execute_write(session, source_query, params)
+        if params["evidence"]:
+            _execute_write(session, evidence_query, params)
+        if params["relationships"]:
+            _execute_write(session, relationship_query, params)
+    persist_investigation_projection(bundle)
+
+
+def _load_investigation_graph(case_id: str) -> Dict[str, object]:
+    driver = get_driver()
+    case_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})
+    RETURN c.caseId AS caseId, c.subject AS subject
+    """
+    entity_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})-[:HAS_INVESTIGATION_ENTITY]->(n:InvestigationEntity)
+    RETURN n.entityId AS id, n.name AS label, n.entityType AS type,
+           coalesce(n.description, '') AS description,
+           coalesce(n.isRoot, false) AS isRoot,
+           properties(n) AS properties
+    ORDER BY n.isRoot DESC, n.entityType, n.name
+    """
+    relationship_query = """
+    MATCH (sourceNode:InvestigationEntity)-[link:INVESTIGATION_LINK {caseId: $caseId}]->(targetNode:InvestigationEntity)
+    RETURN link.relationshipId AS id,
+           sourceNode.entityId AS source,
+           targetNode.entityId AS target,
+           link.relationshipType AS label,
+           coalesce(link.schema, '') AS schema,
+           coalesce(link.confidence, 0.0) AS confidence,
+           coalesce(link.verificationStatus, 'unverified') AS verificationStatus,
+           coalesce(link.details, '') AS details,
+           coalesce(link.evidenceIds, []) AS evidenceIds,
+           properties(link) AS properties
+    ORDER BY link.relationshipType, sourceNode.name, targetNode.name
+    """
+    evidence_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})-[:USES_INVESTIGATION_EVIDENCE]->(e:InvestigationEvidence)
+    RETURN e.evidenceId AS evidenceId, e.sourceId AS sourceId, e.title AS title,
+           coalesce(e.sourceName, '') AS sourceName,
+           coalesce(e.sourceUrl, '') AS sourceUrl,
+           coalesce(e.evidenceType, '') AS evidenceType,
+           coalesce(e.publishedAt, '') AS publishedAt,
+           coalesce(e.note, '') AS note,
+           e.reportId AS reportId
+    ORDER BY e.publishedAt DESC, e.title
+    """
+    source_query = """
+    MATCH (c:DueDiligenceCase {caseId: $caseId})-[:USES_INVESTIGATION_SOURCE]->(s:InvestigationDataSource)
+    RETURN s.sourceId AS sourceId, s.name AS name,
+           coalesce(s.sourceType, '') AS sourceType,
+           coalesce(s.url, '') AS url
+    ORDER BY s.name
+    """
+    with _db_session(driver) as session:
+        case_records = _execute_read(session, case_query, {"caseId": case_id})
+        if not case_records:
+            raise HTTPException(status_code=404, detail="Case not found")
+        entity_records = _execute_read(session, entity_query, {"caseId": case_id})
+        relationship_records = _execute_read(session, relationship_query, {"caseId": case_id})
+        evidence_records = _execute_read(session, evidence_query, {"caseId": case_id})
+        source_records = _execute_read(session, source_query, {"caseId": case_id})
+    nodes = [record.data() for record in entity_records]
+    relationships = [record.data() for record in relationship_records]
+    evidence_rows = [record.data() for record in evidence_records]
+    sources = [record.data() for record in source_records]
+    return {
+        "caseId": case_id,
+        "subject": case_records[0].get("subject"),
+        "nodes": nodes,
+        "relationships": relationships,
+        "evidence": evidence_rows,
+        "sources": sources,
+        "stats": {
+            "entities": len(nodes),
+            "relationships": len(relationships),
+            "evidence": len(evidence_rows),
+            "sources": len(sources),
+            "candidateMatches": sum(
+                1 for row in relationships if row.get("verificationStatus") == "candidate-match"
+            ),
+        },
+    }
+
+
+def _ordered_unique(values: List[object]) -> List[str]:
+    output: List[str] = []
+    for value in values:
+        clean_value = str(value or "").strip()
+        if clean_value and clean_value not in output:
+            output.append(clean_value)
+    return output
+
+
+def _build_investigation_insights(graph: Dict[str, object]) -> Dict[str, object]:
+    case_id = str(graph.get("caseId") or "")
+    nodes = graph.get("nodes") or []
+    relationships = graph.get("relationships") or []
+    node_by_id = {str(row.get("id")): row for row in nodes}
+    root = next((row for row in nodes if row.get("isRoot")), None)
+    insights: List[Dict[str, object]] = []
+
+    def add_insight(
+        *,
+        lead_type: str,
+        title: str,
+        summary: str,
+        severity: str,
+        confidence: float,
+        node_ids: List[object],
+        relationship_ids: List[object],
+        evidence_ids: List[object],
+        recommended_next_steps: List[str],
+    ) -> None:
+        resolved_nodes = _ordered_unique(node_ids)
+        resolved_relationships = _ordered_unique(relationship_ids)
+        resolved_evidence = _ordered_unique(evidence_ids)
+        insight_id = _investigation_id(
+            "insight",
+            case_id,
+            lead_type,
+            ",".join(sorted(resolved_nodes)),
+            ",".join(sorted(resolved_relationships)),
+        )
+        insights.append(
+            {
+                "insightId": insight_id,
+                "leadType": lead_type,
+                "title": title,
+                "summary": summary,
+                "severity": severity,
+                "priority": {"high": 1, "medium": 2, "low": 3}.get(severity, 3),
+                "confidence": round(max(0.0, min(float(confidence), 1.0)), 3),
+                "status": "lead",
+                "verificationStatus": "requires-review",
+                "nodeIds": resolved_nodes,
+                "relationshipIds": resolved_relationships,
+                "evidenceIds": resolved_evidence,
+                "recommendedNextSteps": recommended_next_steps,
+            }
+        )
+
+    family_links = [
+        row for row in relationships if str(row.get("label") or "").startswith("Family:")
+    ]
+    for family_link in family_links:
+        relative_id = str(family_link.get("target") or "")
+        relative = node_by_id.get(relative_id)
+        if not relative:
+            continue
+        connected = [
+            row
+            for row in relationships
+            if row.get("source") == relative_id
+            and str(row.get("label") or "")
+            in {
+                "Declared ownership",
+                "Declared business interest",
+                "Party to declared contract",
+            }
+        ]
+        for connection in connected:
+            target = node_by_id.get(str(connection.get("target") or ""))
+            if not target:
+                continue
+            is_contract = connection.get("label") == "Party to declared contract"
+            lead_type = "relative_contract_path" if is_contract else "relative_asset_or_business"
+            add_insight(
+                lead_type=lead_type,
+                title=(
+                    f"Declared relative-to-contract path for {relative.get('label')}"
+                    if is_contract
+                    else f"Declared relative-to-{str(target.get('type') or 'entity').lower()} path"
+                ),
+                summary=(
+                    f"{relative.get('label')} is identified as {family_link.get('label')} and is also linked to "
+                    f"{target.get('label')} through {connection.get('label')}. This is a documented connection "
+                    "that requires contextual review; it is not evidence of wrongdoing by itself."
+                ),
+                severity="medium" if is_contract or target.get("type") == "Organization" else "low",
+                confidence=min(
+                    float(family_link.get("confidence") or 0),
+                    float(connection.get("confidence") or 0),
+                ),
+                node_ids=[
+                    root.get("id") if root else None,
+                    relative_id,
+                    target.get("id"),
+                ],
+                relationship_ids=[family_link.get("id"), connection.get("id")],
+                evidence_ids=(family_link.get("evidenceIds") or [])
+                + (connection.get("evidenceIds") or []),
+                recommended_next_steps=[
+                    "Open each cited declaration and verify the relationship and ownership dates.",
+                    "Compare the disclosed interest with procurement, company-registry, and beneficial-ownership records.",
+                ],
+            )
+
+    for person in [row for row in nodes if row.get("type") == "Person"]:
+        organization_links = [
+            row
+            for row in relationships
+            if row.get("source") == person.get("id")
+            and node_by_id.get(str(row.get("target") or ""), {}).get("type") == "Organization"
+            and (
+                str(row.get("label") or "").startswith("Held position:")
+                or row.get("label") == "Declared business interest"
+            )
+        ]
+        organization_ids = _ordered_unique([row.get("target") for row in organization_links])
+        if len(organization_ids) < 3:
+            continue
+        add_insight(
+            lead_type="multi_organization_role",
+            title=f"Multiple declared organization roles for {person.get('label')}",
+            summary=(
+                f"{person.get('label')} is linked to {len(organization_ids)} organizations through declared "
+                "positions or business interests. Review timing and role overlap before drawing conclusions."
+            ),
+            severity="medium",
+            confidence=min(float(row.get("confidence") or 0) for row in organization_links),
+            node_ids=[person.get("id")] + organization_ids,
+            relationship_ids=[row.get("id") for row in organization_links],
+            evidence_ids=[
+                evidence_id
+                for row in organization_links
+                for evidence_id in (row.get("evidenceIds") or [])
+            ],
+            recommended_next_steps=[
+                "Build a date-ordered role timeline and check for overlapping public and private interests.",
+                "Confirm legal-entity identifiers before merging same-name organizations.",
+            ],
+        )
+
+    for address in [row for row in nodes if row.get("type") == "Address"]:
+        address_links = [
+            row
+            for row in relationships
+            if row.get("target") == address.get("id") and row.get("label") == "Located at"
+        ]
+        asset_ids = _ordered_unique([row.get("source") for row in address_links])
+        if len(asset_ids) < 2:
+            continue
+        add_insight(
+            lead_type="shared_address_hub",
+            title=f"Shared address hub: {address.get('label')}",
+            summary=(
+                f"{len(asset_ids)} declared assets resolve to the same normalized address. Shared addresses can be "
+                "legitimate; verify cadastral identifiers and ownership periods before treating this as a network link."
+            ),
+            severity="low",
+            confidence=min(float(row.get("confidence") or 0) for row in address_links),
+            node_ids=[address.get("id")] + asset_ids,
+            relationship_ids=[row.get("id") for row in address_links],
+            evidence_ids=[
+                evidence_id
+                for row in address_links
+                for evidence_id in (row.get("evidenceIds") or [])
+            ],
+            recommended_next_steps=[
+                "Verify the address with cadastral or company-registry identifiers.",
+                "Compare acquisition and registration dates to determine whether the overlap is meaningful.",
+            ],
+        )
+
+    for relationship in [
+        row
+        for row in relationships
+        if row.get("verificationStatus") == "candidate-match"
+        and row.get("label") == "Candidate screening match"
+    ]:
+        candidate = node_by_id.get(str(relationship.get("target") or ""), {})
+        add_insight(
+            lead_type="candidate_screening_match",
+            title=f"Unresolved screening candidate: {candidate.get('label') or 'record'}",
+            summary=(
+                "A screening source returned a possible name match. This is an identity-resolution task, not a "
+                "confirmed match or an adverse finding."
+            ),
+            severity="medium",
+            confidence=float(relationship.get("confidence") or 0),
+            node_ids=[relationship.get("source"), relationship.get("target")],
+            relationship_ids=[relationship.get("id")],
+            evidence_ids=relationship.get("evidenceIds") or [],
+            recommended_next_steps=[
+                "Compare birth date, jurisdiction, identifiers, aliases, and role history with the subject.",
+                "Mark the relationship verified or rejected only after identity resolution.",
+            ],
+        )
+
+    insights.sort(
+        key=lambda row: (
+            int(row.get("priority") or 3),
+            -float(row.get("confidence") or 0),
+            str(row.get("title") or ""),
+        )
+    )
+    return {
+        "caseId": case_id,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "total": len(insights),
+            "high": sum(1 for row in insights if row.get("severity") == "high"),
+            "medium": sum(1 for row in insights if row.get("severity") == "medium"),
+            "low": sum(1 for row in insights if row.get("severity") == "low"),
+            "requiresReview": sum(
+                1 for row in insights if row.get("verificationStatus") == "requires-review"
+            ),
+        },
+        "insights": insights,
+    }
+
+
 def _get_pdf_font_name() -> str:
     candidates = [
         (os.environ.get("DD_PDF_FONT_NAME") or "DDReportFont", os.environ.get("DD_PDF_FONT_PATH") or ""),
@@ -2866,6 +3950,15 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         sources=sources,
         case_id=case_id,
     )
+    if report_id and case_id:
+        try:
+            graph_case, graph_report = _case_and_report_for_graph(case_id, report_id)
+            graph_bundle = _build_investigation_graph_bundle(graph_case, graph_report)
+            _persist_investigation_graph_bundle(graph_bundle)
+        except Exception as exc:
+            warnings.append(
+                f"Report saved, but investigation graph normalization is pending: {exc}"
+            )
 
     return {
         "subject": subject,
@@ -3387,6 +4480,778 @@ def create_due_diligence_decision(case_id: str, payload: DueDiligenceDecisionCre
     if not records:
         raise HTTPException(status_code=404, detail="Case not found")
     return records[0].data()
+
+
+@router.get("/graph/schema")
+def get_due_diligence_investigation_graph_schema():
+    return {
+        "version": "1.0",
+        "principles": [
+            "Model observable connections separately from analyst conclusions.",
+            "Attach provenance, confidence, and verification status to every relationship.",
+            "Treat screening results and generated patterns as leads until an analyst verifies identity and context.",
+            "Keep node types extensible so new registries can add addresses, jurisdictions, intermediaries, and documents.",
+        ],
+        "nodeTypes": [
+            {"type": "Person", "role": "Public official, relative, officer, or associated person", "description": "A natural person named by a source."},
+            {"type": "Organization", "role": "Legal entity, institution, employer, or agency", "description": "A company, public body, trust, fund, or other organization."},
+            {"type": "Intermediary", "role": "Agent or professional facilitator", "description": "A person or organization that creates, administers, or connects legal entities."},
+            {"type": "Asset", "role": "Declared or discovered asset", "description": "Real property, movable property, security, or other asset."},
+            {"type": "Contract", "role": "Agreement or procurement record", "description": "A contract linked to a person, organization, or public agency."},
+            {"type": "Address", "role": "Declared or registered address", "description": "A normalized location that can reveal shared-registration patterns."},
+            {"type": "Jurisdiction", "role": "Country or legal jurisdiction", "description": "The jurisdiction attached to an entity, address, or filing."},
+            {"type": "Article", "role": "Source document", "description": "A media or public-source document captured as evidence."},
+            {"type": "Screening record", "role": "Candidate identity record", "description": "A possible screening match that still requires identity resolution."},
+        ],
+        "relationshipTypes": [
+            {"label": "Family: {relationship}", "description": "A family relationship stated by a cited source."},
+            {"label": "Declared ownership", "description": "A person is stated as an owner of an asset."},
+            {"label": "Declared business interest", "description": "A person is stated as having a role or share in a legal entity."},
+            {"label": "Held position: {role}", "description": "A person held a cited role in an organization."},
+            {"label": "Party to declared contract", "description": "A person or organization is linked to a declared contract."},
+            {"label": "Contract counterparty", "description": "An agency or organization is the cited counterparty to a contract."},
+            {"label": "Located at", "description": "An asset or legal entity resolves to a cited address."},
+            {"label": "Mentioned in article", "description": "A source search produced an article candidate that must be opened and verified."},
+            {"label": "Candidate screening match", "description": "A screening result may refer to the subject; identity is not confirmed."},
+        ],
+        "verificationStatuses": [
+            {"value": "source-stated", "label": "Source stated", "meaning": "The cited source explicitly states the connection; context still requires review."},
+            {"value": "candidate-match", "label": "Candidate match", "meaning": "Name or source matching produced a lead that is not identity-resolved."},
+            {"value": "analyst-added", "label": "Analyst added", "meaning": "An analyst recorded the connection and supplied a source and evidence note."},
+            {"value": "verified", "label": "Verified", "meaning": "An analyst completed identity and source verification."},
+            {"value": "unverified", "label": "Unverified", "meaning": "The connection has not yet been checked."},
+        ],
+        "leadTypes": [
+            {"value": "relative_asset_or_business", "label": "Relative asset or business path", "description": "A declared relative is connected to a disclosed asset or legal entity."},
+            {"value": "relative_contract_path", "label": "Relative contract path", "description": "A declared relative is connected to a disclosed contract."},
+            {"value": "multi_organization_role", "label": "Multiple organization roles", "description": "One person is linked to at least three organizations."},
+            {"value": "shared_address_hub", "label": "Shared address hub", "description": "At least two assets or entities resolve to the same normalized address."},
+            {"value": "candidate_screening_match", "label": "Candidate screening match", "description": "A screening record still requires identity resolution."},
+        ],
+    }
+
+
+@router.get("/cases/{case_id}/graph")
+def get_due_diligence_investigation_graph(case_id: str):
+    return _load_investigation_graph(case_id)
+
+
+@router.get("/cases/{case_id}/graph/insights")
+def get_due_diligence_investigation_graph_insights(case_id: str):
+    return _build_investigation_insights(_load_investigation_graph(case_id))
+
+
+@router.post("/cases/{case_id}/graph/enrich")
+def enrich_due_diligence_investigation_graph(
+    case_id: str, payload: InvestigationGraphEnrichRequest
+):
+    case_row, report = _case_and_report_for_graph(case_id, payload.report_id)
+    if not report.get("reportId"):
+        raise HTTPException(
+            status_code=409,
+            detail="Run an investigation first so the graph has saved evidence to enrich from.",
+        )
+    bundle = _build_investigation_graph_bundle(case_row, report)
+    _persist_investigation_graph_bundle(bundle)
+    graph = _load_investigation_graph(case_id)
+    graph["enrichment"] = {
+        "reportId": report.get("reportId"),
+        "entitiesProcessed": len(bundle.get("entities") or []),
+        "relationshipsProcessed": len(bundle.get("relationships") or []),
+        "evidenceProcessed": len(bundle.get("evidence") or []),
+        "message": "Saved evidence was normalized into the investigation graph.",
+    }
+    return graph
+
+
+@router.post("/cases/{case_id}/graph/relationships")
+def add_due_diligence_investigation_relationship(
+    case_id: str, payload: InvestigationRelationshipCreate
+):
+    case_row, report = _case_and_report_for_graph(case_id)
+    base_bundle = _build_investigation_graph_bundle(
+        case_row, {"reportId": None, "payload": {}}
+    )
+    existing_graph = _load_investigation_graph(case_id)
+    existing_ids = {str(row.get("id")) for row in existing_graph.get("nodes") or []}
+    existing_ids.update(str(row.get("entityId")) for row in base_bundle.get("entities") or [])
+    from_id = payload.from_entity_id or base_bundle.get("rootEntityId")
+    if not from_id or str(from_id) not in existing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="fromEntityId must identify an entity already attached to this case.",
+        )
+
+    entities = {
+        str(row.get("entityId")): row for row in base_bundle.get("entities") or []
+    }
+    relationships: Dict[str, Dict[str, object]] = {}
+    sources: Dict[str, Dict[str, object]] = {}
+    evidence: Dict[str, Dict[str, object]] = {}
+    target_type = _clean_decl_text(payload.target_type)[:60] or "Person"
+    target_id = _graph_entity(
+        entities,
+        name=payload.target_name,
+        entity_type=target_type,
+        identity=f"manual|{target_type}|{payload.target_name}",
+        entityRole={
+            "Person": "Associated person",
+            "Organization": "Legal entity",
+            "Address": "Address",
+            "Jurisdiction": "Jurisdiction",
+            "Intermediary": "Intermediary",
+        }.get(target_type, target_type),
+        description="Entity added by an analyst with cited evidence",
+    )
+    source_id = _graph_source(
+        sources,
+        name=payload.source_name,
+        url=payload.source_url or "",
+        source_type="Analyst source",
+    )
+    evidence_id = _graph_evidence(
+        evidence,
+        source_id=source_id,
+        source_name=payload.source_name,
+        title=f"Analyst evidence: {payload.relationship_type}",
+        source_url=payload.source_url or "",
+        evidence_type="Analyst-submitted evidence",
+        note=payload.evidence_note,
+        identity=f"{payload.source_url}|{payload.evidence_note}",
+        report_id=report.get("reportId"),
+    )
+    allowed_statuses = {"unverified", "candidate-match", "source-stated", "analyst-added", "verified"}
+    verification_status = _clean_decl_text(payload.verification_status).casefold()
+    if verification_status not in allowed_statuses:
+        verification_status = "analyst-added"
+    _graph_link(
+        relationships,
+        case_id=case_id,
+        from_id=str(from_id),
+        to_id=target_id,
+        relationship_type=payload.relationship_type[:100],
+        evidence_ids=[evidence_id],
+        confidence=payload.confidence,
+        verification_status=verification_status,
+        details=payload.evidence_note,
+    )
+    bundle = {
+        "caseId": case_id,
+        "rootEntityId": base_bundle.get("rootEntityId"),
+        "entities": list(entities.values()),
+        "relationships": list(relationships.values()),
+        "sources": list(sources.values()),
+        "evidence": list(evidence.values()),
+    }
+    _persist_investigation_graph_bundle(bundle)
+    graph = _load_investigation_graph(case_id)
+    graph["enrichment"] = {
+        "message": "Documented relationship added with linked evidence.",
+        "relationshipId": next(iter(relationships), None),
+        "evidenceId": evidence_id,
+    }
+    return graph
+
+
+@router.post("/cases/{case_id}/graph/import")
+def import_due_diligence_investigation_graph(
+    case_id: str, payload: InvestigationGraphImportRequest
+):
+    case_row, _ = _case_and_report_for_graph(case_id)
+    base_bundle = _build_investigation_graph_bundle(
+        case_row, {"reportId": None, "payload": {}}
+    )
+    existing_graph = _load_investigation_graph(case_id)
+    attached_entity_ids = {
+        str(row.get("id")) for row in existing_graph.get("nodes") or [] if row.get("id")
+    }
+    attached_entity_ids.update(
+        str(row.get("entityId"))
+        for row in base_bundle.get("entities") or []
+        if row.get("entityId")
+    )
+
+    external_ids = [row.external_id.strip() for row in payload.entities]
+    duplicate_external_ids = sorted(
+        {external_id for external_id in external_ids if external_ids.count(external_id) > 1}
+    )
+    if duplicate_external_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "externalId values must be unique within an import request. Duplicates: "
+                + ", ".join(duplicate_external_ids[:10])
+            ),
+        )
+
+    entities = {
+        str(row.get("entityId")): row for row in base_bundle.get("entities") or []
+    }
+    relationships: Dict[str, Dict[str, object]] = {}
+    sources: Dict[str, Dict[str, object]] = {}
+    evidence: Dict[str, Dict[str, object]] = {}
+    source_id = _graph_source(
+        sources,
+        name=payload.source.name,
+        url=payload.source.url or "",
+        source_type=payload.source.source_type or "Imported dataset",
+        publisher=payload.source.publisher,
+        license=payload.source.license,
+        jurisdiction=payload.source.jurisdiction,
+        description=payload.source.description,
+        ingestionMode=payload.source.ingestion_mode,
+    )
+    entity_id_by_external: Dict[str, str] = {}
+    for imported in payload.entities:
+        external_id = imported.external_id.strip()
+        if imported.existing_entity_id:
+            existing_entity_id = imported.existing_entity_id.strip()
+            if existing_entity_id not in attached_entity_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"existingEntityId for {external_id} must identify an entity already attached to this case."
+                    ),
+                )
+            entity_id_by_external[external_id] = existing_entity_id
+            continue
+        custom_properties = _safe_investigation_properties(imported.properties)
+        entity_id = _graph_entity(
+            entities,
+            name=imported.name,
+            entity_type=_clean_decl_text(imported.entity_type)[:60],
+            identity=f"{source_id}|{external_id}",
+            entityRole=_clean_decl_text(imported.entity_role)[:100],
+            description=_clean_decl_text(imported.description)[:1000],
+            sourceId=source_id,
+            sourceExternalId=external_id,
+            **custom_properties,
+        )
+        if entity_id:
+            entity_id_by_external[external_id] = entity_id
+
+    allowed_statuses = {
+        "unverified",
+        "candidate-match",
+        "source-stated",
+        "analyst-added",
+        "verified",
+    }
+    for imported_link in payload.relationships:
+        from_external_id = imported_link.from_external_id.strip()
+        to_external_id = imported_link.to_external_id.strip()
+        from_id = entity_id_by_external.get(from_external_id)
+        to_id = entity_id_by_external.get(to_external_id)
+        if not from_id or not to_id:
+            missing = [
+                external_id
+                for external_id, resolved in [
+                    (from_external_id, from_id),
+                    (to_external_id, to_id),
+                ]
+                if not resolved
+            ]
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Every relationship endpoint must resolve to an entity declared in this import request. "
+                    f"Unresolved externalId values: {', '.join(missing)}"
+                ),
+            )
+        verification_status = _clean_decl_text(
+            imported_link.verification_status
+        ).casefold()
+        if verification_status not in allowed_statuses:
+            verification_status = "source-stated"
+        evidence_row = imported_link.evidence
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=source_id,
+            source_name=payload.source.name,
+            title=evidence_row.title,
+            source_url=evidence_row.source_url or payload.source.url or "",
+            evidence_type="Imported source record",
+            published_at=evidence_row.published_at,
+            note=evidence_row.note,
+            identity=(
+                f"{from_external_id}|{to_external_id}|{imported_link.relationship_type}|"
+                f"{evidence_row.source_url}|{evidence_row.title}|{evidence_row.note}"
+            ),
+        )
+        _graph_link(
+            relationships,
+            case_id=case_id,
+            from_id=from_id,
+            to_id=to_id,
+            relationship_type=imported_link.relationship_type[:100],
+            evidence_ids=[evidence_id],
+            confidence=imported_link.confidence,
+            verification_status=verification_status,
+            details=imported_link.details or evidence_row.note,
+            properties=imported_link.properties,
+        )
+
+    bundle = {
+        "caseId": case_id,
+        "rootEntityId": base_bundle.get("rootEntityId"),
+        "entities": list(entities.values()),
+        "relationships": list(relationships.values()),
+        "sources": list(sources.values()),
+        "evidence": list(evidence.values()),
+    }
+    _persist_investigation_graph_bundle(bundle)
+    import_run_id = _investigation_id(
+        "import-run", case_id, source_id, datetime.now(timezone.utc).isoformat()
+    )
+    import_run_query = """
+    MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    MATCH (source:InvestigationDataSource {sourceId: $sourceId})
+    CREATE (run:InvestigationImportRun {
+      runId: $runId, caseId: $caseId, sourceId: $sourceId,
+      status: 'completed', entityCount: $entityCount,
+      relationshipCount: $relationshipCount, evidenceCount: $evidenceCount,
+      errorCount: 0, startedAt: datetime(), completedAt: datetime()
+    })
+    MERGE (caseNode)-[:HAS_IMPORT_RUN]->(run)
+    MERGE (source)-[:HAS_IMPORT_RUN]->(run)
+    RETURN run.runId AS runId
+    """
+    with _db_session(get_driver()) as session:
+        _execute_write(
+            session,
+            import_run_query,
+            {
+                "caseId": case_id,
+                "sourceId": source_id,
+                "runId": import_run_id,
+                "entityCount": len(payload.entities),
+                "relationshipCount": len(payload.relationships),
+                "evidenceCount": len(evidence),
+            },
+        )
+    graph = _load_investigation_graph(case_id)
+    graph["importResult"] = {
+        "runId": import_run_id,
+        "sourceId": source_id,
+        "entitiesProcessed": len(payload.entities),
+        "relationshipsProcessed": len(payload.relationships),
+        "evidenceProcessed": len(evidence),
+        "message": "Source-scoped entities and evidence-linked relationships were imported.",
+    }
+    return graph
+
+
+def _ftm_values(properties: Dict[str, List[str]], *names: str) -> List[str]:
+    values: List[str] = []
+    for name in names:
+        for value in properties.get(name) or []:
+            clean = str(value or "").strip()
+            if clean and clean not in values:
+                values.append(clean)
+    return values
+
+
+def _ftm_caption(schema_name: str, entity_id: str, properties: Dict[str, List[str]]) -> str:
+    names = _ftm_values(
+        properties,
+        "name",
+        "title",
+        "caption",
+        "legalName",
+        "number",
+        "registrationNumber",
+    )
+    return names[0] if names else f"{schema_name} {entity_id}"
+
+
+def _ftm_edge_details(schema_name: str, properties: Dict[str, List[str]]) -> str:
+    parts: List[str] = []
+    for key in [
+        "role",
+        "title",
+        "summary",
+        "purpose",
+        "amount",
+        "currency",
+        "startDate",
+        "endDate",
+        "date",
+    ]:
+        values = _ftm_values(properties, key)
+        if values:
+            parts.append(f"{key}: {', '.join(values[:3])}")
+    return "; ".join(parts) or f"Imported FollowTheMoney {schema_name} relationship."
+
+
+@router.post("/cases/{case_id}/graph/import/ftm")
+def import_followthemoney_investigation_graph(
+    case_id: str, payload: FollowTheMoneyGraphImportRequest
+):
+    """Import native FollowTheMoney entities without auto-merging identities.
+
+    FtM relationship/interstitial entities become graph relationships, while
+    their own stable ID and literal properties remain statement subjects.
+    """
+    case_row, _ = _case_and_report_for_graph(case_id)
+    base_bundle = _build_investigation_graph_bundle(
+        case_row, {"reportId": None, "payload": {}}
+    )
+    existing_graph = _load_investigation_graph(case_id)
+    existing_nodes = {
+        str(row.get("id")): row
+        for row in existing_graph.get("nodes") or []
+        if row.get("id")
+    }
+    attached_entity_ids = set(existing_nodes)
+    attached_entity_ids.update(
+        str(row.get("entityId"))
+        for row in base_bundle.get("entities") or []
+        if row.get("entityId")
+    )
+
+    external_ids = [entity.id.strip() for entity in payload.entities]
+    duplicate_external_ids = sorted(
+        {external_id for external_id in external_ids if external_ids.count(external_id) > 1}
+    )
+    if duplicate_external_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "FollowTheMoney entity id values must be unique within an import request. Duplicates: "
+                + ", ".join(duplicate_external_ids[:10])
+            ),
+        )
+
+    validated: List[Tuple[FollowTheMoneyImportEntity, Dict[str, object], Dict[str, object]]] = []
+    warnings: List[str] = []
+    for entity in payload.entities:
+        raw = {
+            "id": entity.id,
+            "schema": entity.schema_name,
+            "properties": entity.properties,
+            "datasets": entity.datasets or [payload.dataset.id],
+            "referents": entity.referents,
+            "firstSeen": entity.first_seen,
+            "lastSeen": entity.last_seen,
+            "lastChange": entity.last_change,
+        }
+        try:
+            normalized, entity_warnings = validate_ftm_entity(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        schema_meta = ftm_schema_metadata(str(normalized.get("schema") or ""))
+        if schema_meta is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unsupported FollowTheMoney schema: {normalized.get('schema')}",
+            )
+        validated.append((entity, normalized, schema_meta))
+        warnings.extend(entity_warnings)
+
+    entities = {
+        str(row.get("entityId")): row for row in base_bundle.get("entities") or []
+    }
+    relationships: Dict[str, Dict[str, object]] = {}
+    evidence: Dict[str, Dict[str, object]] = {}
+    source_id = _investigation_id(
+        "source", payload.dataset.id.strip(), payload.dataset.name.strip()
+    )
+    sources: Dict[str, Dict[str, object]] = {
+        source_id: {
+            "sourceId": source_id,
+            "datasetId": payload.dataset.id.strip(),
+            "name": payload.dataset.name.strip(),
+            "sourceType": "FollowTheMoney dataset",
+            "url": _clean_decl_text(payload.dataset.url),
+            "publisher": _clean_decl_text(payload.dataset.publisher),
+            "license": _clean_decl_text(payload.dataset.license),
+            "jurisdiction": _clean_decl_text(payload.dataset.jurisdiction),
+            "description": _clean_decl_text(payload.dataset.description),
+            "ingestionMode": "followthemoney-json",
+            "format": "FollowTheMoney",
+        }
+    }
+
+    entity_id_by_external: Dict[str, str] = {}
+    evidence_id_by_external: Dict[str, str] = {}
+    node_count = 0
+    edge_count = 0
+
+    for input_entity, normalized, schema_meta in validated:
+        if schema_meta.get("edge"):
+            continue
+        external_id = str(normalized.get("id") or "")
+        schema_name = str(normalized.get("schema") or "Thing")
+        properties = normalized.get("properties") or {}
+        assert isinstance(properties, dict)
+        caption = _ftm_caption(schema_name, external_id, properties)
+        source_urls = _ftm_values(properties, "sourceUrl", "url", "website")
+        published = _ftm_values(
+            properties, "publishedAt", "date", "modifiedAt", "retrievedAt"
+        )
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=source_id,
+            source_name=payload.dataset.name,
+            title=f"{schema_name}: {caption}",
+            source_url=source_urls[0] if source_urls else payload.dataset.url,
+            evidence_type="FollowTheMoney source entity",
+            published_at=published[0] if published else input_entity.last_seen,
+            note=(
+                f"Imported FollowTheMoney {schema_name} entity {external_id} "
+                f"from dataset {payload.dataset.id}."
+            ),
+            identity=f"{payload.dataset.id}|{external_id}",
+        )
+        evidence_id_by_external[external_id] = evidence_id
+
+        if input_entity.existing_entity_id:
+            entity_id = input_entity.existing_entity_id.strip()
+            if entity_id not in attached_entity_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"existingEntityId for {external_id} must identify an entity already attached to this case."
+                    ),
+                )
+            existing = existing_nodes.get(entity_id) or {}
+            existing_properties = existing.get("properties") or {}
+            entities[entity_id] = {
+                "entityId": entity_id,
+                "name": existing.get("label") or existing_properties.get("name") or caption,
+                "entityType": existing.get("type") or existing_properties.get("entityType") or schema_name,
+            }
+        else:
+            entity_id = _graph_entity(
+                entities,
+                name=caption,
+                entity_type=schema_name,
+                identity=f"{source_id}|{external_id}",
+            )
+            if not entity_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"FollowTheMoney entity {external_id} has no usable caption",
+                )
+        entity_id_by_external[external_id] = entity_id
+        row = entities[entity_id]
+        names = _ftm_values(properties, "name", "alias", "weakAlias", "previousName")
+        identifiers: List[str] = []
+        for prop_name, prop_values in properties.items():
+            if infer_ftm_property_type(str(prop_name)) == "identifier":
+                identifiers.extend(str(value) for value in prop_values)
+        birth_dates = _ftm_values(properties, "birthDate")
+        row.update(
+            {
+                "sourceId": source_id,
+                "sourceExternalId": external_id,
+                "ftmSchema": schema_name,
+                "ftmDatasets": normalized.get("datasets") or [payload.dataset.id],
+                "ftmReferents": normalized.get("referents") or [],
+                "ftmPropertiesJson": json.dumps(
+                    properties, ensure_ascii=False, sort_keys=True
+                ),
+                "evidenceIds": _ordered_unique(
+                    list(row.get("evidenceIds") or []) + [evidence_id]
+                ),
+                "firstSeen": normalized.get("firstSeen") or "",
+                "lastSeen": normalized.get("lastSeen") or "",
+                "lastChange": normalized.get("lastChange") or "",
+            }
+        )
+        if names:
+            row["aliases"] = _ordered_unique(
+                list(row.get("aliases") or []) + [name for name in names if name != caption]
+            )
+        addresses = _ftm_values(properties, "address", "registeredAddress")
+        if addresses:
+            row["address"] = addresses[0]
+        jurisdictions = _ftm_values(
+            properties, "jurisdiction", "country", "nationality"
+        )
+        if jurisdictions:
+            row["jurisdiction"] = jurisdictions
+        if identifiers:
+            row["identifiers"] = _ordered_unique(identifiers)
+        if birth_dates:
+            row["birthYear"] = birth_dates[0][:4]
+        roles = _ftm_values(properties, "role", "position", "topics")
+        if roles:
+            row["entityRole"] = ", ".join(roles[:5])
+        descriptions = _ftm_values(properties, "summary", "notes", "description")
+        if descriptions:
+            row["description"] = descriptions[0]
+        node_count += 1
+
+    for input_entity, normalized, schema_meta in validated:
+        if not schema_meta.get("edge"):
+            continue
+        external_id = str(normalized.get("id") or "")
+        schema_name = str(normalized.get("schema") or "")
+        properties = normalized.get("properties") or {}
+        assert isinstance(properties, dict)
+        source_prop = str(schema_meta.get("sourceProp") or "")
+        target_prop = str(schema_meta.get("targetProp") or "")
+        source_external_ids = _ftm_values(properties, source_prop)
+        target_external_ids = _ftm_values(properties, target_prop)
+        if not source_external_ids or not target_external_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"FollowTheMoney edge {external_id} ({schema_name}) must define "
+                    f"{source_prop} and {target_prop}."
+                ),
+            )
+        unresolved = sorted(
+            {
+                ref
+                for ref in source_external_ids + target_external_ids
+                if ref not in entity_id_by_external
+            }
+        )
+        if unresolved:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Every FollowTheMoney relationship endpoint must resolve to an imported id "
+                    "or an entity with explicit existingEntityId. Unresolved ids: "
+                    + ", ".join(unresolved[:20])
+                ),
+            )
+        source_urls = _ftm_values(properties, "sourceUrl", "url")
+        published = _ftm_values(properties, "date", "startDate", "modifiedAt")
+        evidence_id = _graph_evidence(
+            evidence,
+            source_id=source_id,
+            source_name=payload.dataset.name,
+            title=f"{schema_name}: {external_id}",
+            source_url=source_urls[0] if source_urls else payload.dataset.url,
+            evidence_type="FollowTheMoney relationship entity",
+            published_at=published[0] if published else input_entity.last_seen,
+            note=(
+                f"Imported FollowTheMoney {schema_name} relationship entity {external_id} "
+                f"from dataset {payload.dataset.id}."
+            ),
+            identity=f"{payload.dataset.id}|{external_id}",
+        )
+        evidence_id_by_external[external_id] = evidence_id
+        edge_properties = {
+            key: values
+            for key, values in properties.items()
+            if key not in {source_prop, target_prop}
+        }
+        edge_properties["ftmEntityId"] = external_id
+        for source_external_id in source_external_ids:
+            for target_external_id in target_external_ids:
+                source_entity_id = entity_id_by_external[source_external_id]
+                target_entity_id = entity_id_by_external[target_external_id]
+                if source_entity_id == target_entity_id:
+                    warnings.append(
+                        f"{external_id}: ignored self-referencing {schema_name} relationship"
+                    )
+                    continue
+                relationship_id = _investigation_id(
+                    "link",
+                    case_id,
+                    source_entity_id,
+                    target_entity_id,
+                    schema_name,
+                    external_id,
+                )
+                _graph_link(
+                    relationships,
+                    case_id=case_id,
+                    from_id=source_entity_id,
+                    to_id=target_entity_id,
+                    relationship_type=schema_name,
+                    evidence_ids=[evidence_id],
+                    confidence=1.0,
+                    verification_status="source-stated",
+                    details=_ftm_edge_details(schema_name, properties),
+                    relationship_id=relationship_id,
+                    properties=edge_properties,
+                    ftm_schema=schema_name,
+                )
+                edge_count += 1
+
+    bundle = {
+        "caseId": case_id,
+        "rootEntityId": base_bundle.get("rootEntityId"),
+        "entities": list(entities.values()),
+        "relationships": list(relationships.values()),
+        "sources": list(sources.values()),
+        "evidence": list(evidence.values()),
+    }
+    _persist_investigation_graph_bundle(bundle)
+    import_run_id = _investigation_id(
+        "import-run",
+        case_id,
+        source_id,
+        datetime.now(timezone.utc).isoformat(),
+    )
+    import_run_query = """
+    MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    MATCH (source:InvestigationDataSource {sourceId: $sourceId})
+    CREATE (run:InvestigationImportRun {
+      runId: $runId, caseId: $caseId, sourceId: $sourceId,
+      format: 'FollowTheMoney', status: 'completed', entityCount: $entityCount,
+      relationshipCount: $relationshipCount, evidenceCount: $evidenceCount,
+      warningCount: $warningCount, warnings: $warnings, errorCount: 0,
+      startedAt: datetime(), completedAt: datetime()
+    })
+    MERGE (caseNode)-[:HAS_IMPORT_RUN]->(run)
+    MERGE (source)-[:HAS_IMPORT_RUN]->(run)
+    RETURN run.runId AS runId
+    """
+    with _db_session(get_driver()) as session:
+        _execute_write(
+            session,
+            import_run_query,
+            {
+                "caseId": case_id,
+                "sourceId": source_id,
+                "runId": import_run_id,
+                "entityCount": node_count,
+                "relationshipCount": edge_count,
+                "evidenceCount": len(evidence),
+                "warningCount": len(warnings),
+                "warnings": warnings[:100],
+            },
+        )
+    graph = _load_investigation_graph(case_id)
+    graph["importResult"] = {
+        "runId": import_run_id,
+        "sourceId": source_id,
+        "datasetId": payload.dataset.id,
+        "format": "FollowTheMoney",
+        "entitiesProcessed": node_count,
+        "relationshipsProcessed": edge_count,
+        "evidenceProcessed": len(evidence),
+        "warnings": warnings,
+        "message": (
+            "FollowTheMoney entities were validated, source-scoped, and imported with "
+            "statement-level provenance; no identities were auto-merged."
+        ),
+    }
+    return graph
+
+
+@router.get("/data-sources")
+def list_due_diligence_investigation_sources():
+    driver = get_driver()
+    query = """
+    MATCH (source:InvestigationDataSource)
+    OPTIONAL MATCH (caseNode:DueDiligenceCase)-[:USES_INVESTIGATION_SOURCE]->(source)
+    RETURN source.sourceId AS sourceId, source.name AS name,
+           coalesce(source.sourceType, '') AS sourceType,
+           coalesce(source.url, '') AS url,
+           count(DISTINCT caseNode) AS caseCount,
+           toString(source.updatedAt) AS updatedAt
+    ORDER BY source.name
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(session, query)
+    return [record.data() for record in records]
 
 
 @router.get("/reports", response_model=List[DueDiligenceReportListOut])

@@ -15,6 +15,7 @@ import json
 import os
 import re
 import time
+import uuid
 from typing import Any, List, Optional
 
 import requests
@@ -58,6 +59,7 @@ class ChatAskIn(BaseModel):
 
 
 class ChatAskOut(BaseModel):
+    answer_id: str = Field(alias="answerId")
     answer: str
     cypher: str
     rows: List[dict]
@@ -68,10 +70,28 @@ class ChatAskOut(BaseModel):
         populate_by_name = True
 
 
+class ChatFeedbackIn(BaseModel):
+    feedback: str
+
+
+class ChatFeedbackOut(BaseModel):
+    answer_id: str = Field(alias="answerId")
+    feedback: str
+
+    class Config:
+        populate_by_name = True
+
+
 def _execute_read(session, query: str, params: Optional[dict] = None):
     if hasattr(session, "execute_read"):
         return session.execute_read(lambda tx: list(tx.run(query, params or {})))
     return session.read_transaction(lambda tx: list(tx.run(query, params or {})))
+
+
+def _execute_write(session, query: str, params: Optional[dict] = None):
+    if hasattr(session, "execute_write"):
+        return session.execute_write(lambda tx: list(tx.run(query, params or {})))
+    return session.write_transaction(lambda tx: list(tx.run(query, params or {})))
 
 
 def _db_session(driver):
@@ -235,6 +255,45 @@ def _run_cypher(session, query: str) -> List[dict]:
     return rows
 
 
+def _load_correct_examples(session) -> List[dict]:
+    records = _execute_read(
+        session,
+        """
+        MATCH (a:DataChatAnswer {feedback: 'correct'})
+        RETURN a.question AS question, a.cypher AS cypher
+        ORDER BY a.feedbackAt DESC
+        LIMIT 8
+        """,
+    )
+    return [
+        {"question": row.get("question"), "cypher": row.get("cypher")}
+        for row in records
+        if row.get("question") and row.get("cypher")
+    ]
+
+
+def _save_answer(session, answer_id: str, question: str, answer: str, query: str, rows: List[dict], model: str):
+    _execute_write(
+        session,
+        """
+        CREATE (a:DataChatAnswer {
+          id: $id, question: $question, answer: $answer, cypher: $cypher,
+          rowsJson: $rows_json, rowCount: $row_count, model: $model,
+          createdAt: datetime()
+        })
+        """,
+        {
+            "id": answer_id,
+            "question": question,
+            "answer": answer,
+            "cypher": query,
+            "rows_json": json.dumps(rows, ensure_ascii=False),
+            "row_count": len(rows),
+            "model": model,
+        },
+    )
+
+
 CYPHER_SYSTEM_PROMPT = """You translate user questions into a single read-only Neo4j Cypher query.
 
 Rules:
@@ -273,12 +332,27 @@ def ask_database(payload: ChatAskIn):
     driver = get_driver()
     with _db_session(driver) as session:
         schema = _get_schema(session)
+        correct_examples = _load_correct_examples(session)
+
+        examples_text = ""
+        if correct_examples:
+            examples_text = (
+                "\n\nPreviously user-confirmed examples follow. Use them only when their "
+                "meaning and graph structure are relevant; never copy filters or values blindly:\n"
+                + "\n".join(
+                    f"Question: {item['question']}\nCypher: {item['cypher']}"
+                    for item in correct_examples
+                )
+            )
 
         cypher_messages = [
             {
                 "role": "system",
-                "content": CYPHER_SYSTEM_PROMPT.replace("{schema}", schema).replace(
-                    "{max_rows}", str(MAX_RESULT_ROWS)
+                "content": (
+                    CYPHER_SYSTEM_PROMPT.replace("{schema}", schema).replace(
+                        "{max_rows}", str(MAX_RESULT_ROWS)
+                    )
+                    + examples_text
                 ),
             },
             {"role": "user", "content": question},
@@ -331,10 +405,37 @@ def ask_database(payload: ChatAskIn):
     ]
     answer = _call_llm(answer_messages, api_url, api_key, model)
 
+    answer_id = str(uuid.uuid4())
+    with _db_session(driver) as session:
+        _save_answer(session, answer_id, question, answer, query, rows, model)
+
     return ChatAskOut(
+        answerId=answer_id,
         answer=answer,
         cypher=query,
         rows=rows,
         rowCount=len(rows),
         model=model,
     )
+
+
+@router.put("/answers/{answer_id}/feedback", response_model=ChatFeedbackOut)
+def set_answer_feedback(answer_id: str, payload: ChatFeedbackIn):
+    feedback = payload.feedback.strip().lower()
+    if feedback not in {"correct", "incorrect"}:
+        raise HTTPException(status_code=400, detail="Feedback must be correct or incorrect.")
+
+    driver = get_driver()
+    with _db_session(driver) as session:
+        records = _execute_write(
+            session,
+            """
+            MATCH (a:DataChatAnswer {id: $id})
+            SET a.feedback = $feedback, a.feedbackAt = datetime()
+            RETURN a.id AS id
+            """,
+            {"id": answer_id, "feedback": feedback},
+        )
+    if not records:
+        raise HTTPException(status_code=404, detail="Chat answer not found.")
+    return ChatFeedbackOut(answerId=answer_id, feedback=feedback)

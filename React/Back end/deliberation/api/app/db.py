@@ -160,6 +160,17 @@ def init_constraints():
         "CREATE CONSTRAINT participant_id IF NOT EXISTS FOR (p:Participant) REQUIRE p.id IS UNIQUE",
         "CREATE CONSTRAINT cluster_id IF NOT EXISTS FOR (c:Cluster) REQUIRE c.id IS UNIQUE",
         "CREATE CONSTRAINT analysis_run_id IF NOT EXISTS FOR (a:AnalysisRun) REQUIRE a.id IS UNIQUE",
+        "CREATE CONSTRAINT investigation_entity_id IF NOT EXISTS FOR (n:InvestigationEntity) REQUIRE n.entityId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_source_id IF NOT EXISTS FOR (n:InvestigationDataSource) REQUIRE n.sourceId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_evidence_id IF NOT EXISTS FOR (n:InvestigationEvidence) REQUIRE n.evidenceId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_statement_id IF NOT EXISTS FOR (n:InvestigationStatement) REQUIRE n.statementId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_name_normalized IF NOT EXISTS FOR (n:InvestigationName) REQUIRE n.normalizedName IS UNIQUE",
+        "CREATE CONSTRAINT investigation_match_value_id IF NOT EXISTS FOR (n:InvestigationMatchValue) REQUIRE n.valueId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_resolution_id IF NOT EXISTS FOR (n:EntityResolutionReview) REQUIRE n.candidateId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_path_run_id IF NOT EXISTS FOR (n:InvestigationPathRun) REQUIRE n.runId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_import_run_id IF NOT EXISTS FOR (n:InvestigationImportRun) REQUIRE n.runId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_finding_id IF NOT EXISTS FOR (n:InvestigationFinding) REQUIRE n.findingId IS UNIQUE",
+        "CREATE CONSTRAINT investigation_publication_id IF NOT EXISTS FOR (n:InvestigationPublication) REQUIRE n.publicationId IS UNIQUE",
     ]
     with driver.session(database=get_active_database()) as session:
         for query in queries:

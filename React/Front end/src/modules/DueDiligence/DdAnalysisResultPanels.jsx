@@ -35,21 +35,23 @@ export function DdAnalysisResultPanels({
   if (!analysisResult) return null
 
   return (
-    <div className="stack">
-      <div className="module-alert module-alert--success">
-        Risk level: {analysisResult.summary?.risk_level || 'Unknown'} - Total hits:{' '}
-        {analysisResult.summary?.total_hits - 0}
+    <div className="stack dd-analysis-result">
+      <div className={`dd-risk-summary is-${String(analysisResult.summary?.risk_level || 'unknown').toLowerCase()}`}>
+        <div className="dd-risk-summary__score">
+          <strong>{analysisResult.summary?.risk_score ?? '—'}</strong>
+          <span>/100</span>
+        </div>
+        <div>
+          <span className="dd-card-kicker">Automated risk signal</span>
+          <h3>{analysisResult.summary?.risk_level || 'Unknown'} risk</h3>
+          <p>{analysisResult.summary?.total_hits - 0} findings across the configured evidence sources.</p>
+        </div>
       </div>
-      {analysisResult.summary?.risk_score !== undefined ? (
-        <p className="muted">Risk score: {analysisResult.summary?.risk_score}/100</p>
-      ) : null}
       {analysisResult.summary?.source_notes?.length ? (
-        <p className="muted">
-          Source note: {analysisResult.summary.source_notes.join(' ')}
-        </p>
+        <div className="dd-source-note"><strong>Coverage note</strong>{analysisResult.summary.source_notes.join(' ')}</div>
       ) : null}
       {analysisResult.summary?.risk_rationale?.length ? (
-        <ul className="compact-list">
+        <ul className="compact-list dd-risk-rationale">
           {analysisResult.summary.risk_rationale.map((item, idx) => (
             <li key={`${item}-${idx}`}>{item}</li>
           ))}
@@ -83,7 +85,7 @@ export function DdAnalysisResultPanels({
 
       {showSourceDetails ? (
         <>
-          <details className="dashboard-detail" open>
+          <details className="dashboard-detail">
             <summary>Wikipedia results ({(analysisResult.wikipedia || []).length})</summary>
             <div className="dashboard-detail__body">
               <div className="table">
@@ -115,7 +117,7 @@ export function DdAnalysisResultPanels({
             </div>
           </details>
 
-          <details className="dashboard-detail" open>
+          <details className="dashboard-detail">
             <summary>Wikidata entity results ({(analysisResult.wikidata || []).length})</summary>
             <div className="dashboard-detail__body">
               <div className="table">
@@ -147,7 +149,7 @@ export function DdAnalysisResultPanels({
             </div>
           </details>
 
-          <details className="dashboard-detail" open>
+          <details className="dashboard-detail">
             <summary>OpenSanctions results ({(analysisResult.opensanctions || []).length})</summary>
             <div className="dashboard-detail__body">
               <div className="table">
@@ -181,7 +183,7 @@ export function DdAnalysisResultPanels({
             </div>
           </details>
 
-          <details className="dashboard-detail" open>
+          <details className="dashboard-detail">
             <summary>News / Web results ({(analysisResult.news || []).length})</summary>
             <div className="dashboard-detail__body">
               <div className="table">
@@ -213,7 +215,7 @@ export function DdAnalysisResultPanels({
             </div>
           </details>
 
-          <details className="dashboard-detail" open>
+          <details className="dashboard-detail">
             <summary>
               Asset declarations ({(analysisResult.declarations || []).length})
             </summary>
