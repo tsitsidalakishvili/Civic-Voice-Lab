@@ -178,6 +178,7 @@ def init_constraints():
         "CREATE CONSTRAINT oidc_transaction_id IF NOT EXISTS FOR (n:OidcLoginTransaction) REQUIRE n.transactionId IS UNIQUE",
         "CREATE CONSTRAINT oidc_state_hash IF NOT EXISTS FOR (n:OidcLoginTransaction) REQUIRE n.stateHash IS UNIQUE",
         "CREATE CONSTRAINT auth_allowlist_id IF NOT EXISTS FOR (n:AuthAllowlistEntry) REQUIRE n.allowlistId IS UNIQUE",
+        "CREATE CONSTRAINT auth_allowlist_entry_key IF NOT EXISTS FOR (n:AuthAllowlistEntry) REQUIRE n.entryKey IS UNIQUE",
         "CREATE CONSTRAINT auth_session_hash IF NOT EXISTS FOR (n:AuthSession) REQUIRE n.sessionIdHash IS UNIQUE",
         "CREATE CONSTRAINT auth_audit_event_id IF NOT EXISTS FOR (n:AuthAuditEvent) REQUIRE n.eventId IS UNIQUE",
         "CREATE CONSTRAINT compliance_audit_event_id IF NOT EXISTS FOR (n:ComplianceAuditEvent) REQUIRE n.eventId IS UNIQUE",

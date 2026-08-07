@@ -18,15 +18,11 @@ export function buildLoginUrl(returnTo) {
   const runtime = getRuntimeConfig()
   const base = runtime.apiBaseUrl.replace(/\/$/, '')
   const query = new URLSearchParams({ returnTo: safeReturnPath(returnTo) })
-  if (runtime.oidcProvider) query.set('provider', runtime.oidcProvider)
+  query.set('provider', 'google')
   return `${base}/auth/login?${query}`
 }
 
 export function beginOrganizationLogin(returnTo) {
   const current = `${window.location.pathname}${window.location.search}`
   window.location.assign(buildLoginUrl(returnTo || current))
-}
-
-export function principalKey(principal) {
-  return String(principal?.id || principal?.userId || principal?.sub || principal?.email || '')
 }

@@ -36,9 +36,24 @@ function pageIsServedFromLoopback() {
  * `VITE_API_BASE_URL` from the build; use runtime override only when it is non-loopback
  * or the page itself is on localhost.
  */
+export function validateProductionApiOrigin(value) {
+  const normalized = normalizeString(value).replace(/\/$/, '')
+  let parsed
+  try { parsed = new URL(normalized) } catch { throw new Error('Production API origin is not configured.') }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.origin !== normalized ||
+    parsed.username ||
+    parsed.password ||
+    pointsToLoopback(normalized)
+  ) throw new Error('Production API origin is not configured.')
+  return parsed.origin
+}
+
 function resolveApiBaseUrl(overrides) {
   const fromVite = normalizeString(import.meta.env.VITE_API_BASE_URL)
   const fromRuntime = normalizeString(overrides.API_BASE_URL)
+  if (import.meta.env.PROD) return validateProductionApiOrigin(fromVite)
   let base = fromVite || fromRuntime || DEFAULT_API_BASE_URL
   if (typeof window !== 'undefined' && !pageIsServedFromLoopback() && pointsToLoopback(base)) {
     base = fromVite || DEFAULT_API_BASE_URL
@@ -65,27 +80,10 @@ function readBool(envValue, runtimeValue, fallback = false) {
 
 export function getRuntimeConfig() {
   const overrides = readRuntimeOverrides()
-  const productionDefaultAuth = Boolean(import.meta.env.PROD)
   return {
     apiBaseUrl: resolveApiBaseUrl(overrides),
-    authEnabled: readBool(
-      import.meta.env.VITE_AUTH_ENABLED,
-      overrides.AUTH_ENABLED,
-      productionDefaultAuth,
-    ),
     authMode: 'session',
-    oidcProvider: readValue(import.meta.env.VITE_OIDC_PROVIDER, overrides.OIDC_PROVIDER, ''),
-    csrfPath: readValue(import.meta.env.VITE_CSRF_PATH, overrides.CSRF_PATH, '/auth/csrf'),
-    csrfHeaderName: readValue(
-      import.meta.env.VITE_CSRF_HEADER_NAME,
-      overrides.CSRF_HEADER_NAME,
-      'X-FS-CSRF',
-    ),
-    emergencyGateEnabled: readBool(
-      import.meta.env.VITE_EMERGENCY_AUTH_GATE_ENABLED,
-      overrides.EMERGENCY_AUTH_GATE_ENABLED,
-      false,
-    ),
+    oidcProvider: 'google',
     publicBusinessRoutesEnabled: readBool(
       import.meta.env.VITE_PUBLIC_BUSINESS_ROUTES_ENABLED,
       overrides.PUBLIC_BUSINESS_ROUTES_ENABLED,

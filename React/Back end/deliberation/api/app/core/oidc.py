@@ -13,9 +13,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from .auth_store import (
     authorize_and_bind_allowlist,
+    consume_oidc_transaction,
     create_auth_session,
     create_oidc_transaction,
     keyed_hash,
+    normalize_exact_email,
     record_auth_audit,
     revoke_auth_session,
 )
@@ -112,26 +114,37 @@ def _validate_id_token(
     expected_nonce_hash: str,
 ) -> dict[str, Any]:
     try:
-        from authlib.jose import JoseError, JsonWebToken
+        from joserfc import jwt
+        from joserfc.errors import JoseError
+        from joserfc.jwk import KeySet
+        from joserfc.jwt import JWTClaimsRegistry
     except ImportError as exc:  # pragma: no cover - startup dependency check
-        raise RuntimeError("Authlib is required for OIDC validation.") from exc
-    jwt = JsonWebToken(["RS256"])
+        raise RuntimeError("joserfc is required for OIDC validation.") from exc
     claims_options = {
         "iss": {"essential": True, "value": settings.oidc_issuer},
         "aud": {"essential": True, "value": settings.oidc_client_id},
         "exp": {"essential": True},
+        "nbf": {"essential": False},
         "iat": {"essential": True},
         "sub": {"essential": True},
     }
     try:
-        claims = jwt.decode(
+        token = jwt.decode(
             id_token,
-            _jwks(str(metadata["jwks_uri"])),
-            claims_options=claims_options,
+            KeySet.import_key_set(_jwks(str(metadata["jwks_uri"]))),
+            algorithms=["RS256"],
         )
-        claims.validate(leeway=60)
-    except JoseError as exc:
+        JWTClaimsRegistry(leeway=60, **claims_options).validate(token.claims)
+        claims = token.claims
+    except (JoseError, KeyError, TypeError, ValueError) as exc:
         raise ValueError("OIDC ID token validation failed.") from exc
+    audience = claims.get("aud")
+    authorized_party = str(claims.get("azp") or "")
+    if isinstance(audience, (list, tuple)) and len(audience) > 1:
+        if authorized_party != settings.oidc_client_id:
+            raise ValueError("OIDC authorized party validation failed.")
+    elif authorized_party and authorized_party != settings.oidc_client_id:
+        raise ValueError("OIDC authorized party validation failed.")
     nonce = str(claims.get("nonce") or "")
     if not nonce or not secrets.compare_digest(
         keyed_hash(settings, "oidc-nonce", nonce), expected_nonce_hash
@@ -164,6 +177,9 @@ def _validate_id_token(
         )
     if not email:
         raise ValueError("The provider did not return an organization email.")
+    email = normalize_exact_email(email)
+    if provider == "google" and email.rsplit("@", 1)[1] != settings.oidc_google_hosted_domain:
+        raise ValueError("The organization email domain is not permitted.")
     return {
         "issuer": str(claims["iss"]),
         "subject": str(claims["sub"]),
@@ -263,6 +279,7 @@ def oidc_login(
                 "nonce": nonce,
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
+                "hd": settings.oidc_google_hosted_domain if provider == "google" else "",
             }
         )
         return RedirectResponse(
@@ -286,8 +303,6 @@ def oidc_callback(
     state: str = Query(""),
     error: str = Query(""),
 ):
-    from .auth_store import consume_oidc_transaction
-
     settings = get_settings()
     provider = str(provider or "").strip().lower()
     if not _provider_enabled(settings, provider) or not settings.oidc_configured:

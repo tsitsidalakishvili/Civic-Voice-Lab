@@ -8,8 +8,8 @@ pandas
 scikit-learn
 reportlab
 requests
-Authlib>=1.3,<2
-cryptography>=42,<46
+joserfc>=1.7,<2
+cryptography>=49,<50
 PyPDF2
 beautifulsoup4
 followthemoney>=4.10,<5; sys_platform != "win32"

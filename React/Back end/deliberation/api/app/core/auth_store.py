@@ -23,15 +23,41 @@ def iso(value: datetime | None = None) -> str:
 
 def normalize_exact_email(value: str) -> str:
     candidate = str(value or "").strip().lower()
-    if not candidate or candidate.count("@") != 1:
+    if (
+        not candidate
+        or len(candidate) > 320
+        or candidate.count("@") != 1
+        or any(char.isspace() or ord(char) < 32 for char in candidate)
+    ):
         raise ValueError("A valid email address is required.")
     local, domain = candidate.rsplit("@", 1)
-    if not local or not domain:
+    if (
+        not local
+        or len(local) > 64
+        or local.startswith(".")
+        or local.endswith(".")
+        or ".." in local
+        or not domain
+    ):
         raise ValueError("A valid email address is required.")
     try:
         canonical_domain = domain.encode("idna").decode("ascii").lower()
     except UnicodeError as exc:
         raise ValueError("A valid email domain is required.") from exc
+    labels = canonical_domain.split(".")
+    if (
+        len(canonical_domain) > 253
+        or len(labels) < 2
+        or any(
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+            or not all(char.isalnum() or char == "-" for char in label)
+            for label in labels
+        )
+    ):
+        raise ValueError("A valid email domain is required.")
     # Deliberately do not rewrite dots or plus aliases in the local part.
     return f"{local}@{canonical_domain}"
 
@@ -226,6 +252,12 @@ def authorize_and_bind_allowlist(
     issuer: str,
     subject: str,
 ) -> dict[str, Any] | None:
+    if (
+        provider != settings.oidc_provider
+        or str(issuer or "").rstrip("/") != settings.oidc_issuer.rstrip("/")
+        or not str(subject or "").strip()
+    ):
+        return None
     normalized = normalize_exact_email(email)
     configured = next(
         (
@@ -238,10 +270,13 @@ def authorize_and_bind_allowlist(
     if configured is None:
         return None
     email_hash = keyed_hash(settings, "allowlist-email", normalized)
+    entry_key = keyed_hash(settings, "allowlist-entry", f"{provider}:{normalized}")
     rows = _write(
         """
-        MERGE (entry:AuthAllowlistEntry {emailHash: $emailHash, provider: $provider})
+        MERGE (entry:AuthAllowlistEntry {entryKey: $entryKey})
         ON CREATE SET entry.allowlistId = $allowlistId,
+                      entry.emailHash = $emailHash,
+                      entry.provider = $provider,
                       entry.normalizedEmail = $normalizedEmail,
                       entry.createdAt = datetime(), entry.addedAt = datetime(),
                       entry.addedBy = 'server-config', entry.version = 1,
@@ -269,6 +304,7 @@ def authorize_and_bind_allowlist(
         """,
         {
             "emailHash": email_hash,
+            "entryKey": entry_key,
             "allowlistId": str(uuid4()),
             "normalizedEmail": normalized,
             "provider": provider,
@@ -426,4 +462,3 @@ def revoke_auth_session(session_hash: str) -> bool:
         {"sessionIdHash": session_hash},
     )
     return bool(rows)
-

@@ -19,7 +19,7 @@ Env:
 5. Set environment variable:
    - **`VITE_API_BASE_URL`** = your Render (or other) API origin, e.g. `https://fs-udmk.onrender.com`
    - Required if you do not rely on a committed `.env.production` during build. Without it, the browser may try `localhost:8010` and CRM calls (e.g. `GET /crm/events`) fail with **Failed to fetch** while some POSTs appear to work.
-   - **`VITE_OIDC_PROVIDER`** = `google` or `entra`, matching the backend's single configured provider. This is provider selection, not a secret.
+   - Google Workspace is the fixed organization provider. No provider secret or organization identity belongs in frontend environment variables.
    - Leave **`VITE_PUBLIC_BUSINESS_ROUTES_ENABLED=false`** until the backend explicitly allows every public method and path after privacy/signature review.
    - Leave **`VITE_ANALYTICS_ENABLED=false`** for private releases. Analytics mounts only after an explicit privacy-approved opt-in.
 6. On Render, set **`CORS_ORIGINS`** to your real frontend origin(s), comma-separated, e.g. `https://your-app.vercel.app,https://your-custom-domain.com` (default regex already allows `*.vercel.app` and `*.netlify.app`).
@@ -32,7 +32,7 @@ Env:
 - Every API request includes cookies; mutations send `X-FS-CSRF`. Provider tokens, session IDs, allowlists, staff emails, and shared keys must not be placed in Vite or runtime configuration.
 - Prefer same-site custom `app.<organization>` and `api.<organization>` domains. Vercel-to-Render service domains require exact credentialed CORS and a backend `Secure; SameSite=None` cookie, and may still be blocked by browser third-party-cookie policy.
 - Public business routes fail closed by default. Frontend route visibility never grants backend authorization.
-- Rollback is backend environment-selected only. The normal frontend contains no credential input. `VITE_EMERGENCY_AUTH_GATE_ENABLED` is reserved for a separately reviewed migration screen and remains false; it never contains a secret.
+- Rollback is backend environment-selected only. The normal frontend contains no credential input or shared-secret compatibility path.
 - On logout, 401, revocation, or principal change, clear in-memory GET and CSRF state. Do not persist sensitive responses in browser storage.
 - The campaign seed contains synthetic records only. Production builds also fail-safe against copying the retired `ade-demo.pdf` and `ade-demo-test.pdf` paths into deploy artifacts.
 

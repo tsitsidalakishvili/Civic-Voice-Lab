@@ -1,5 +1,7 @@
 import json
+import importlib.util
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import urlparse
@@ -39,6 +41,10 @@ DEFAULT_OIDC_PUBLIC_RULES = DEFAULT_AUTH_PUBLIC_RULES + (
 )
 
 SUPPORTED_AUTH_MODES = {"bearer", "api_key", "oidc"}
+GOOGLE_OIDC_ISSUER = "https://accounts.google.com"
+DOMAIN_PATTERN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 
 TRUTHY = {"1", "true", "yes", "on"}
 
@@ -64,6 +70,28 @@ def _split_csv(value: str | None) -> tuple[str, ...]:
     if not value:
         return ()
     return tuple(item.strip() for item in str(value).split(",") if item.strip())
+
+
+def _normalize_config_email(value: object) -> str:
+    candidate = str(value or "").strip().lower()
+    if candidate.count("@") != 1 or any(char.isspace() or ord(char) < 32 for char in candidate):
+        raise ValueError("invalid exact email")
+    local, domain = candidate.rsplit("@", 1)
+    if not local or len(local) > 64 or local.startswith(".") or local.endswith(".") or ".." in local:
+        raise ValueError("invalid exact email")
+    try:
+        domain = domain.encode("idna").decode("ascii").lower()
+    except UnicodeError as exc:
+        raise ValueError("invalid exact email") from exc
+    if not DOMAIN_PATTERN.fullmatch(domain):
+        raise ValueError("invalid exact email")
+    return f"{local}@{domain}"
+
+
+def _host_is_in_domain(hostname: str | None, domain: str) -> bool:
+    host = str(hostname or "").strip().lower().rstrip(".")
+    expected = str(domain or "").strip().lower().rstrip(".")
+    return bool(host and expected and (host == expected or host.endswith(f".{expected}")))
 
 
 @dataclass(frozen=True)
@@ -310,6 +338,29 @@ def validate_auth_startup(settings: Settings | None = None) -> None:
         raise RuntimeError("FS_OIDC_PROVIDER must explicitly be google or entra.")
     if missing:
         raise RuntimeError("OIDC configuration is incomplete: " + ", ".join(sorted(set(missing))))
+    missing_dependencies = [
+        package
+        for package in ("joserfc", "cryptography")
+        if importlib.util.find_spec(package) is None
+    ]
+    if missing_dependencies:
+        raise RuntimeError(
+            "OIDC runtime dependencies are missing: " + ", ".join(missing_dependencies)
+        )
+    if current.oidc_provider == "google" and current.oidc_issuer != GOOGLE_OIDC_ISSUER:
+        raise RuntimeError(
+            f"Google Workspace OIDC requires FS_OIDC_ISSUER={GOOGLE_OIDC_ISSUER}."
+        )
+    if current.oidc_provider == "google":
+        hosted_domain = current.oidc_google_hosted_domain.rstrip(".")
+        if (
+            hosted_domain != current.oidc_google_hosted_domain
+            or "*" in hosted_domain
+            or not DOMAIN_PATTERN.fullmatch(hosted_domain)
+        ):
+            raise RuntimeError(
+                "FS_OIDC_GOOGLE_HOSTED_DOMAIN must be one exact DNS domain without wildcards."
+            )
     if len(current.session_secret) < 32:
         raise RuntimeError("FS_SESSION_SECRET must contain at least 32 characters.")
     if "*" in current.cors_origins:
@@ -318,13 +369,44 @@ def validate_auth_startup(settings: Settings | None = None) -> None:
         raise RuntimeError("OIDC CORS must contain only the exact FS_FRONTEND_ORIGIN.")
     frontend = urlparse(current.frontend_origin)
     redirect = urlparse(current.oidc_redirect_uri)
+    issuer = urlparse(current.oidc_issuer)
     allowed_schemes = {"https"}
     if frontend.hostname in {"localhost", "127.0.0.1", "::1"}:
         allowed_schemes.add("http")
-    if frontend.scheme not in allowed_schemes or not frontend.netloc:
+    if (
+        frontend.scheme not in allowed_schemes
+        or not frontend.netloc
+        or frontend.path not in {"", "/"}
+        or frontend.params
+        or frontend.query
+        or frontend.fragment
+        or frontend.username
+        or frontend.password
+        or "*" in frontend.netloc
+    ):
         raise RuntimeError("FS_FRONTEND_ORIGIN must be an exact HTTPS origin (HTTP only for localhost).")
-    if redirect.scheme not in allowed_schemes or not redirect.netloc:
+    if (
+        redirect.scheme not in allowed_schemes
+        or not redirect.netloc
+        or redirect.params
+        or redirect.query
+        or redirect.fragment
+        or redirect.username
+        or redirect.password
+        or "*" in redirect.netloc
+    ):
         raise RuntimeError("FS_OIDC_REDIRECT_URI must be HTTPS (HTTP only for localhost development).")
+    if (
+        issuer.scheme != "https"
+        or not issuer.netloc
+        or issuer.path not in {"", "/"}
+        or issuer.params
+        or issuer.query
+        or issuer.fragment
+        or issuer.username
+        or issuer.password
+    ):
+        raise RuntimeError("FS_OIDC_ISSUER must be an exact HTTPS issuer origin.")
     expected_callback = f"/auth/callback/{current.oidc_provider}"
     if redirect.path.rstrip("/") != expected_callback:
         raise RuntimeError(f"FS_OIDC_REDIRECT_URI path must be exactly {expected_callback}.")
@@ -332,9 +414,49 @@ def validate_auth_startup(settings: Settings | None = None) -> None:
         raise RuntimeError("SameSite=None requires a Secure session cookie.")
     if current.session_cookie_name.startswith("__Host-") and not current.session_cookie_secure:
         raise RuntimeError("__Host- session cookies must be Secure.")
+    if current.oidc_provider == "google":
+        same_organization_site = _host_is_in_domain(
+            frontend.hostname, current.oidc_google_hosted_domain
+        ) and _host_is_in_domain(
+            redirect.hostname, current.oidc_google_hosted_domain
+        )
+        is_local_pair = frontend.hostname in {"localhost", "127.0.0.1", "::1"} and redirect.hostname in {
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        }
+        if (
+            not same_organization_site
+            and not is_local_pair
+            and current.session_cookie_samesite != "none"
+        ):
+            raise RuntimeError(
+                "Cross-site frontend/API hosting requires FS_SESSION_COOKIE_SAMESITE=none."
+            )
     try:
         allowlist = json.loads(current.oidc_allowed_emails_json)
     except (TypeError, ValueError) as exc:
         raise RuntimeError("FS_ALLOWED_EMAILS_JSON must be valid JSON.") from exc
     if not isinstance(allowlist, list) or not allowlist:
         raise RuntimeError("FS_ALLOWED_EMAILS_JSON must be a non-empty JSON array.")
+    normalized_allowlist: set[str] = set()
+    for entry in allowlist:
+        if not isinstance(entry, (str, dict)):
+            raise RuntimeError("Every FS_ALLOWED_EMAILS_JSON entry must be an exact email or object.")
+        item = {"email": entry} if isinstance(entry, str) else entry
+        try:
+            normalized_email = _normalize_config_email(item.get("email"))
+        except ValueError as exc:
+            raise RuntimeError(
+                "Every FS_ALLOWED_EMAILS_JSON entry must contain a valid exact email."
+            ) from exc
+        provider = str(item.get("provider") or current.oidc_provider).strip().lower()
+        if provider != current.oidc_provider:
+            raise RuntimeError("Allowlist entry provider must match FS_OIDC_PROVIDER.")
+        if current.oidc_provider == "google" and normalized_email.rsplit("@", 1)[1] != current.oidc_google_hosted_domain:
+            raise RuntimeError(
+                "Google allowlist entries must use the exact configured Workspace domain."
+            )
+        if normalized_email in normalized_allowlist:
+            raise RuntimeError("FS_ALLOWED_EMAILS_JSON contains a duplicate exact email.")
+        normalized_allowlist.add(normalized_email)

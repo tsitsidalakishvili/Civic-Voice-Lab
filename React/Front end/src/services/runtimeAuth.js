@@ -7,10 +7,6 @@ export function saveAuthCredentials() {
 }
 
 export function clearAuthCredentials() {
-  if (typeof window === 'undefined') return
-  for (const storage of [window.localStorage, window.sessionStorage]) {
-    storage.removeItem('fs_auth_token')
-    storage.removeItem('fs_auth_api_key')
-    storage.removeItem('fs_access_email')
-  }
+  // Session cookies are HttpOnly and revoked by the backend logout endpoint.
+  // No authentication material is readable or removable by client JavaScript.
 }
