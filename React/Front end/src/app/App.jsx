@@ -25,6 +25,7 @@ import {
   IconLayoutGrid,
   IconMessage2,
   IconSearch,
+  IconLogout,
 } from '@tabler/icons-react'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { ThemeToggle } from '@/components/ThemeToggle/ThemeToggle'
@@ -37,10 +38,11 @@ import { PublicSupporterSignup } from '@/views/PublicSupporterSignup'
 import { DeliberationQuestionnaire } from '@/views/DeliberationQuestionnaire'
 import { DeliberationPublicReport } from '@/views/DeliberationPublicReport'
 import { PlatformAccessGate } from '@/views/PlatformAccessGate'
-import { clearStoredAccessEmail, getStoredAccessEmail } from '@/services/accessGate'
-import { getJson, requestJson } from '@/services/api'
+import { clearAuthCredentials } from '@/services/runtimeAuth'
+import { clearApiSessionState, getJson, onApiAuthEvent, requestJson, setSessionCsrfToken } from '@/services/api'
 import { PublicCampaignPage } from '@/modules'
 import { parseStoredList } from '@/utils/deck'
+import { getRuntimeConfig } from '@/config/runtime'
 import { PageHeader } from '@/ui'
 import './App.css'
 
@@ -68,43 +70,42 @@ function AppShell_() {
     (questionnaire && questionnaire.startsWith('deliberation')) ||
     (conversationId && isQuestionnaireView)
   const isPublicReport = Boolean(reportShare)
-  const isPublicView =
-    isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport || isSupporterSignup
+  // Business routes are private by default. Enabling their public presentation is
+  // only valid when the backend has an explicit method+path policy for each route.
+  const isPublicView = getRuntimeConfig().publicBusinessRoutesEnabled &&
+    (isPublicEvent || isQuestionnaire || isPublicCampaign || isPublicReport || isSupporterSignup)
 
   const [accessChecked, setAccessChecked] = useState(false)
   const [accessGranted, setAccessGranted] = useState(false)
+  const [accessState, setAccessState] = useState('unauthenticated')
+  const [accessError, setAccessError] = useState('')
 
   useEffect(() => {
     if (isPublicView) return undefined
     let mounted = true
     const checkAccess = async () => {
       try {
-        const status = await getJson('/platform/access/status', { cacheMs: 0 })
+        const result = await getJson('/auth/me', {
+          cacheMs: 0,
+          forceRefresh: true,
+        })
         if (!mounted) return
-        if (!status?.enabled) {
-          setAccessGranted(true)
-          setAccessChecked(true)
-          return
-        }
-        const stored = getStoredAccessEmail()
-        if (stored) {
-          const result = await requestJson('/platform/access/verify', {
-            payload: { email: stored },
-          })
-          if (!mounted) return
-          if (result?.allowed) {
-            setAccessGranted(true)
-            setAccessChecked(true)
-            return
-          }
-          clearStoredAccessEmail()
-        }
-        setAccessGranted(false)
+        setAccessGranted(result?.authenticated === true)
+        setSessionCsrfToken(result?.csrf?.token || '')
+        setAccessState('authenticated')
+        setAccessError('')
         setAccessChecked(true)
-      } catch {
-        // Backend unreachable: let the app render so pages can surface their own errors.
+      } catch (error) {
         if (!mounted) return
-        setAccessGranted(true)
+        clearAuthCredentials()
+        setAccessGranted(false)
+        setAccessState(error?.status === 403 ? 'unauthorized' : error?.status === 401 ? 'unauthenticated' : 'unavailable')
+        const callbackFailed = pathName.replace(/\/$/, '') === '/auth/callback' && params.get('error') === 'login_failed'
+        setAccessError(
+          callbackFailed
+            ? 'Organization sign-in could not be completed. No account details were disclosed.'
+            : error?.status ? '' : 'The sign-in service could not be reached. Access remains locked.',
+        )
         setAccessChecked(true)
       }
     }
@@ -113,6 +114,25 @@ function AppShell_() {
       mounted = false
     }
   }, [isPublicView])
+
+  useEffect(() => onApiAuthEvent(({ type }) => {
+    setAccessGranted(false)
+    setAccessChecked(true)
+    setAccessState(type === 'unauthorized' ? 'unauthorized' : type === 'revoked' ? 'revoked' : 'expired')
+  }), [])
+
+  const retryAccess = useCallback(() => {
+    setAccessChecked(false)
+    window.location.reload()
+  }, [])
+
+  const handleLogout = useCallback(async () => {
+    try { await requestJson('/auth/logout', { method: 'POST' }) } catch { /* local cleanup still applies */ }
+    clearApiSessionState()
+    clearAuthCredentials()
+    setAccessGranted(false)
+    setAccessState('unauthenticated')
+  }, [])
 
   const modules = useMemo(() => buildModules(t), [t])
   const MODULE_SECTIONS = useMemo(() => buildModuleSections(t), [t])
@@ -241,7 +261,7 @@ function AppShell_() {
   const pageDescription = activeSection?.hint || activeModule?.description
   const pageEyebrow = activeSection ? activeModule?.label : null
 
-  if (isPublicEvent) {
+  if ((isPublicView || accessGranted) && isPublicEvent) {
     return (
       <PublicEventRegistration
         eventId={eventId}
@@ -252,7 +272,7 @@ function AppShell_() {
       />
     )
   }
-  if (isPublicCampaign) {
+  if ((isPublicView || accessGranted) && isPublicCampaign) {
     return (
       <PublicCampaignPage
         campaignId={publicCampaignId}
@@ -263,7 +283,7 @@ function AppShell_() {
       />
     )
   }
-  if (isSupporterSignup) {
+  if ((isPublicView || accessGranted) && isSupporterSignup) {
     return (
       <PublicSupporterSignup
         inviteCode={supporterInviteCode}
@@ -274,7 +294,7 @@ function AppShell_() {
       />
     )
   }
-  if (isPublicReport) {
+  if ((isPublicView || accessGranted) && isPublicReport) {
     return (
       <DeliberationPublicReport
         shareId={reportShare}
@@ -285,7 +305,7 @@ function AppShell_() {
       />
     )
   }
-  if (isQuestionnaire) {
+  if ((isPublicView || accessGranted) && isQuestionnaire) {
     return (
       <DeliberationQuestionnaire
         conversationId={conversationId}
@@ -302,7 +322,13 @@ function AppShell_() {
   }
 
   if (!accessGranted) {
-    return <PlatformAccessGate onGranted={() => setAccessGranted(true)} />
+    return (
+      <PlatformAccessGate
+        state={accessState}
+        message={accessError}
+        onRetry={accessState === 'unavailable' ? retryAccess : undefined}
+      />
+    )
   }
 
   return (
@@ -375,6 +401,10 @@ function AppShell_() {
                     {lang.label}
                   </Menu.Item>
                 ))}
+                <Menu.Divider />
+                <Menu.Item leftSection={<IconLogout size={16} />} onClick={handleLogout}>
+                  Sign out
+                </Menu.Item>
               </Menu.Dropdown>
             </Menu>
           </Group>

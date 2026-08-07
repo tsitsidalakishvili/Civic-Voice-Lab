@@ -10,14 +10,15 @@ import './index.css'
 import App from './app/App.jsx'
 import { theme } from './theme'
 
-const colorSchemeManager = localStorageColorSchemeManager({ key: 'fs_color_scheme' })
+const colorSchemeManager = localStorageColorSchemeManager({ key: 'civic_voice_lab_color_scheme' })
+const analyticsEnabled = import.meta.env.VITE_ANALYTICS_ENABLED === 'true'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <MantineProvider theme={theme} colorSchemeManager={colorSchemeManager} defaultColorScheme="auto">
       <Notifications position="top-right" />
       <App />
-      <Analytics />
+      {analyticsEnabled ? <Analytics /> : null}
     </MantineProvider>
   </StrictMode>,
 )

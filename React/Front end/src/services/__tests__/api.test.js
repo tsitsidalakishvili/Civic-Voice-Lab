@@ -1,0 +1,36 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearApiSessionState, getJson, requestJson, setSessionCsrfToken } from '../api'
+
+describe('session API transport', () => {
+  beforeEach(() => {
+    clearApiSessionState()
+    globalThis.fetch = vi.fn()
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('includes cookie credentials without authorization tokens', async () => {
+    fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await getJson('/auth/me', { cacheMs: 0 })
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/me'), { credentials: 'include' })
+    expect(JSON.stringify(fetch.mock.calls)).not.toMatch(/authorization|bearer|api.?key/i)
+  })
+
+  it('adds the session CSRF token to mutations', async () => {
+    setSessionCsrfToken('synthetic-csrf')
+    fetch.mockResolvedValue(new Response(null, { status: 204 }))
+    await requestJson('/auth/logout', { method: 'POST' })
+    expect(fetch.mock.calls[0][1]).toMatchObject({
+      credentials: 'include',
+      headers: expect.objectContaining({ 'X-FS-CSRF': 'synthetic-csrf' }),
+    })
+  })
+
+  it('does not reuse cached data after session state is cleared', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: 2 }), { status: 200 }))
+    expect((await getJson('/private')).value).toBe(1)
+    clearApiSessionState()
+    expect((await getJson('/private')).value).toBe(2)
+  })
+})

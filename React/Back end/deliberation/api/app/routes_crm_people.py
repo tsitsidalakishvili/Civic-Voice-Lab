@@ -40,6 +40,15 @@ from .routes_crm_helpers import (
     segment_filter_from_stored_value,
 )
 from .routes_crm_support import _send_smtp_email
+from .compliance import (
+    SubjectAddress,
+    SubjectReference,
+    _subject_key,
+    collection_fields_allowed,
+    has_active_channel_consent,
+    is_channel_suppressed,
+)
+from .core.config import get_settings
 from .services.crm_snapshot_cache import read_snapshot_people
 
 router = APIRouter()
@@ -309,21 +318,24 @@ class SupporterInviteReminderCreate(BaseModel):
 class SupporterSignupCreate(BaseModel):
     first_name: str = Field(alias="firstName", min_length=1)
     last_name: str = Field(alias="lastName", min_length=1)
-    birth_date: str = Field(alias="birthDate", min_length=1)
+    birth_date: Optional[str] = Field(alias="birthDate", default=None)
     email: str
-    phone: str = Field(min_length=1)
-    address: str = Field(min_length=1)
-    profession: str = Field(min_length=1)
-    social_media: str = Field(alias="socialMedia", min_length=1)
-    former_party_member: str = Field(alias="formerPartyMember", min_length=1)
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    profession: Optional[str] = None
+    social_media: Optional[str] = Field(alias="socialMedia", default=None)
+    former_party_member: Optional[str] = Field(alias="formerPartyMember", default=None)
     party_details: Optional[str] = Field(alias="partyDetails", default="")
-    time_availability: str = Field(alias="timeAvailability", min_length=1)
-    interests: List[str] = Field(default_factory=list, min_length=1)
-    whatsapp_group: str = Field(alias="whatsappGroup", min_length=1)
-    interested_in_membership: str = Field(alias="interestedInMembership", min_length=1)
+    time_availability: Optional[str] = Field(alias="timeAvailability", default=None)
+    interests: List[str] = Field(default_factory=list)
+    whatsapp_group: Optional[str] = Field(alias="whatsappGroup", default=None)
+    interested_in_membership: Optional[str] = Field(alias="interestedInMembership", default=None)
     additional_comments: Optional[str] = Field(alias="additionalComments", default="")
     agrees_with_manifesto: bool = Field(alias="agreesWithManifesto", default=False)
     invite_code: Optional[str] = Field(alias="inviteCode", default="")
+    purpose_id: str = Field(alias="purposeId", min_length=2)
+    notice_version_id: str = Field(alias="noticeVersionId", min_length=2)
+    consent_event_ids: List[str] = Field(alias="consentEventIds", min_length=1)
 
 
 class SupporterSignupConfigUpdate(BaseModel):
@@ -371,7 +383,55 @@ def _build_supporter_signup_submission(payload: SupporterSignupCreate) -> dict:
         "additionalComments": _clean_text(payload.additional_comments),
         "agreesWithManifesto": bool(payload.agrees_with_manifesto),
         "inviteCode": _clean_text(payload.invite_code),
+        "purposeId": payload.purpose_id.strip(),
+        "noticeVersionId": payload.notice_version_id.strip(),
+        "consentEventIds": sorted(set(payload.consent_event_ids)),
     }
+
+
+def _validate_supporter_signup_governance(payload: SupporterSignupCreate, submission: dict) -> None:
+    try:
+        subject_key = _subject_key(
+            SubjectReference(address=SubjectAddress(type="email", value=submission["email"]))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="A valid email is required") from exc
+    consent_ids = sorted(set(payload.consent_event_ids))
+    driver = get_driver()
+    with _db_session(driver) as session:
+        rows = _execute_read(
+            session,
+            """
+            MATCH (event:ConsentEvent)
+            WHERE event.consentEventId IN $consentEventIds
+              AND event.subjectKey = $subjectKey
+              AND event.purposeId = $purposeId
+              AND event.noticeVersionId = $noticeVersionId
+              AND event.status = 'granted'
+            RETURN collect(DISTINCT event.consentEventId) AS found
+            """,
+            {"consentEventIds": consent_ids, "subjectKey": subject_key, "purposeId": payload.purpose_id, "noticeVersionId": payload.notice_version_id},
+        )
+    found = set(rows[0].get("found") or []) if rows else set()
+    if found != set(consent_ids):
+        raise HTTPException(status_code=409, detail="Explicit consent provenance is missing or does not match this submission")
+    sensitive_fields = []
+    for api_field, stored_field in (
+        (payload.birth_date, "birthDate"),
+        (payload.address, "address"),
+        (payload.social_media, "socialMedia"),
+        (payload.former_party_member, "formerPartyMember"),
+        (payload.party_details, "partyDetails"),
+        (payload.interests, "interests"),
+        (payload.whatsapp_group, "whatsappGroup"),
+        (payload.interested_in_membership, "interestedInMembership"),
+        (payload.agrees_with_manifesto, "agreesWithManifesto"),
+    ):
+        if api_field:
+            sensitive_fields.append(stored_field)
+    allowed, denied = collection_fields_allowed(payload.purpose_id, sensitive_fields)
+    if not allowed:
+        raise HTTPException(status_code=403, detail={"code": "FIELD_COLLECTION_FORBIDDEN", "fields": denied})
 
 def _supporter_signup_base_url():
     configured = str(os.getenv("SUPPORTER_SIGNUP_BASE_URL") or "").strip()
@@ -437,7 +497,27 @@ The Freedom Square Team
 """.strip()
 
 
+def _marketing_email_allowed(recipient_email: str) -> bool:
+    settings = get_settings()
+    if not settings.direct_marketing_enforcement_enabled:
+        return True
+    purpose_id = settings.direct_marketing_purpose_id
+    try:
+        return (
+            has_active_channel_consent("email", recipient_email, purpose_id, "email")
+            and not is_channel_suppressed("email", recipient_email, purpose_id, "email")
+        )
+    except Exception:
+        return False
+
+
+def _marketing_denied_result():
+    return False, "suppressed_or_unverified_consent", "Recipient is not eligible for this channel and purpose."
+
+
 def _send_supporter_invite_email(recipient_email: str, recipient_name: str, invite_code: str, supporter_type: str):
+    if not _marketing_email_allowed(recipient_email):
+        return _marketing_denied_result()
     invite_url = _build_supporter_invite_url(invite_code, supporter_type)
     return _send_smtp_email(
         recipient_email,
@@ -466,6 +546,8 @@ The Freedom Square Team
 
 
 def _send_survey_invite_email(recipient_email: str, recipient_name: str, topic: str, invite_url: str, notes: str = ""):
+    if not _marketing_email_allowed(recipient_email):
+        return _marketing_denied_result()
     return _send_smtp_email(
         recipient_email,
         f"Freedom Square survey: {topic or 'Participate'}",
@@ -493,6 +575,8 @@ The Freedom Square Team
 
 
 def _send_event_invite_email(recipient_email: str, recipient_name: str, event_name: str, invite_url: str, notes: str = ""):
+    if not _marketing_email_allowed(recipient_email):
+        return _marketing_denied_result()
     return _send_smtp_email(
         recipient_email,
         f"Freedom Square event: {event_name or 'Registration'}",
@@ -501,6 +585,8 @@ def _send_event_invite_email(recipient_email: str, recipient_name: str, event_na
 
 
 def _send_supporter_reminder_email(recipient_email: str, recipient_name: str, invite_code: str, supporter_type: str):
+    if not _marketing_email_allowed(recipient_email):
+        return _marketing_denied_result()
     invite_url = _build_supporter_invite_url(invite_code, supporter_type)
     return _send_smtp_email(
         recipient_email,
@@ -1058,6 +1144,7 @@ def remind_supporter_invite(invite_code: str, payload: SupporterInviteReminderCr
 @router.post("/supporter-signup")
 def supporter_signup(payload: SupporterSignupCreate):
     submission = _build_supporter_signup_submission(payload)
+    _validate_supporter_signup_governance(payload, submission)
     driver = get_driver()
     with _db_session(driver) as session:
         _execute_write(
@@ -1081,9 +1168,15 @@ def supporter_signup(payload: SupporterSignupCreate):
                 signup.additionalComments = $additionalComments,
                 signup.agreesWithManifesto = $agreesWithManifesto,
                 signup.inviteCode = $inviteCode,
+                signup.purposeId = $purposeId,
+                signup.noticeVersionId = $noticeVersionId,
+                signup.consentEventIds = $consentEventIds,
+                signup.legacyConsentStatus = 'verified',
+                signup.dataClassificationVersion = 1,
                 signup.signupSource = 'public_signup',
                 signup.submittedAt = datetime(),
                 signup.updatedAt = datetime()
+            RETURN signup.signupId AS signupId
             """,
             submission,
         )

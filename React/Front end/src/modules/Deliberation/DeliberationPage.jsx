@@ -32,7 +32,7 @@ import {
   IconBrandWhatsapp,
   IconBrandSlack,
 } from '@tabler/icons-react'
-import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
+import { downloadFile, getJson, requestJson } from '../../services/api'
 import {
   getInviteAudienceGroupEmail,
   getInviteAudienceLabel,
@@ -1811,19 +1811,7 @@ ${link}`
     setExportStatus('')
     setExporting(true)
     try {
-      const response = await fetch(`${getApiBaseUrl()}/conversations/${activeId}/export`)
-      if (!response.ok) {
-        throw new Error('Export failed.')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `conversation_${activeId}_export.zip`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      await downloadFile(`/conversations/${activeId}/export`, `conversation_${activeId}_export.zip`)
       setExportStatus('Export downloaded.')
     } catch (err) {
       setExportStatus(err.message || 'Unable to download export.')
@@ -1837,19 +1825,7 @@ ${link}`
     setTableExportingConversationId(conversationId)
     setConvoError('')
     try {
-      const response = await fetch(`${getApiBaseUrl()}/conversations/${conversationId}/export.csv`)
-      if (!response.ok) {
-        throw new Error('Conversation CSV export failed.')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `conversation_${conversationId}_dataset.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      await downloadFile(`/conversations/${conversationId}/export.csv`, `conversation_${conversationId}_dataset.csv`)
     } catch (err) {
       setConvoError(err.message || 'Unable to export conversation CSV.')
     } finally {
@@ -2070,19 +2046,7 @@ ${link}`
   const handleDownloadExportJob = async () => {
     if (!exportJob?.id) return
     try {
-      const response = await fetch(`${getApiBaseUrl()}/exports/${exportJob.id}/download`)
-      if (!response.ok) {
-        throw new Error('Export not ready.')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `conversation_${activeId}_export.zip`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      await downloadFile(`/exports/${exportJob.id}/download`, `conversation_${activeId}_export.zip`)
     } catch (err) {
       setExportStatus(err.message || 'Unable to download export.')
     }

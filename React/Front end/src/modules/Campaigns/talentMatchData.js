@@ -88,84 +88,17 @@ export const INFLUENCE_TIERS = [
 
 // Seed roster — curated Georgian voices/creators. Replaceable via CSV import at runtime.
 const SEED = [
-  { name: 'Salome Gviniashvili', ig: 'https://www.instagram.com/salomegviniashvili/', igUser: 'salomegviniashvili', tt: 'https://www.tiktok.com/@salomegviniashviliii', ttUser: 'salomegviniashviliii', niche: 'entertainment', igF: 245000, ttF: 31800 },
-  { name: 'Zura Khizanishvili', ig: 'https://www.instagram.com/zurakhizana/', igUser: 'zurakhizana', tt: null, ttUser: null, niche: 'entertainment', igF: 104000, ttF: 0 },
-  { name: 'Rusa Chachua', ig: 'https://www.instagram.com/rusachachua/', igUser: 'rusachachua', tt: 'https://www.tiktok.com/@rusa.chachua', ttUser: 'rusa.chachua', niche: 'lifestyle', igF: 157000, ttF: 3490 },
-  { name: 'Manika Asatiani', ig: 'https://www.instagram.com/manika_asatiani/', igUser: 'manika_asatiani', tt: 'https://www.tiktok.com/@manikaasatianiii', ttUser: 'manikaasatianiii', niche: 'beauty', igF: 169000, ttF: 38000 },
-  { name: 'Mariam Kukhalashvili', ig: 'https://www.instagram.com/mariam.kukhalashvili/', igUser: 'mariam.kukhalashvili', tt: 'https://www.tiktok.com/@mariamkukhalashvili1', ttUser: 'mariamkukhalashvili1', niche: 'fashion', igF: 67900, ttF: 3370 },
-  { name: 'Mariam Sanogo', ig: 'https://www.instagram.com/msanogo/', igUser: 'msanogo', tt: 'https://www.tiktok.com/@mariamsanogo000', ttUser: 'mariamsanogo000', niche: 'lifestyle', igF: 97500, ttF: 27900 },
-  { name: 'Ninutsa Bibileishvili', ig: 'https://www.instagram.com/ninutsaschannelyoutube/', igUser: 'ninutsaschannelyoutube', tt: 'https://www.tiktok.com/@ninutsaschannel', ttUser: 'ninutsaschannel', niche: 'entertainment', igF: 25900, ttF: 68000 },
-  { name: 'Lika Evgenidze', ig: 'https://www.instagram.com/likaevgenidze/', igUser: 'likaevgenidze', tt: 'https://www.tiktok.com/@likaevgenidze_', ttUser: 'likaevgenidze_', niche: 'fashion', igF: 66400, ttF: 2429 },
-  { name: 'Merab Sharikadze', ig: 'https://www.instagram.com/merabsharikadze/', igUser: 'merabsharikadze', tt: null, ttUser: null, niche: 'entertainment', igF: 22400, ttF: 0 },
-  { name: 'Nuka Karalashvili', ig: 'https://www.instagram.com/nukak__/', igUser: 'nukak__', tt: null, ttUser: null, niche: 'lifestyle', igF: 28700, ttF: 0 },
-  { name: 'Anna Koshadze', ig: 'https://www.instagram.com/anakoshadze/', igUser: 'anakoshadze', tt: null, ttUser: null, niche: 'beauty', igF: 38200, ttF: 0 },
-  { name: 'Elene Surmanidze', ig: 'https://www.instagram.com/elenesurmanidze/', igUser: 'elenesurmanidze', tt: 'https://www.tiktok.com/@elenesurmanidze', ttUser: 'elenesurmanidze', niche: 'fashion', igF: 37800, ttF: 27400 },
-  { name: 'Natia Bakuradze', ig: 'https://www.instagram.com/_natia_bakuradze_/', igUser: '_natia_bakuradze_', tt: 'https://www.tiktok.com/@natkabakuradze', ttUser: 'natkabakuradze', niche: 'lifestyle', igF: 130000, ttF: 3801 },
-  { name: 'Foxy Eleniko', ig: 'https://www.instagram.com/foxy_eleniko/', igUser: 'foxy_eleniko', tt: 'https://www.tiktok.com/@foxy_eleniko', ttUser: 'foxy_eleniko', niche: 'entertainment', igF: 148000, ttF: 587700 },
-  { name: 'Salome Toshkua', ig: 'https://www.instagram.com/salomitoshkua/', igUser: 'salomitoshkua', tt: 'https://www.tiktok.com/@salometoshkua', ttUser: 'salometoshkua', niche: 'lifestyle', igF: 35800, ttF: 80500 },
-  { name: 'Maria Giorgobiani', ig: 'https://www.instagram.com/mariaa.giorgobiani/', igUser: 'mariaa.giorgobiani', tt: 'https://www.tiktok.com/@maria.giorgobiani', ttUser: 'maria.giorgobiani', niche: 'fashion', igF: 8122, ttF: 31600 },
-  { name: 'Torcho', ig: 'https://www.instagram.com/torchooo/', igUser: 'torchooo', tt: 'https://www.tiktok.com/@torchooo', ttUser: 'torchooo', niche: 'entertainment', igF: 21200, ttF: 36400 },
-  { name: 'Likuna Metreveli', ig: 'https://www.instagram.com/likunametreveli/', igUser: 'likunametreveli', tt: null, ttUser: null, niche: 'lifestyle', igF: 49000, ttF: 0 },
-  { name: 'Tasia', ig: 'https://www.instagram.com/anastasiiajairath/', igUser: 'anastasiiajairath', tt: null, ttUser: null, niche: 'beauty', igF: 34100, ttF: 0 },
-  { name: 'Ruso Kobakhidze', ig: 'https://www.instagram.com/juicyyr/', igUser: 'juicyyr', tt: null, ttUser: null, niche: 'lifestyle', igF: 7030, ttF: 0 },
-  { name: 'Nino Eliava', ig: 'https://www.instagram.com/ninoeliava/', igUser: 'ninoeliava', tt: 'https://www.tiktok.com/@nineliava', ttUser: 'nineliava', niche: 'lifestyle', igF: 81000, ttF: 370 },
-  { name: 'Tako Chkeidze', ig: 'https://www.instagram.com/tako_chkheidze/', igUser: 'tako_chkheidze', tt: 'https://www.tiktok.com/@chkheidzetako', ttUser: 'chkheidzetako', niche: 'fashion', igF: 164000, ttF: 0 },
-  { name: 'Nino Mchedlishvili', ig: 'https://www.instagram.com/ninucani/', igUser: 'ninucani', tt: null, ttUser: null, niche: 'beauty', igF: 58800, ttF: 15900 },
-  { name: 'Mariam Davitadze', ig: 'https://www.instagram.com/acidwv/', igUser: 'acidwv', tt: 'https://www.tiktok.com/@acidwv_', ttUser: 'acidwv_', niche: 'entertainment', igF: 63400, ttF: 112200 },
-  { name: 'Bakhva', ig: 'https://www.instagram.com/bakhvaa/', igUser: 'bakhvaa', tt: 'https://www.tiktok.com/@backstagevideos', ttUser: 'backstagevideos', niche: 'entertainment', igF: 73600, ttF: 54600 },
-  { name: 'Leka Mikadze', ig: 'https://www.instagram.com/leka.mikadze/', igUser: 'leka.mikadze', tt: 'https://www.tiktok.com/@lekamikadze', ttUser: 'lekamikadze', niche: 'lifestyle', igF: 69900, ttF: 7950 },
-  { name: 'Guga Giorgobiani', ig: 'https://www.instagram.com/gugagiorgobiani14/', igUser: 'gugagiorgobiani14', tt: 'https://www.tiktok.com/@gugagiorgobiani14', ttUser: 'gugagiorgobiani14', niche: 'entertainment', igF: 22200, ttF: 413300 },
-  { name: 'Anna Dolidze', ig: 'https://www.instagram.com/anyadolidze/', igUser: 'anyadolidze', tt: 'https://www.tiktok.com/@annadolidze', ttUser: 'annadolidze', niche: 'lifestyle', igF: 37600, ttF: 28800 },
-  { name: 'Salome Khelashvili', ig: 'https://www.instagram.com/salomekhelashvil/', igUser: 'salomekhelashvil', tt: null, ttUser: null, niche: 'fashion', igF: 38000, ttF: 0 },
-  { name: 'Natia Mezurnishvili', ig: 'https://www.instagram.com/saintnacka/', igUser: 'saintnacka', tt: null, ttUser: null, niche: 'beauty', igF: 69800, ttF: 0 },
-  { name: 'Nanuka Gogichaishvili', ig: 'https://www.instagram.com/nanukagogicha/', igUser: 'nanukagogicha', tt: null, ttUser: null, niche: 'lifestyle', igF: 56700, ttF: 0 },
-  { name: 'Ruska Makashvili', ig: 'https://www.instagram.com/russana18/', igUser: 'russana18', tt: 'https://www.tiktok.com/@rusana18', ttUser: 'rusana18', niche: 'entertainment', igF: 420000, ttF: 242700 },
-  { name: 'Eko Pangani', ig: 'https://www.instagram.com/ekaterinapangani/', igUser: 'ekaterinapangani', tt: 'https://www.tiktok.com/@ekaterinapangani', ttUser: 'ekaterinapangani', niche: 'travel', igF: 116000, ttF: 6257 },
-  { name: 'Nincho Jeiranashvili', ig: 'https://www.instagram.com/ninchouss', igUser: 'ninchouss', tt: 'https://www.tiktok.com/@ninchous', ttUser: 'ninchous', niche: 'lifestyle', igF: 25100, ttF: 2654 },
-  { name: 'Loli', ig: 'https://www.instagram.com/tami_loli', igUser: 'tami_loli', tt: null, ttUser: null, niche: 'lifestyle', igF: 28600, ttF: 0 },
-  { name: 'Tatia Tchotorlishvili', ig: 'https://www.instagram.com/tattacho/', igUser: 'tattacho', tt: null, ttUser: null, niche: 'beauty', igF: 117000, ttF: 0 },
-  { name: 'Tuski Tsirekidze', ig: 'https://www.instagram.com/tusikoo', igUser: 'tusikoo', tt: null, ttUser: null, niche: 'fashion', igF: 11400, ttF: 0 },
-  { name: 'Annastasia', ig: 'https://www.instagram.com/_annastassiaa', igUser: '_annastassiaa', tt: 'https://www.tiktok.com/@_annastassiaa', ttUser: '_annastassiaa', niche: 'lifestyle', igF: 47000, ttF: 53500 },
-  { name: 'Tako Natsvlishvili', ig: 'https://www.instagram.com/takonats', igUser: 'takonats', tt: 'https://www.tiktok.com/@takonats1', ttUser: 'takonats1', niche: 'fashion', igF: 315000, ttF: 22100 },
-  { name: 'Anna Shelia', ig: 'https://www.instagram.com/annashelia', igUser: 'annashelia', tt: 'https://www.tiktok.com/@annashelia8', ttUser: 'annashelia8', niche: 'beauty', igF: 44800, ttF: 5348 },
-  { name: 'Lika Kvaratskhelia', ig: 'https://www.instagram.com/likakvaratskhelia', igUser: 'likakvaratskhelia', tt: 'https://www.tiktok.com/@likkakvaratskhelia', ttUser: 'likkakvaratskhelia', niche: 'fashion', igF: 86700, ttF: 17000 },
-  { name: 'Nini Kometiani', ig: 'https://www.instagram.com/nini.kometiani', igUser: 'nini.kometiani', tt: 'https://www.tiktok.com/@ninikometiani', ttUser: 'ninikometiani', niche: 'lifestyle', igF: 3903, ttF: 1079 },
-  { name: 'Nini Ukhurgunashvili', ig: 'https://www.instagram.com/niniukh', igUser: 'niniukh', tt: 'https://www.tiktok.com/@niniukh', ttUser: 'niniukh', niche: 'lifestyle', igF: 9679, ttF: 970 },
-  { name: 'Katie Jgennti-Keburia', ig: 'https://www.instagram.com/katiejgennti', igUser: 'katiejgennti', tt: 'https://www.tiktok.com/@katiejgennti', ttUser: 'katiejgennti', niche: 'lifestyle', igF: 69900, ttF: 30300 },
-  { name: 'Giorgi Iashvili', ig: 'https://www.instagram.com/george.iashvili', igUser: 'george.iashvili', tt: 'https://www.tiktok.com/@george.iashvili', ttUser: 'george.iashvili', niche: 'entertainment', igF: 7953, ttF: 50200 },
-  { name: 'Ketevan Khatiashvili', ig: 'https://www.instagram.com/ketevan_khatiashvili', igUser: 'ketevan_khatiashvili', tt: 'https://www.tiktok.com/@ketevankhatiashvi', ttUser: 'ketevankhatiashvi', niche: 'food', igF: 128000, ttF: 31900 },
-  { name: 'Elene Shelia', ig: 'https://www.instagram.com/elenesheliaa/', igUser: 'elenesheliaa', tt: null, ttUser: null, niche: 'beauty', igF: 13900, ttF: 0 },
-
-  // ── Researched additions across expanded topics (music, comedy, gaming, tech,
-  // health, education, news, business). Follower counts are approximate /
-  // point-in-time (~Aug 2026) from public sources — verify before relying on them.
-  { name: 'Bera Ivanishvili', ig: 'https://www.instagram.com/beraofficial/', igUser: 'beraofficial', tt: null, ttUser: null, niche: 'music', igF: 1000000, ttF: 0 },
-  { name: 'Trio Mandili', ig: 'https://www.instagram.com/trio_mandili/', igUser: 'trio_mandili', tt: 'https://www.tiktok.com/@triomandilliofficial', ttUser: 'triomandilliofficial', niche: 'music', igF: 391000, ttF: 20000 },
-  { name: 'Khatia Buniatishvili', ig: 'https://www.instagram.com/khatiabuniatishvili/', igUser: 'khatiabuniatishvili', tt: null, ttUser: null, niche: 'music', igF: 350000, ttF: 0 },
-  { name: 'Katie Melua', ig: 'https://www.instagram.com/katiemeluaofficial/', igUser: 'katiemeluaofficial', tt: null, ttUser: null, niche: 'music', igF: 115000, ttF: 0 },
-  { name: 'Hungryman', ig: 'https://www.instagram.com/hungrymantv/', igUser: 'hungrymantv', tt: 'https://www.tiktok.com/@hungryman.ge', ttUser: 'hungryman.ge', niche: 'comedy', igF: 136000, ttF: 463000 },
-  { name: 'Giorgi Danelia', ig: 'https://www.instagram.com/giodannell/', igUser: 'giodannell', tt: 'https://www.tiktok.com/@giodannell', ttUser: 'giodannell', niche: 'entertainment', igF: 160000, ttF: 705000 },
-  { name: 'Nanuka Zhorzholiani', ig: 'https://www.instagram.com/nanukashow/', igUser: 'nanukashow', tt: 'https://www.tiktok.com/@nanukashow', ttUser: 'nanukashow', niche: 'news', igF: 396000, ttF: 106500 },
-  { name: 'Ekaterine Kotrikadze', ig: 'https://www.instagram.com/katyakotrikadze/', igUser: 'katyakotrikadze', tt: null, ttUser: null, niche: 'news', igF: 47000, ttF: 0 },
-  { name: 'Nino Cherkezishvili', ig: 'https://www.instagram.com/cherrys_fitness/', igUser: 'cherrys_fitness', tt: null, ttUser: null, niche: 'health', igF: 116000, ttF: 0 },
-  { name: 'Giorgi Tchintcharauli', ig: 'https://www.instagram.com/doctor_giorgi/', igUser: 'doctor_giorgi', tt: null, ttUser: null, niche: 'health', igF: 86000, ttF: 0 },
-  { name: 'Ana Wei', ig: 'https://www.instagram.com/ana__wei/', igUser: 'ana__wei', tt: null, ttUser: null, niche: 'health', igF: 39700, ttF: 0 },
-  { name: 'Georgian Mom Life', ig: 'https://www.instagram.com/georgianmomlife/', igUser: 'georgianmomlife', tt: null, ttUser: null, niche: 'health', igF: 6400, ttF: 0 },
-  { name: 'Codnismoqvare Podcast', ig: 'https://www.instagram.com/kpodcast_ge/', igUser: 'kpodcast_ge', tt: null, ttUser: null, niche: 'education', igF: 30200, ttF: 0 },
-  { name: 'Nana Janashia', ig: 'https://www.instagram.com/techworld_with_nana/', igUser: 'techworld_with_nana', tt: null, ttUser: null, niche: 'tech', igF: 46000, ttF: 0 },
-  { name: 'QIMERA', ig: 'https://www.instagram.com/qimera__/', igUser: 'qimera__', tt: 'https://www.tiktok.com/@qimeraa', ttUser: 'qimeraa', niche: 'gaming', igF: 9400, ttF: 125000 },
-  { name: 'Amiko Zarkua', ig: 'https://www.instagram.com/amikozarkua/', igUser: 'amikozarkua', tt: 'https://www.tiktok.com/@amikozarkuagames', ttUser: 'amikozarkuagames', niche: 'gaming', igF: 31000, ttF: 0 },
-  { name: 'Shota Vlogger', ig: null, igUser: null, tt: 'https://www.tiktok.com/@shotavlogger', ttUser: 'shotavlogger', niche: 'gaming', igF: 0, ttF: 34000 },
-  { name: 'Meri Darchia', ig: 'https://www.instagram.com/meriway1/', igUser: 'meriway1', tt: null, ttUser: null, niche: 'business', igF: 15000, ttF: 0 },
-
-  // ── Civic voices (politics / news / activism). Primarily active on X/Twitter;
-  // follower counts approximate (~Aug 2026). Entries without a sourced count are
-  // omitted here — handles verified, awaiting numbers.
-  { name: 'Salome Zourabichvili', x: 'https://x.com/Zourabichvili_S', xUser: 'Zourabichvili_S', niche: 'politics', xF: 132300 },
-  { name: 'Elene Khoshtaria', x: 'https://x.com/Helenkhosh', xUser: 'Helenkhosh', niche: 'politics', xF: 17300 },
+  { name: 'Synthetic Creator 01', ig: 'https://example.invalid/synthetic-creator-01', igUser: 'synthetic_creator_01', tt: null, ttUser: null, niche: 'education', igF: 12500, ttF: 0, synthetic: true },
+  { name: 'Synthetic Creator 02', ig: null, igUser: null, tt: 'https://example.invalid/synthetic-creator-02', ttUser: 'synthetic_creator_02', niche: 'tech', igF: 0, ttF: 28400, synthetic: true },
+  { name: 'Synthetic Creator 03', ig: 'https://example.invalid/synthetic-creator-03', igUser: 'synthetic_creator_03', tt: 'https://example.invalid/synthetic-creator-03-video', ttUser: 'synthetic_creator_03', niche: 'lifestyle', igF: 86700, ttF: 19400, synthetic: true },
+  { name: 'Synthetic Creator 04', ig: 'https://example.invalid/synthetic-creator-04', igUser: 'synthetic_creator_04', tt: null, ttUser: null, niche: 'news', igF: 43200, ttF: 0, synthetic: true },
+  { name: 'Synthetic Creator 05', ig: null, igUser: null, tt: null, ttUser: null, x: 'https://example.invalid/synthetic-creator-05', xUser: 'synthetic_creator_05', niche: 'social', igF: 0, ttF: 0, xF: 9100, synthetic: true },
+  { name: 'Synthetic Creator 06', ig: 'https://example.invalid/synthetic-creator-06', igUser: 'synthetic_creator_06', tt: null, ttUser: null, niche: 'health', igF: 156000, ttF: 0, synthetic: true },
+  { name: 'Synthetic Creator 07', ig: 'https://example.invalid/synthetic-creator-07', igUser: 'synthetic_creator_07', tt: 'https://example.invalid/synthetic-creator-07-video', ttUser: 'synthetic_creator_07', niche: 'entertainment', igF: 324000, ttF: 118000, synthetic: true },
+  { name: 'Synthetic Creator 08', ig: 'https://example.invalid/synthetic-creator-08', igUser: 'synthetic_creator_08', tt: null, ttUser: null, niche: 'business', igF: 6300, ttF: 0, synthetic: true },
 ]
 
-// ── pure helpers ──────────────────────────────────────────────
+// Pure helpers
 export function formatCompact(n) {
   const num = Number(n) || 0
   if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`

@@ -2551,14 +2551,16 @@ def _load_investigation_graph(case_id: str) -> Dict[str, object]:
            coalesce(e.evidenceType, '') AS evidenceType,
            coalesce(e.publishedAt, '') AS publishedAt,
            coalesce(e.note, '') AS note,
-           e.reportId AS reportId
+           e.reportId AS reportId,
+           properties(e) AS properties
     ORDER BY e.publishedAt DESC, e.title
     """
     source_query = """
     MATCH (c:DueDiligenceCase {caseId: $caseId})-[:USES_INVESTIGATION_SOURCE]->(s:InvestigationDataSource)
     RETURN s.sourceId AS sourceId, s.name AS name,
            coalesce(s.sourceType, '') AS sourceType,
-           coalesce(s.url, '') AS url
+           coalesce(s.url, '') AS url,
+           properties(s) AS properties
     ORDER BY s.name
     """
     with _db_session(driver) as session:
@@ -4485,11 +4487,12 @@ def create_due_diligence_decision(case_id: str, payload: DueDiligenceDecisionCre
 @router.get("/graph/schema")
 def get_due_diligence_investigation_graph_schema():
     return {
-        "version": "1.0",
+        "version": "1.1",
         "principles": [
             "Model observable connections separately from analyst conclusions.",
             "Attach provenance, confidence, and verification status to every relationship.",
             "Treat screening results and generated patterns as leads until an analyst verifies identity and context.",
+            "Keep social profiles source-scoped; a display-name alias never proves that a profile is an official person.",
             "Keep node types extensible so new registries can add addresses, jurisdictions, intermediaries, and documents.",
         ],
         "nodeTypes": [
@@ -4502,6 +4505,14 @@ def get_due_diligence_investigation_graph_schema():
             {"type": "Jurisdiction", "role": "Country or legal jurisdiction", "description": "The jurisdiction attached to an entity, address, or filing."},
             {"type": "Article", "role": "Source document", "description": "A media or public-source document captured as evidence."},
             {"type": "Screening record", "role": "Candidate identity record", "description": "A possible screening match that still requires identity resolution."},
+            {"type": "Social profile", "role": "Source-scoped public social profile", "description": "A platform profile whose display name is an alias, not a resolved official identity."},
+            {"type": "Social group", "role": "Public social-media group", "description": "A public group observed through a cited collection run."},
+            {"type": "Social post", "role": "Public social-media post", "description": "A post preserved with its source URL, record checksum, timestamps, and engagement snapshot."},
+            {"type": "Social comment", "role": "Public social-media comment", "description": "A collected comment linked to its post and source-scoped profile."},
+            {"type": "Vehicle", "role": "Movable asset", "description": "A car or other vehicle supported by registry, declaration, or reviewed source evidence."},
+            {"type": "Real estate", "role": "Immovable asset", "description": "Land, buildings, or other real property supported by cited evidence."},
+            {"type": "Vessel", "role": "Maritime asset", "description": "A vessel identified by cited registry or source data."},
+            {"type": "Airplane", "role": "Aviation asset", "description": "An aircraft identified by cited registry or source data."},
         ],
         "relationshipTypes": [
             {"label": "Family: {relationship}", "description": "A family relationship stated by a cited source."},
@@ -5057,6 +5068,13 @@ def import_followthemoney_investigation_graph(
                 "firstSeen": normalized.get("firstSeen") or "",
                 "lastSeen": normalized.get("lastSeen") or "",
                 "lastChange": normalized.get("lastChange") or "",
+                "identifierIssuer": (
+                    _clean_decl_text(payload.dataset.jurisdiction)
+                    or _clean_decl_text(payload.dataset.id)
+                ),
+                "identifierJurisdiction": _clean_decl_text(
+                    payload.dataset.jurisdiction
+                ),
             }
         )
         if names:

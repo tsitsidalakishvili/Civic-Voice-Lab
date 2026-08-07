@@ -5,6 +5,7 @@ from deliberation.api.app.investigation_ftm import (
     InvestigationPathQueryRequest,
     _enumerate_paths,
     _normalize_name,
+    _projection_match_values,
     _projection_rows,
 )
 from deliberation.api.app.investigation_reuse import (
@@ -92,6 +93,43 @@ class TestInvestigationFollowTheMoney(unittest.TestCase):
         )
         self.assertEqual(birth_statement["value"], "1980")
         self.assertEqual(birth_statement["sourceId"], "source-1")
+
+    def test_identifiers_are_issuer_scoped_before_candidate_generation(self):
+        bundle = {
+            "caseId": "case-1",
+            "entities": [
+                {
+                    "entityId": "company-ge",
+                    "name": "Georgia Company",
+                    "entityType": "Organization",
+                    "sourceId": "source-ge",
+                    "identifierIssuer": "GE-NAPR",
+                    "identifierJurisdiction": "GE",
+                    "identifiers": ["123456789"],
+                },
+                {
+                    "entityId": "company-other",
+                    "name": "Other Company",
+                    "entityType": "Organization",
+                    "sourceId": "source-other",
+                    "identifierIssuer": "OTHER-REGISTRY",
+                    "identifierJurisdiction": "XX",
+                    "identifiers": ["123456789"],
+                },
+            ],
+            "relationships": [],
+            "evidence": [],
+        }
+        rows = _projection_match_values(bundle)
+        by_entity = {row["entityId"]: row for row in rows}
+        self.assertNotEqual(
+            by_entity["company-ge"]["valueId"],
+            by_entity["company-other"]["valueId"],
+        )
+        self.assertEqual(by_entity["company-ge"]["issuer"], "GE-NAPR")
+        self.assertTrue(
+            by_entity["company-ge"]["normalizedValue"].startswith("ge napr::")
+        )
 
     @patch(
         "deliberation.api.app.investigation_ftm._path_statement_ids",

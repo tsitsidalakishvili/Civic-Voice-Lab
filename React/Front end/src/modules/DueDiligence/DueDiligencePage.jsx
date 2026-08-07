@@ -1376,11 +1376,6 @@ export function DueDiligencePage({
     ],
     [competitorMatches.length, crmMatches.length, reportHistory.length, summary?.competitors],
   )
-  const activeWorkflowIndex = Math.max(
-    0,
-    workflowSteps.findIndex((step) => step.id === activeTab),
-  )
-
   return (
     <section className="module dd-workspace">
       <div className="dd-command-bar">
@@ -1423,27 +1418,6 @@ export function DueDiligencePage({
           </button>
         </div>
       </div>
-
-      <nav className="dd-workflow" aria-label="Due diligence workflow">
-        {workflowSteps.map((step, index) => {
-          const isActive = step.id === activeTab
-          const isComplete = index < activeWorkflowIndex
-          return (
-            <button
-              key={step.id}
-              type="button"
-              className={`dd-workflow__step${isActive ? ' is-active' : ''}${isComplete ? ' is-complete' : ''}`}
-              onClick={() => applyActiveTab(step.id)}
-            >
-              <span className="dd-workflow__number">{isComplete ? <IconCheck size={14} /> : index + 1}</span>
-              <span>
-                <strong>{step.label}</strong>
-                <small>{step.detail}</small>
-              </span>
-            </button>
-          )
-        })}
-      </nav>
 
       <div className="dd-workspace__body">
         {activeTab === 'overview' ? (

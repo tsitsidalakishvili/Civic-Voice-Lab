@@ -35,3 +35,8 @@ outputs/
 runtime/logs/
 runtime/outputs/
 
+# Privacy: local CRM import artifacts must never be committed.
+data/import_batches/2026_06_crm_people/
+data/imports/members_2026_06.csv
+data/imports/supporters_2026_06.csv
+

@@ -2,9 +2,9 @@
 // For servers without a build-time URL, set API_BASE_URL here to your API origin (https://…).
 window.__FS_RUNTIME_CONFIG__ = {
   API_BASE_URL: '',
-  AUTH_ENABLED: false,
-  AUTH_MODE: 'bearer',
-  AUTH_TOKEN: '',
-  AUTH_API_KEY: '',
-  AUTH_HEADER_NAME: 'X-FS-API-Key',
+  AUTH_ENABLED: true,
+  AUTH_MODE: 'session',
+  OIDC_PROVIDER: '',
+  PUBLIC_BUSINESS_ROUTES_ENABLED: false,
+  EMERGENCY_AUTH_GATE_ENABLED: false,
 }

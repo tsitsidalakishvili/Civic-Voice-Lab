@@ -65,32 +65,31 @@ function readBool(envValue, runtimeValue, fallback = false) {
 
 export function getRuntimeConfig() {
   const overrides = readRuntimeOverrides()
+  const productionDefaultAuth = Boolean(import.meta.env.PROD)
   return {
     apiBaseUrl: resolveApiBaseUrl(overrides),
     authEnabled: readBool(
       import.meta.env.VITE_AUTH_ENABLED,
       overrides.AUTH_ENABLED,
+      productionDefaultAuth,
+    ),
+    authMode: 'session',
+    oidcProvider: readValue(import.meta.env.VITE_OIDC_PROVIDER, overrides.OIDC_PROVIDER, ''),
+    csrfPath: readValue(import.meta.env.VITE_CSRF_PATH, overrides.CSRF_PATH, '/auth/csrf'),
+    csrfHeaderName: readValue(
+      import.meta.env.VITE_CSRF_HEADER_NAME,
+      overrides.CSRF_HEADER_NAME,
+      'X-FS-CSRF',
+    ),
+    emergencyGateEnabled: readBool(
+      import.meta.env.VITE_EMERGENCY_AUTH_GATE_ENABLED,
+      overrides.EMERGENCY_AUTH_GATE_ENABLED,
       false,
     ),
-    authMode: readValue(
-      import.meta.env.VITE_AUTH_MODE,
-      overrides.AUTH_MODE,
-      'bearer',
-    ).toLowerCase(),
-    authToken: readValue(
-      import.meta.env.VITE_AUTH_TOKEN,
-      overrides.AUTH_TOKEN,
-      '',
-    ),
-    authApiKey: readValue(
-      import.meta.env.VITE_AUTH_API_KEY,
-      overrides.AUTH_API_KEY,
-      '',
-    ),
-    authHeaderName: readValue(
-      import.meta.env.VITE_AUTH_HEADER_NAME,
-      overrides.AUTH_HEADER_NAME,
-      'X-FS-API-Key',
+    publicBusinessRoutesEnabled: readBool(
+      import.meta.env.VITE_PUBLIC_BUSINESS_ROUTES_ENABLED,
+      overrides.PUBLIC_BUSINESS_ROUTES_ENABLED,
+      false,
     ),
   }
 }

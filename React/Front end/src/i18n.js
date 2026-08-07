@@ -19,7 +19,7 @@ export const TRANSLATIONS = {
     'module.campaigns.desc': 'Plan campaigns, coordinate activities, launch surveys, and track outcomes.',
     'module.dueDiligence': 'Due Diligence',
     'module.dueDiligence.desc':
-      'Assess people or organizations, manage watchlists, and record risk decisions.',
+      'Connect sources, resolve identities, trace evidence, and publish defensible findings.',
     'module.audienceDiscovery': 'Audience Discovery Engine',
     'module.audienceDiscovery.desc':
       'Identify audience segments with cited evidence and tailored messaging.',

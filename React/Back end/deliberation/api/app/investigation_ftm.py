@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .db import get_active_database, get_driver
@@ -19,6 +19,8 @@ from .investigation_reuse import (
     official_logic_v2,
     toolkit_capabilities,
 )
+from .investigation_governance import append_review_event, publication_governance_blockers
+from .core.errors import error_response
 
 
 router = APIRouter()
@@ -251,20 +253,34 @@ def _projection_rows(bundle: Dict[str, object]) -> Tuple[List[Dict[str, object]]
         entity_id = str(entity.get("entityId") or "")
         if not entity_id:
             continue
-        display_names = _ordered_unique([entity.get("name")] + list(entity.get("aliases") or []))
-        for display_name in display_names:
-            for normalized in name_blocking_keys(display_name):
-                names[(entity_id, normalized)] = {
-                    "entityId": entity_id,
-                    "normalizedName": normalized,
-                    "displayName": display_name,
-                }
         evidence_ids = sorted(
             set(evidence_by_entity.get(entity_id) or [])
             | {str(value) for value in entity.get("evidenceIds") or [] if value}
         )
         if not evidence_ids and entity.get("sourceId"):
             evidence_ids = [""]
+        display_names = _ordered_unique(
+            [entity.get("name")] + list(entity.get("aliases") or [])
+        )
+        for display_index, display_name in enumerate(display_names):
+            if str(entity.get("entityType") or "") == "Social profile":
+                alias_type = "social-display"
+            elif display_index == 0:
+                alias_type = "official-name"
+            else:
+                alias_type = "source-alias"
+            for normalized in name_blocking_keys(display_name):
+                names[(entity_id, normalized)] = {
+                    "entityId": entity_id,
+                    "normalizedName": normalized,
+                    "displayName": display_name,
+                    "aliasType": alias_type,
+                    "platform": str(entity.get("platform") or ""),
+                    "sourceIds": _ordered_unique([entity.get("sourceId")]),
+                    "evidenceIds": evidence_ids,
+                    "assertionKind": "sourced",
+                    "verificationStatus": "source-stated",
+                }
         property_values: List[Tuple[str, object, str, str]] = []
         for key, value in [("name", entity.get("name"))] + [
             ("aliases", value) for value in entity.get("aliases") or []
@@ -446,17 +462,37 @@ def _projection_match_values(bundle: Dict[str, object]) -> List[Dict[str, object
         entity_id = str(entity.get("entityId") or "")
         if not entity_id:
             continue
-        candidates: List[Tuple[str, str, object]] = []
+        candidates: List[Tuple[str, str, object, str, str, str]] = []
+        default_issuer = str(
+            entity.get("identifierIssuer") or entity.get("sourceId") or ""
+        )
+        identifier_jurisdiction = str(
+            entity.get("identifierJurisdiction")
+            or (
+                (entity.get("jurisdiction") or [""])[0]
+                if isinstance(entity.get("jurisdiction"), list)
+                else entity.get("jurisdiction") or ""
+            )
+        )
         for value in entity.get("identifiers") or []:
-            candidates.append(("identifier", "Thing:idNumber", value))
+            candidates.append(
+                (
+                    "identifier",
+                    "Thing:idNumber",
+                    value,
+                    default_issuer,
+                    identifier_jurisdiction,
+                    str(entity.get("identifierType") or "generic-identifier"),
+                )
+            )
         if entity.get("address"):
-            candidates.append(("address", "Thing:address", entity.get("address")))
+            candidates.append(("address", "Thing:address", entity.get("address"), "", "", ""))
         for key, value_type in [("email", "email"), ("phone", "phone"), ("url", "url")]:
             value = entity.get(key)
             values = value if isinstance(value, list) else [value]
             for item in values:
                 if item:
-                    candidates.append((value_type, f"Thing:{key}", item))
+                    candidates.append((value_type, f"Thing:{key}", item, "", "", ""))
 
         ftm_schema = str(entity.get("ftmSchema") or entity.get("entityType") or "Thing")
         ftm_properties = entity.get("ftmProperties")
@@ -475,7 +511,31 @@ def _projection_match_values(bundle: Dict[str, object]) -> List[Dict[str, object
                 continue
             prop_values = values if isinstance(values, list) else [values]
             for value in prop_values:
-                candidates.append((value_type, f"{ftm_schema}:{prop_name}", value))
+                normalized_prop = str(prop_name).casefold()
+                issuer = ""
+                identifier_type = ""
+                if value_type == "identifier":
+                    if normalized_prop in {"leicode", "lei"}:
+                        issuer, identifier_type = "GLEIF", "lei"
+                    elif normalized_prop in {"imonumber", "imo"}:
+                        issuer, identifier_type = "IMO", "imo-number"
+                    elif "aircraft" in normalized_prop or "icao" in normalized_prop:
+                        issuer, identifier_type = "ICAO", "aircraft-identifier"
+                    else:
+                        issuer = default_issuer
+                        identifier_type = str(
+                            entity.get("identifierType") or normalized_prop or "generic-identifier"
+                        )
+                candidates.append(
+                    (
+                        value_type,
+                        f"{ftm_schema}:{prop_name}",
+                        value,
+                        issuer,
+                        identifier_jurisdiction,
+                        identifier_type,
+                    )
+                )
 
         evidence_ids = sorted(
             set(evidence_by_entity.get(entity_id) or [])
@@ -485,8 +545,22 @@ def _projection_match_values(bundle: Dict[str, object]) -> List[Dict[str, object
             [entity.get("sourceId")]
             + [evidence_by_id.get(evidence_id, {}).get("sourceId") for evidence_id in evidence_ids]
         )
-        for value_type, predicate, display_value in candidates:
-            normalized = normalize_match_value(value_type, display_value)
+        for (
+            value_type,
+            predicate,
+            display_value,
+            issuer,
+            jurisdiction,
+            identifier_type,
+        ) in candidates:
+            normalized_unscoped = normalize_match_value(value_type, display_value)
+            normalized = normalized_unscoped
+            if value_type == "identifier" and normalized_unscoped:
+                if not issuer:
+                    # A bare numeric value without an issuer/source scope is not a
+                    # safe identity pivot across jurisdictions.
+                    continue
+                normalized = f"{normalize_investigation_name(issuer)}::{normalized_unscoped}"
             if not normalized:
                 continue
             key = (entity_id, value_type, normalized, predicate)
@@ -500,6 +574,10 @@ def _projection_match_values(bundle: Dict[str, object]) -> List[Dict[str, object
                     "normalizedValue": normalized,
                     "displayValue": str(display_value),
                     "predicate": predicate,
+                    "issuer": issuer,
+                    "jurisdiction": jurisdiction,
+                    "identifierType": identifier_type,
+                    "unscopedNormalizedValue": normalized_unscoped,
                     "sourceIds": [],
                     "evidenceIds": [],
                 },
@@ -530,7 +608,20 @@ def persist_investigation_projection(bundle: Dict[str, object]) -> None:
     ON CREATE SET name.createdAt = datetime()
     SET name.displayName = item.displayName, name.updatedAt = datetime()
     MERGE (entity)-[link:HAS_INVESTIGATION_NAME {caseId: $caseId}]->(name)
-    SET link.displayName = item.displayName
+    SET link.displayName = item.displayName,
+        link.aliasType = item.aliasType,
+        link.platform = item.platform,
+        link.assertionKind = item.assertionKind,
+        link.verificationStatus = item.verificationStatus,
+        link.sourceIds = reduce(
+          collected = [], sourceId IN coalesce(link.sourceIds, []) + item.sourceIds |
+          CASE WHEN sourceId IN collected THEN collected ELSE collected + [sourceId] END
+        ),
+        link.evidenceIds = reduce(
+          collected = [], evidenceId IN coalesce(link.evidenceIds, []) + item.evidenceIds |
+          CASE WHEN evidenceId IN collected THEN collected ELSE collected + [evidenceId] END
+        ),
+        link.updatedAt = datetime()
     """
     statement_query = """
     MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
@@ -558,6 +649,10 @@ def persist_investigation_projection(bundle: Dict[str, object]) -> None:
     SET value.valueType = item.valueType,
         value.normalizedValue = item.normalizedValue,
         value.displayValue = coalesce(value.displayValue, item.displayValue),
+        value.issuer = item.issuer,
+        value.jurisdiction = item.jurisdiction,
+        value.identifierType = item.identifierType,
+        value.unscopedNormalizedValue = item.unscopedNormalizedValue,
         value.updatedAt = datetime()
     MERGE (entity)-[link:HAS_MATCH_VALUE {caseId: item.caseId, predicate: item.predicate}]->(value)
     ON CREATE SET link.createdAt = datetime()
@@ -603,7 +698,18 @@ def _refresh_statement_contradictions(case_id: str) -> None:
       other IN statements WHERE other.value <> current.value | other.statementId
     ]
     """
-    params = {"caseId": case_id, "predicates": ["Person:birthDate"]}
+    params = {
+        "caseId": case_id,
+        "predicates": [
+            "Person:birthDate",
+            "Company:name",
+            "Company:registrationNumber",
+            "Company:incorporationDate",
+            "Company:address",
+            "Company:legalForm",
+            "Company:status",
+        ],
+    }
     with _db_session(driver) as session:
         _execute_write(session, clear_query, params)
         _execute_write(session, contradiction_query, params)
@@ -763,6 +869,30 @@ def list_investigation_datasets(case_id: str):
            source.name AS name, coalesce(source.sourceType, 'Public source') AS type,
            coalesce(source.url, '') AS url, coalesce(source.license, '') AS license,
            coalesce(source.ingestionMode, 'projection') AS ingestionMode,
+           coalesce(source.connector, '') AS connector,
+           coalesce(source.platform, '') AS platform,
+           coalesce(source.actorId, '') AS actorId,
+           coalesce(source.actorName, '') AS actorName,
+           coalesce(source.actorUrl, '') AS actorUrl,
+           coalesce(source.resolvedActorId, '') AS resolvedActorId,
+           coalesce(source.actorSchemaVersion, '') AS actorSchemaVersion,
+           coalesce(source.actorBuildId, '') AS actorBuildId,
+           coalesce(source.actorBuildNumber, '') AS actorBuildNumber,
+           coalesce(source.externalRunId, '') AS externalRunId,
+           coalesce(source.externalDatasetId, '') AS externalDatasetId,
+           coalesce(source.pricingModel, '') AS pricingModel,
+           coalesce(source.usageTotalUsd, 0.0) AS usageTotalUsd,
+           coalesce(source.requestedCostCapUsd, 0.0) AS requestedCostCapUsd,
+           coalesce(source.chargedItemCount, 0) AS chargedItemCount,
+           coalesce(source.sourceTotalItems, 0) AS sourceTotalItems,
+           coalesce(source.datasetTruncated, false) AS datasetTruncated,
+           coalesce(source.schemaRejectedItems, 0) AS schemaRejectedItems,
+           toString(source.fetchedAt) AS fetchedAt,
+           coalesce(source.publicContentOnly, false) AS publicContentOnly,
+           coalesce(source.collectionPolicy, '') AS collectionPolicy,
+           coalesce(source.retentionDays, 0) AS retentionDays,
+           coalesce(source.retentionEnforcement, '') AS retentionEnforcement,
+           coalesce(source.rawArtifactPolicy, '') AS rawArtifactPolicy,
            CASE WHEN statementCount > 0 THEN 'ready' ELSE 'registered' END AS status,
            toString(coalesce(lastRunAt, lastSeen)) AS lastImportedAt,
            recordCount, statementCount, evidenceCount,
@@ -791,10 +921,45 @@ def list_investigation_dataset_imports(
     query = """
     MATCH (:DueDiligenceCase {caseId: $caseId})-[:HAS_IMPORT_RUN]->(run:InvestigationImportRun {sourceId: $sourceId})
     RETURN run.runId AS runId, run.sourceId AS sourceId, run.status AS status,
+           coalesce(run.connector, '') AS connector,
+           coalesce(run.platform, '') AS platform,
+           coalesce(run.actorId, '') AS actorId,
+           coalesce(run.actorName, '') AS actorName,
+           coalesce(run.actorUrl, '') AS actorUrl,
+           coalesce(run.resolvedActorId, '') AS resolvedActorId,
+           coalesce(run.actorSchemaVersion, '') AS actorSchemaVersion,
+           coalesce(run.actorBuildId, '') AS actorBuildId,
+           coalesce(run.actorBuildNumber, '') AS actorBuildNumber,
+           coalesce(run.externalRunId, '') AS externalRunId,
+           coalesce(run.externalDatasetId, '') AS externalDatasetId,
+           coalesce(run.externalRunStatus, '') AS externalRunStatus,
+           coalesce(run.pricingModel, '') AS pricingModel,
+           coalesce(run.usageTotalUsd, 0.0) AS usageTotalUsd,
+           coalesce(run.requestedCostCapUsd, 0.0) AS requestedCostCapUsd,
+           coalesce(run.chargedItemCount, 0) AS chargedItemCount,
+           coalesce(run.chargedEventCountsJson, '{}') AS chargedEventCountsJson,
+           coalesce(run.rawItemCount, 0) AS rawItemCount,
+           coalesce(run.acceptedItemCount, 0) AS acceptedItemCount,
+           coalesce(run.rejectedItemCount, 0) AS rejectedItemCount,
+           coalesce(run.duplicateItemCount, 0) AS duplicateItemCount,
            coalesce(run.entityCount, 0) AS entityCount,
            coalesce(run.relationshipCount, 0) AS relationshipCount,
            coalesce(run.evidenceCount, 0) AS evidenceCount,
            coalesce(run.errorCount, 0) AS errorCount,
+           coalesce(run.sourceTotalItems, 0) AS sourceTotalItems,
+           coalesce(run.datasetTruncated, false) AS datasetTruncated,
+           coalesce(run.fetchPageCount, 0) AS fetchPageCount,
+           coalesce(run.schemaRejectedItemCount, 0) AS schemaRejectedItemCount,
+           coalesce(run.schemaRejectionReasonsJson, '{}') AS schemaRejectionReasonsJson,
+           coalesce(run.inputMode, '') AS inputMode,
+           coalesce(run.retentionDays, 0) AS retentionDays,
+           toString(run.retentionExpiresAt) AS retentionExpiresAt,
+           coalesce(run.retentionEnforcement, '') AS retentionEnforcement,
+           coalesce(run.rawArtifactPolicy, '') AS rawArtifactPolicy,
+           coalesce(run.retentionStatus, '') AS retentionStatus,
+           toString(run.contentExpiredAt) AS contentExpiredAt,
+           toString(run.fetchedAt) AS fetchedAt,
+           coalesce(run.inputFingerprint, '') AS inputFingerprint,
            toString(run.startedAt) AS startedAt,
            toString(run.completedAt) AS completedAt
     ORDER BY run.startedAt DESC
@@ -885,7 +1050,11 @@ def list_investigation_entities(
     driver = get_driver()
     query = """
     MATCH (caseNode:DueDiligenceCase {caseId: $caseId})-[:HAS_INVESTIGATION_ENTITY]->(entity:InvestigationEntity)
-    WHERE ($q IS NULL OR toLower(entity.name) CONTAINS toLower($q))
+    WHERE ($q IS NULL OR toLower(entity.name) CONTAINS toLower($q)
+      OR EXISTS {
+        MATCH (entity)-[aliasLink:HAS_INVESTIGATION_NAME {caseId: $caseId}]->(:InvestigationName)
+        WHERE toLower(aliasLink.displayName) CONTAINS toLower($q)
+      })
       AND ($entityType IS NULL OR entity.entityType = $entityType)
     OPTIONAL MATCH (entity)-[:HAS_STATEMENT]->(statement:InvestigationStatement {caseId: $caseId})
     WITH caseNode, entity, count(DISTINCT statement) AS statementCount,
@@ -927,6 +1096,72 @@ def list_investigation_entities(
     return [row.data() for row in records]
 
 
+def _load_investigation_aliases(
+    case_id: str, entity_id: str, include_cluster: bool = True
+) -> List[Dict[str, object]]:
+    _ensure_case(case_id)
+    driver = get_driver()
+    query = """
+    MATCH (caseNode:DueDiligenceCase {caseId: $caseId})-[:HAS_INVESTIGATION_ENTITY]->(requested:InvestigationEntity {entityId: $entityId})
+    WITH caseNode, requested, coalesce(requested.canonicalEntityId, requested.entityId) AS canonicalEntityId
+    MATCH (caseNode)-[:HAS_INVESTIGATION_ENTITY]->(member:InvestigationEntity)
+    WHERE member = requested OR ($includeCluster AND coalesce(member.canonicalEntityId, member.entityId) = canonicalEntityId)
+    MATCH (member)-[link:HAS_INVESTIGATION_NAME {caseId: $caseId}]->(name:InvestigationName)
+    RETURN member.entityId + '|' + name.normalizedName AS aliasId,
+           member.entityId AS sourceEntityId,
+           member.entityType AS sourceEntityType,
+           member.entityId = requested.entityId AS belongsToRequestedEntity,
+           link.displayName AS value,
+           name.normalizedName AS normalizedValue,
+           coalesce(link.aliasType, CASE WHEN member.entityType = 'Social profile' THEN 'social-display' ELSE 'source-alias' END) AS aliasType,
+           coalesce(link.platform, member.platform, '') AS platform,
+           coalesce(link.assertionKind, 'sourced') AS assertionKind,
+           coalesce(link.verificationStatus, 'source-stated') AS verificationStatus,
+           coalesce(link.sourceIds, []) AS sourceIds,
+           coalesce(link.evidenceIds, []) AS evidenceIds,
+           canonicalEntityId
+    ORDER BY belongsToRequestedEntity DESC, aliasType, value
+    """
+    with _db_session(driver) as session:
+        records = _execute_read(
+            session,
+            query,
+            {
+                "caseId": case_id,
+                "entityId": entity_id,
+                "includeCluster": bool(include_cluster),
+            },
+        )
+    return [row.data() for row in records]
+
+
+@router.get("/cases/{case_id}/entities/{entity_id}/aliases")
+def list_investigation_entity_aliases(
+    case_id: str,
+    entity_id: str,
+    include_cluster: bool = Query(default=True, alias="includeCluster"),
+):
+    aliases = _load_investigation_aliases(case_id, entity_id, include_cluster)
+    if not aliases:
+        driver = get_driver()
+        query = """
+        MATCH (:DueDiligenceCase {caseId: $caseId})-[:HAS_INVESTIGATION_ENTITY]->(entity:InvestigationEntity {entityId: $entityId})
+        RETURN count(entity) AS count
+        """
+        with _db_session(driver) as session:
+            records = _execute_read(
+                session, query, {"caseId": case_id, "entityId": entity_id}
+            )
+        if not records or int(records[0].get("count") or 0) == 0:
+            raise HTTPException(status_code=404, detail="Entity is not attached to this case")
+    return {
+        "caseId": case_id,
+        "entityId": entity_id,
+        "includeCluster": include_cluster,
+        "aliases": aliases,
+    }
+
+
 @router.get("/cases/{case_id}/entities/{entity_id}")
 def get_investigation_entity_dossier(case_id: str, entity_id: str):
     entities = list_investigation_entities(
@@ -962,6 +1197,7 @@ def get_investigation_entity_dossier(case_id: str, entity_id: str):
     return {
         "caseId": case_id,
         "entity": entity,
+        "aliases": _load_investigation_aliases(case_id, entity_id, True),
         "statementGroups": [
             {"predicate": predicate, "statements": rows}
             for predicate, rows in sorted(groups.items())
@@ -1334,7 +1570,7 @@ def list_entity_resolution_candidates(
 
 @router.post("/cases/{case_id}/resolution-candidates/{candidate_id}/review")
 def review_entity_resolution_candidate(
-    case_id: str, candidate_id: str, payload: EntityResolutionReviewRequest
+    request: Request, case_id: str, candidate_id: str, payload: EntityResolutionReviewRequest
 ):
     decision = payload.decision.strip().casefold()
     if decision not in RESOLUTION_DECISIONS:
@@ -1347,6 +1583,24 @@ def review_entity_resolution_candidate(
     candidate = next((row for row in candidates if row.get("candidateId") == candidate_id), None)
     if not candidate:
         raise HTTPException(status_code=404, detail="Resolution candidate not found")
+    if decision == "accepted":
+        signal_types = {
+            str(signal.get("type") or "").casefold()
+            for signal in (candidate.get("signals") or [])
+        }
+        independent_terms = ("identifier", "registration", "email", "phone", "address", "birth", "date", "tax", "lei")
+        has_independent_signal = bool(candidate.get("sharedValues")) or any(
+            any(term in signal_type for term in independent_terms)
+            for signal_type in signal_types
+        )
+        if not has_independent_signal:
+            return error_response(
+                409,
+                "NAME_ONLY_MATCH_REQUIRES_MORE_EVIDENCE",
+                "Name similarity alone cannot confirm a person or entity identity.",
+                request_id=str(getattr(request.state, "request_id", "")),
+                details={"candidateId": candidate_id, "required": "independent identifier or corroborating attribute"},
+            )
 
     left_canonical = str((candidate.get("left") or {}).get("id") or left_id)
     right_canonical = str((candidate.get("right") or {}).get("id") or right_id)
@@ -1394,7 +1648,7 @@ def review_entity_resolution_candidate(
         "rightEntityId": right_id,
         "decision": decision,
         "rationale": payload.rationale.strip(),
-        "reviewedBy": str(payload.reviewed_by or "").strip(),
+        "reviewedBy": str(((getattr(request.state, "principal", None) or {}).get("principalId")) or payload.reviewed_by or "local-development").strip(),
         "canonicalEntityId": canonical_id,
     }
     with _db_session(driver) as session:
@@ -1407,12 +1661,23 @@ def review_entity_resolution_candidate(
             members_updated = int((canonical_rows[0].get("membersUpdated") if canonical_rows else 0) or 0)
     if decision == "accepted":
         _refresh_statement_contradictions(case_id)
+    review_event_id = append_review_event(
+        case_id,
+        target_type="resolution",
+        target_id=candidate_id,
+        decision=decision,
+        rationale=payload.rationale.strip(),
+        reviewer_id=params["reviewedBy"],
+        evidence_ids=list(candidate.get("evidenceIds") or []),
+        metadata={"signals": candidate.get("signals") or [], "conflicts": candidate.get("conflicts") or [], "score": candidate.get("score")},
+    )
     return {
         "candidateId": candidate_id,
         "decision": decision,
         "canonicalEntityId": canonical_id if decision == "accepted" else None,
         "membersUpdated": members_updated,
         "reviewedAt": datetime.now(timezone.utc).isoformat(),
+        "reviewEventId": review_event_id,
         "message": "Identity decision recorded without deleting either source record.",
     }
 
@@ -1727,7 +1992,7 @@ def list_investigation_findings(
 
 
 @router.post("/cases/{case_id}/findings")
-def create_investigation_finding(case_id: str, payload: InvestigationFindingCreate):
+def create_investigation_finding(request: Request, case_id: str, payload: InvestigationFindingCreate):
     _ensure_case(case_id)
     status = payload.status.strip().casefold()
     if status not in FINDING_STATUSES:
@@ -1787,10 +2052,20 @@ def create_investigation_finding(case_id: str, payload: InvestigationFindingCrea
         "relationshipIds": relationship_ids,
         "analystRationale": payload.analyst_rationale.strip(),
         "recommendedNextSteps": _ordered_unique(payload.recommended_next_steps),
-        "createdBy": str(payload.created_by or "").strip(),
+        "createdBy": str(((getattr(request.state, "principal", None) or {}).get("principalId")) or payload.created_by or "local-development").strip(),
     }
     with _db_session(driver) as session:
         _execute_write(session, query, params)
+    append_review_event(
+        case_id,
+        target_type="finding",
+        target_id=finding_id,
+        decision=status if status in {"accepted", "rejected", "needs-research"} else "deferred",
+        rationale=payload.analyst_rationale.strip() or "Finding created for human review.",
+        reviewer_id=params["createdBy"],
+        evidence_ids=evidence_ids,
+        metadata={"action": "created", "status": status},
+    )
     return next(
         row
         for row in list_investigation_findings(case_id, status=None)["findings"]
@@ -1800,7 +2075,7 @@ def create_investigation_finding(case_id: str, payload: InvestigationFindingCrea
 
 @router.patch("/cases/{case_id}/findings/{finding_id}")
 def update_investigation_finding(
-    case_id: str, finding_id: str, payload: InvestigationFindingUpdate
+    request: Request, case_id: str, finding_id: str, payload: InvestigationFindingUpdate
 ):
     _ensure_case(case_id)
     current = next(
@@ -1865,12 +2140,22 @@ def update_investigation_finding(
         "relationshipIds": relationship_ids,
         "analystRationale": str(rationale).strip(),
         "recommendedNextSteps": _ordered_unique(payload.recommended_next_steps if payload.recommended_next_steps is not None else current.get("recommendedNextSteps") or []),
-        "reviewedBy": str(payload.reviewed_by if payload.reviewed_by is not None else current.get("reviewedBy") or "").strip(),
+        "reviewedBy": str(((getattr(request.state, "principal", None) or {}).get("principalId")) or (payload.reviewed_by if payload.reviewed_by is not None else current.get("reviewedBy")) or "local-development").strip(),
     }
     with _db_session(driver) as session:
         records = _execute_write(session, query, params)
     if not records:
         raise HTTPException(status_code=404, detail="Finding not found")
+    append_review_event(
+        case_id,
+        target_type="finding",
+        target_id=finding_id,
+        decision=status if status in {"accepted", "rejected", "needs-research"} else "deferred",
+        rationale=str(rationale).strip() or "Finding record updated.",
+        reviewer_id=params["reviewedBy"],
+        evidence_ids=evidence_ids,
+        metadata={"action": "updated", "previousStatus": current.get("status"), "status": status},
+    )
     return next(
         row
         for row in list_investigation_findings(case_id, status=None)["findings"]
@@ -1938,9 +2223,18 @@ def get_investigation_publication(case_id: str, publication_id: str):
 
 @router.post("/cases/{case_id}/publications")
 def create_investigation_publication(
-    case_id: str, payload: InvestigationPublicationCreate
+    request: Request, case_id: str, payload: InvestigationPublicationCreate
 ):
     case_row = _ensure_case(case_id)
+    governance_blockers = publication_governance_blockers(case_id)
+    if governance_blockers:
+        return error_response(
+            409,
+            "PUBLICATION_GOVERNANCE_BLOCKED",
+            "Publication is blocked until governance requirements are satisfied.",
+            request_id=str(getattr(request.state, "request_id", "")),
+            details={"blockers": governance_blockers},
+        )
     accepted = list_investigation_findings(case_id, status="accepted")["findings"]
     if not accepted:
         raise HTTPException(

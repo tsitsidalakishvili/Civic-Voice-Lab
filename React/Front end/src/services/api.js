@@ -1,5 +1,4 @@
 import { getRuntimeConfig } from '../config/runtime'
-import { getAuthHeaders, getAuthSnapshot } from './runtimeAuth'
 
 /** Resolve on each use so production never keeps a stale base from first module load. */
 export function getApiBaseUrl() {
@@ -9,6 +8,9 @@ export function getApiBaseUrl() {
 const DEFAULT_GET_CACHE_MS = 5000
 const getCache = new Map()
 const inflightGetRequests = new Map()
+const authListeners = new Set()
+let cacheGeneration = 0
+let csrfToken = ''
 
 function buildUrl(path) {
   const base = getApiBaseUrl()
@@ -16,11 +18,7 @@ function buildUrl(path) {
 }
 
 function buildGetRequestKey(url) {
-  const auth = getAuthSnapshot()
-  if (!auth.enabled) return `GET:public:${url}`
-  const credential = auth.mode === 'api_key' ? auth.apiKey : auth.token
-  const authSuffix = credential ? credential.slice(-6) : 'anon'
-  return `GET:${auth.mode}:${auth.headerName}:${authSuffix}:${url}`
+  return `GET:${cacheGeneration}:${url}`
 }
 
 function cloneJson(value) {
@@ -30,9 +28,33 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-function clearGetCache() {
+export function clearApiSessionState() {
+  cacheGeneration += 1
   getCache.clear()
   inflightGetRequests.clear()
+  csrfToken = ''
+}
+
+function invalidateGetCache() {
+  cacheGeneration += 1
+  getCache.clear()
+  inflightGetRequests.clear()
+}
+
+export function setSessionCsrfToken(value = '') { csrfToken = String(value || '') }
+export function onApiAuthEvent(listener) {
+  authListeners.add(listener)
+  return () => authListeners.delete(listener)
+}
+
+export class ApiError extends Error {
+  constructor(message, status, code = '', detail = null) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.detail = detail
+  }
 }
 
 async function parseError(response) {
@@ -40,13 +62,29 @@ async function parseError(response) {
   // Try to extract a readable message from JSON error responses (e.g. FastAPI {"detail": "..."})
   try {
     const json = JSON.parse(text)
-    if (typeof json?.detail === 'string') return json.detail
-    if (typeof json?.message === 'string') return json.message
-    if (typeof json?.error === 'string') return json.error
+    const code = json?.error?.code || json?.detail?.code || ''
+    if (typeof json?.detail === 'string') return new ApiError(json.detail, response.status, code, json)
+    if (json?.detail && typeof json.detail === 'object') {
+      return new ApiError(json.detail.message || 'Request failed.', response.status, code, json.detail)
+    }
+    if (typeof json?.message === 'string') return new ApiError(json.message, response.status, code, json)
+    if (json?.error?.message) return new ApiError(json.error.message, response.status, code, json.error)
   } catch {
     // not JSON — fall through
   }
-  return text || `Request failed: ${response.status}`
+  return new ApiError(text || `Request failed: ${response.status}`, response.status)
+}
+
+async function requireOk(response) {
+  if (response.ok) return response
+  const error = await parseError(response)
+  if (response.status === 401) {
+    clearApiSessionState()
+    authListeners.forEach((listener) => listener({ type: error.code === 'AUTH_SESSION_REVOKED' ? 'revoked' : 'unauthenticated', error }))
+  } else if (response.status === 403 && error.code === 'ACCESS_REVOKED') {
+    authListeners.forEach((listener) => listener({ type: 'unauthorized', error }))
+  }
+  throw error
 }
 
 export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefresh = false } = {}) {
@@ -65,12 +103,10 @@ export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefre
   }
 
   const pendingRequest = fetch(url, {
-    headers: getAuthHeaders(),
+    credentials: 'include',
   })
     .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(await parseError(response))
-      }
+      await requireOk(response)
       return response.json()
     })
     .then((payload) => {
@@ -94,20 +130,19 @@ export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefre
 export async function requestJson(path, { method = 'POST', payload, headers } = {}) {
   const url = buildUrl(path)
   if (String(method).toUpperCase() !== 'GET') {
-    clearGetCache()
+    invalidateGetCache()
   }
   const response = await fetch(url, {
     method,
+    credentials: 'include',
     headers: {
-      ...getAuthHeaders(),
       'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-FS-CSRF': csrfToken } : {}),
       ...(headers || {}),
     },
     body: payload === undefined ? null : JSON.stringify(payload),
   })
-  if (!response.ok) {
-    throw new Error(await parseError(response))
-  }
+  await requireOk(response)
   if (response.status === 204) return null
   return response.json()
 }
@@ -115,11 +150,9 @@ export async function requestJson(path, { method = 'POST', payload, headers } = 
 export async function downloadFile(path, fallbackFileName = 'download') {
   const url = buildUrl(path)
   const response = await fetch(url, {
-    headers: getAuthHeaders(),
+    credentials: 'include',
   })
-  if (!response.ok) {
-    throw new Error(await parseError(response))
-  }
+  await requireOk(response)
   const disposition = response.headers.get('Content-Disposition') || ''
   const match = disposition.match(/filename="?([^";]+)"?/i)
   const fileName = match ? match[1] : fallbackFileName
@@ -138,16 +171,15 @@ export async function downloadFile(path, fallbackFileName = 'download') {
 export async function requestForm(path, { method = 'POST', formData } = {}) {
   const url = buildUrl(path)
   if (String(method).toUpperCase() !== 'GET') {
-    clearGetCache()
+    invalidateGetCache()
   }
   const response = await fetch(url, {
     method,
-    headers: getAuthHeaders(),
+    credentials: 'include',
+    headers: csrfToken ? { 'X-FS-CSRF': csrfToken } : {},
     body: formData,
   })
-  if (!response.ok) {
-    throw new Error(await parseError(response))
-  }
+  await requireOk(response)
   if (response.status === 204) return null
   return response.json()
 }

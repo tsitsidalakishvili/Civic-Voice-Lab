@@ -3,23 +3,27 @@ import {
   IconAlertTriangle,
   IconArrowsExchange,
   IconArrowRight,
+  IconAsset,
+  IconBriefcase,
   IconBuilding,
   IconBuildingBank,
+  IconBuildingEstate,
   IconCar,
   IconCircle,
   IconDatabaseSearch,
   IconExternalLink,
   IconFileSearch,
-  IconFileDescription,
+  IconFileInvoice,
   IconFileText,
-  IconHome,
-  IconMapPin,
+  IconHomeDollar,
+  IconIdBadge,
   IconMessageCircle,
   IconNews,
   IconPlane,
   IconPlus,
   IconRefresh,
   IconRoute,
+  IconScale,
   IconShip,
   IconUser,
   IconUserCircle,
@@ -64,28 +68,92 @@ const normalizeType = (value) => String(value || '').trim().toLowerCase()
 
 function iconForType(type) {
   const value = normalizeType(type)
-  if (value === 'person') return IconUser
-  if (value === 'social profile') return IconUserCircle
-  if (value === 'social group') return IconUsers
-  if (value === 'social post') return IconFileText
-  if (value === 'social comment') return IconMessageCircle
-  if (['organization', 'company', 'publicbody', 'public body'].includes(value)) return IconBuilding
-  if (value === 'vehicle') return IconCar
-  if (['real estate', 'property'].includes(value)) return IconHome
-  if (value === 'vessel') return IconShip
-  if (value === 'airplane') return IconPlane
-  if (value === 'contract') return IconFileDescription
-  if (value === 'address') return IconMapPin
-  if (value === 'jurisdiction') return IconBuildingBank
-  if (value === 'bankaccount' || value === 'bank account') return IconWallet
-  if (value === 'payment') return IconArrowsExchange
-  if (value === 'document') return IconFileSearch
-  if (value === 'article') return IconNews
-  if (value === 'screening record') return IconWorld
+  if (['person', 'individual', 'relative', 'officer', 'director', 'shareholder'].includes(value)) return IconUser
+  if (value.includes('social profile')) return IconUserCircle
+  if (value.includes('social group')) return IconUsers
+  if (value.includes('social post')) return IconFileText
+  if (value.includes('social comment')) return IconMessageCircle
+  if (['publicbody', 'public body', 'government body', 'government agency', 'regulator'].includes(value)) return IconBuildingBank
+  if (['organization', 'organisation', 'company', 'business', 'legal entity', 'intermediary'].includes(value)) return IconBuilding
+  if (['vehicle', 'car', 'automobile', 'motor vehicle'].includes(value) || value.endsWith(' vehicle')) return IconCar
+  if (['real estate', 'property', 'land', 'building', 'apartment', 'house'].includes(value)) return IconHomeDollar
+  if (['address', 'registered address', 'residential address', 'location', 'site'].includes(value)) return IconBuildingEstate
+  if (['vessel', 'ship', 'boat'].includes(value)) return IconShip
+  if (['airplane', 'aircraft', 'plane'].includes(value)) return IconPlane
+  if (['contract', 'agreement', 'award', 'tender', 'procurement'].includes(value)) return IconFileInvoice
+  if (['jurisdiction', 'country', 'region', 'municipality'].includes(value)) return IconWorld
+  if (['bankaccount', 'bank account', 'account', 'wallet'].includes(value)) return IconWallet
+  if (['payment', 'transaction', 'transfer'].includes(value)) return IconArrowsExchange
+  if (['employment', 'position', 'job', 'role'].includes(value)) return IconBriefcase
+  if (['identifier', 'identification', 'registration number', 'lei'].includes(value)) return IconIdBadge
+  if (['sanction', 'designation', 'regulatory action', 'court case'].includes(value)) return IconScale
+  if (['document', 'registry record', 'source document'].includes(value)) return IconFileSearch
+  if (['article', 'media article', 'news'].includes(value)) return IconNews
+  if (['screening record', 'candidate match'].includes(value)) return IconDatabaseSearch
+  if (['asset', 'other'].includes(value)) return IconAsset
   return IconCircle
 }
 
+function colorForType(type) {
+  if (TYPE_COLORS[type]) return TYPE_COLORS[type]
+  const value = normalizeType(type)
+  if (['vehicle', 'car', 'automobile', 'motor vehicle'].includes(value) || value.endsWith(' vehicle')) return TYPE_COLORS.Vehicle
+  if (['real estate', 'property', 'land', 'building', 'apartment', 'house'].includes(value)) return TYPE_COLORS.Property
+  if (['address', 'registered address', 'residential address', 'location', 'site'].includes(value)) return TYPE_COLORS.Address
+  if (['organization', 'organisation', 'company', 'business', 'legal entity', 'intermediary'].includes(value)) return TYPE_COLORS.Organization
+  if (['person', 'individual', 'relative', 'officer', 'director', 'shareholder'].includes(value)) return TYPE_COLORS.Person
+  if (['contract', 'agreement', 'award', 'tender', 'procurement'].includes(value)) return TYPE_COLORS.Contract
+  if (['payment', 'transaction', 'transfer', 'bankaccount', 'bank account', 'account', 'wallet'].includes(value)) return TYPE_COLORS.Payment
+  return '#475569'
+}
+
 const statusLabel = (status) => String(status || 'unverified').replaceAll('-', ' ')
+const isRestrictedProperty = (key) => /personal.?id|national.?id|personal.?number|passport/i.test(String(key || ''))
+const isDuplicateNodeProperty = (key) => ['name', 'description', 'entitytype', 'entityid', 'canonicalentityid'].includes(String(key || '').replaceAll('_', '').toLowerCase())
+
+function cleanDisplayText(value) {
+  const text = String(value || '').trim()
+  if (!text.includes(',')) return text
+  return text.split(',').map((part) => part.trim()).filter(Boolean).join(', ')
+}
+
+function nodeDisplayLabel(node) {
+  return normalizeType(node?.type) === 'address' ? cleanDisplayText(node?.label) : String(node?.label || 'Untitled').trim()
+}
+
+function propertyLabel(key) {
+  const spaced = String(key || '').replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2')
+  return spaced.replace(/\bId\b/gi, 'ID').replace(/^./, (letter) => letter.toUpperCase())
+}
+
+function neo4jDateTime(value) {
+  const date = value?._DateTime__date
+  const time = value?._DateTime__time
+  if (!date?._Date__year || !date?._Date__month || !date?._Date__day) return null
+  const parsed = new Date(
+    date._Date__year,
+    date._Date__month - 1,
+    date._Date__day,
+    time?._Time__hour || 0,
+    time?._Time__minute || 0,
+    time?._Time__second || 0,
+    Math.floor((time?._Time__nanosecond || 0) / 1e6),
+  )
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function propertyValue(key, value) {
+  if (value === null || value === undefined || value === '') return 'Not available'
+  const structuredDate = typeof value === 'object' ? neo4jDateTime(value) : null
+  if (structuredDate) return structuredDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+  if (/created|updated|published|retrieved|observed/i.test(key) && typeof value === 'string') {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+  }
+  if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? cleanDisplayText(item) : String(item)).join(' · ')
+  if (typeof value === 'object') return Object.entries(value).map(([childKey, childValue]) => `${propertyLabel(childKey)}: ${String(childValue)}`).join(' · ')
+  return typeof value === 'string' ? cleanDisplayText(value) : String(value)
+}
 
 function makeLayout(nodes, width = 920, height = 560) {
   if (!nodes.length) return []
@@ -349,10 +417,10 @@ export function InvestigationGraph({ caseId, reportId }) {
                 const NodeIcon = iconForType(node.type)
                 return (
                   <g key={node.id} className={`dd-graph-node${node.isRoot ? ' is-root' : ''}${selected ? ' is-selected' : ''}`} transform={`translate(${node.x} ${node.y})`} onClick={() => { setSelectedNodeId(node.id); setSelectedRelationshipId('') }}>
-                    <circle r={node.isRoot ? 30 : 22} fill={TYPE_COLORS[node.type] || '#475569'} />
+                    <circle r={node.isRoot ? 30 : 22} fill={colorForType(node.type)} />
                     <NodeIcon className="dd-graph-node__icon" x={-10} y={-10} width={20} height={20} strokeWidth={2} />
-                    <text y={node.isRoot ? 48 : 38} textAnchor="middle">{String(node.label || 'Untitled').slice(0, 24)}</text>
-                    <title>{node.label} · {node.type}</title>
+                    <text y={node.isRoot ? 48 : 38} textAnchor="middle">{nodeDisplayLabel(node).slice(0, 24)}</text>
+                    <title>{nodeDisplayLabel(node)} · {node.type}</title>
                   </g>
                 )
               })}
@@ -360,7 +428,7 @@ export function InvestigationGraph({ caseId, reportId }) {
             <div className="dd-graph-legend">
               {presentTypes.map((type) => {
                 const LegendIcon = iconForType(type)
-                return <span key={type}><i style={{ backgroundColor: TYPE_COLORS[type] || '#475569' }}><LegendIcon size={9} strokeWidth={2.2} /></i>{type}</span>
+                return <span key={type}><i style={{ backgroundColor: colorForType(type) }}><LegendIcon size={9} strokeWidth={2.2} /></i>{type}</span>
               })}
             </div>
           </div>
@@ -371,9 +439,9 @@ export function InvestigationGraph({ caseId, reportId }) {
                 <span className={`dd-graph-status is-${selectedRelationship.verificationStatus}`}>{statusLabel(selectedRelationship.verificationStatus)}</span>
                 <h3>{selectedRelationship.label}</h3>
                 <div className="dd-graph-connection-title">
-                  <strong>{nodeById.get(selectedRelationship.source)?.label || 'Unknown'}</strong>
+                  <strong>{nodeDisplayLabel(nodeById.get(selectedRelationship.source))}</strong>
                   <IconArrowRight size={16} />
-                  <strong>{nodeById.get(selectedRelationship.target)?.label || 'Unknown'}</strong>
+                  <strong>{nodeDisplayLabel(nodeById.get(selectedRelationship.target))}</strong>
                 </div>
                 <p>{selectedRelationship.details || 'No additional relationship details.'}</p>
                 <div className="dd-graph-confidence"><span style={{ width: `${Math.round((selectedRelationship.confidence || 0) * 100)}%` }} /></div>
@@ -391,12 +459,12 @@ export function InvestigationGraph({ caseId, reportId }) {
             ) : selectedNode ? (
               <>
                 <span className="dd-card-kicker">{selectedNode.type}</span>
-                <h3>{selectedNode.label}</h3>
+                <h3>{nodeDisplayLabel(selectedNode)}</h3>
                 <p>{selectedNode.description || 'No description available.'}</p>
                 {Object.keys(selectedNode.properties || {}).length ? (
                   <dl className="dd-node-properties">
-                    {Object.entries(selectedNode.properties).slice(0, 12).map(([key, value]) => (
-                      <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>
+                    {Object.entries(selectedNode.properties).filter(([key]) => !isRestrictedProperty(key) && !isDuplicateNodeProperty(key)).slice(0, 12).map(([key, value]) => (
+                      <div key={key}><dt>{propertyLabel(key)}</dt><dd>{propertyValue(key, value)}</dd></div>
                     ))}
                   </dl>
                 ) : null}
@@ -436,7 +504,7 @@ export function InvestigationGraph({ caseId, reportId }) {
             </div>
             <p className="muted">Record what the source states. This creates an analyst-added lead, not a verified finding.</p>
             <div className="dd-graph-form__grid">
-              <label>From entity<select value={form.fromEntityId} onChange={(event) => updateForm('fromEntityId', event.target.value)}><option value="">Case subject (root)</option>{graph.nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
+              <label>From entity<select value={form.fromEntityId} onChange={(event) => updateForm('fromEntityId', event.target.value)}><option value="">Case subject (root)</option>{graph.nodes.map((node) => <option key={node.id} value={node.id}>{nodeDisplayLabel(node)}</option>)}</select></label>
               <label>Target name<input required value={form.targetName} onChange={(event) => updateForm('targetName', event.target.value)} /></label>
               <label>Target type<select value={form.targetType} onChange={(event) => updateForm('targetType', event.target.value)}>{['Person', 'Organization', 'Asset', 'Contract', 'Other'].map((type) => <option key={type}>{type}</option>)}</select></label>
               <label>Relationship<input required placeholder="e.g. FAMILY_MEMBER_OF" value={form.relationshipType} onChange={(event) => updateForm('relationshipType', event.target.value)} /></label>

@@ -8,9 +8,10 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from .api.router import router as api_router
 from .core.auth import OptionalAuthMiddleware
-from .core.config import get_settings
+from .core.config import get_settings, validate_auth_startup
 from .core.env import load_backend_env
-from .db import close_driver, db_health, init_constraints
+from .core.field_masking import FieldMaskingMiddleware
+from .db import close_driver, db_health, init_compliance_backfill, init_constraints
 
 logger = logging.getLogger(__name__)
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -22,11 +23,20 @@ app = FastAPI(title=settings.app_title)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
-    allow_origin_regex=settings.cors_origin_regex,
+    allow_origin_regex=settings.cors_origin_regex or None,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "X-FS-API-Key",
+        "X-FS-CSRF",
+        "X-FS-Purpose-Id",
+        "Idempotency-Key",
+    ],
 )
+app.add_middleware(FieldMaskingMiddleware)
 app.add_middleware(OptionalAuthMiddleware)
 
 app.include_router(api_router)
@@ -47,19 +57,8 @@ def root():
 def healthz():
     health = db_health()
     if health.get("ok"):
-        return {
-            "status": "ok",
-            "db": "ok",
-            "target_source": health.get("target_source"),
-            "target_uri": health.get("target_uri"),
-            "target_database": health.get("target_database"),
-        }
-    return {
-        "status": "degraded",
-        "db": "error",
-        "detail": health.get("error"),
-        "startup_error": getattr(app.state, "db_bootstrap_error", None),
-    }
+        return {"status": "ok"}
+    return {"status": "degraded"}
 
 
 @app.get("/health")
@@ -67,10 +66,23 @@ def health():
     return healthz()
 
 
+@app.get("/admin/diagnostics/health")
+def detailed_health_diagnostics():
+    """Protected operational diagnostics; never add this path to public rules."""
+    health = db_health()
+    return {
+        "status": "ok" if health.get("ok") else "degraded",
+        "database": health,
+        "startupError": getattr(app.state, "db_bootstrap_error", None),
+    }
+
+
 @app.on_event("startup")
 def on_startup():
+    validate_auth_startup(settings)
     try:
         init_constraints()
+        init_compliance_backfill()
         app.state.db_bootstrap_ok = True
     except Exception as exc:
         app.state.db_bootstrap_ok = False
@@ -87,6 +99,7 @@ def on_shutdown():
 
 @app.exception_handler(ServiceUnavailable)
 def handle_neo4j_unavailable(_: Request, exc: ServiceUnavailable):
+    logger.exception("Neo4j unavailable: %s", exc)
     return JSONResponse(
         status_code=503,
         content={
@@ -94,13 +107,13 @@ def handle_neo4j_unavailable(_: Request, exc: ServiceUnavailable):
                 "Neo4j is unavailable for deliberation backend. "
                 "Check DELIBERATION_NEO4J_* / NEO4J_* credentials and network."
             ),
-            "error": str(exc),
         },
     )
 
 
 @app.exception_handler(Neo4jError)
 def handle_neo4j_error(_: Request, exc: Neo4jError):
+    logger.exception("Neo4j query failed: %s", exc)
     return JSONResponse(
         status_code=503,
         content={
@@ -108,7 +121,6 @@ def handle_neo4j_error(_: Request, exc: Neo4jError):
                 "Neo4j query failed for deliberation backend. "
                 "Verify credentials/database and retry."
             ),
-            "error": str(exc),
         },
     )
 
@@ -117,6 +129,7 @@ def handle_neo4j_error(_: Request, exc: Neo4jError):
 def handle_runtime_error(_: Request, exc: RuntimeError):
     message = str(exc)
     if "No working Neo4j configuration" in message:
+        logger.exception("Neo4j configuration is invalid or unreachable: %s", exc)
         return JSONResponse(
             status_code=503,
             content={
@@ -124,7 +137,7 @@ def handle_runtime_error(_: Request, exc: RuntimeError):
                     "Neo4j configuration is invalid/unreachable for deliberation backend. "
                     "Set DELIBERATION_NEO4J_* (or NEO4J_*) to a reachable DB."
                 ),
-                "error": message,
             },
         )
-    return JSONResponse(status_code=500, content={"detail": message})
+    logger.exception("Unhandled runtime error: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal service error."})

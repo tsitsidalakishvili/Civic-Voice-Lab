@@ -1,58 +1,35 @@
-import { useState } from 'react'
-import { requestJson } from '../services/api'
-import { saveStoredAccessEmail } from '../services/accessGate'
+import { beginOrganizationLogin } from '../services/sessionAuth'
 
-export function PlatformAccessGate({ onGranted }) {
-  const [email, setEmail] = useState('')
-  const [checking, setChecking] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const candidate = email.trim().toLowerCase()
-    if (!candidate) {
-      setError('Enter your email address to continue.')
-      return
-    }
-    setChecking(true)
-    setError('')
-    try {
-      const result = await requestJson('/platform/access/verify', {
-        payload: { email: candidate },
-      })
-      if (result?.allowed) {
-        saveStoredAccessEmail(candidate)
-        if (onGranted) onGranted(candidate)
-      } else {
-        setError('This email does not have access to the platform.')
-      }
-    } catch (err) {
-      setError(err?.message || 'Unable to verify access. Try again.')
-    } finally {
-      setChecking(false)
-    }
-  }
+export function PlatformAccessGate({ state = 'unauthenticated', message = '', onRetry }) {
+  const unauthorized = state === 'unauthorized'
+  const unavailable = state === 'unavailable'
+  const expired = state === 'expired' || state === 'revoked'
 
   return (
-    <div className="access-gate">
-      <form className="access-gate__card" onSubmit={handleSubmit}>
-        <h2>Freedom Square</h2>
+    <main className="access-gate" aria-labelledby="access-title">
+      <section className="access-gate__card">
+        <p className="eyebrow">Freedom Square staff workspace</p>
+        <h1 id="access-title">
+          {unauthorized ? 'Access is not authorized' : unavailable ? 'Sign-in service unavailable' : 'Organization sign-in'}
+        </h1>
         <p className="muted">
-          This platform is restricted. Enter your email address to continue.
+          {unauthorized
+            ? 'You are signed in, but your organization account does not have access to this workspace.'
+            : expired
+              ? 'Your session ended or was revoked. Sign in again to continue securely.'
+              : unavailable
+                ? 'The private workspace remains locked while authentication is unavailable.'
+                : 'Use your approved organization account. This application never asks for or stores your organization password.'}
         </p>
-        <input
-          className="input"
-          type="email"
-          autoFocus
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@example.com"
-        />
-        {error ? <div className="module-alert">{error}</div> : null}
-        <button className="button" type="submit" disabled={checking}>
-          {checking ? 'Checking...' : 'Continue'}
-        </button>
-      </form>
-    </div>
+        {message ? <div className="module-alert" role="alert">{message}</div> : null}
+        {!unauthorized && !unavailable ? (
+          <button className="button" type="button" onClick={() => beginOrganizationLogin()}>
+            Sign in with organization account
+          </button>
+        ) : null}
+        {onRetry ? <button className="button button--secondary" type="button" onClick={onRetry}>Try again</button> : null}
+        {unauthorized ? <p className="muted">Contact an administrator through your normal internal support channel.</p> : null}
+      </section>
+    </main>
   )
 }

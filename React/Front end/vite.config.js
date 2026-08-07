@@ -2,12 +2,16 @@
 import { fileURLToPath } from 'url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { privateReleaseGuard } from './build/privateRelease.js'
 
 // https://vite.dev/config/
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    privateReleaseGuard({ production: mode === 'production', outDir: resolve(__dirname, 'dist') }),
+    react(),
+  ],
   resolve: {
     alias: [
       {
@@ -28,5 +32,5 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
   },
-})
+}))
 
