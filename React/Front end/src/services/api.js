@@ -14,7 +14,9 @@ let csrfToken = ''
 
 const DUE_DILIGENCE_PURPOSE_ID = 'dd-investigation'
 
-function purposeHeaders(path) {
+function purposeHeaders(path, explicitPurposeId = '') {
+  const purposeId = String(explicitPurposeId || '').trim()
+  if (purposeId) return { 'X-FS-Purpose-Id': purposeId }
   const normalizedPath = `/${String(path || '').replace(/^\/+/, '')}`
   return (normalizedPath === '/due-diligence' || normalizedPath.startsWith('/due-diligence/'))
     ? { 'X-FS-Purpose-Id': DUE_DILIGENCE_PURPOSE_ID }
@@ -96,7 +98,7 @@ async function requireOk(response) {
   throw error
 }
 
-export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefresh = false } = {}) {
+export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefresh = false, purposeId = '' } = {}) {
   const url = buildUrl(path)
   const key = buildGetRequestKey(url)
   const now = Date.now()
@@ -113,7 +115,7 @@ export async function getJson(path, { cacheMs = DEFAULT_GET_CACHE_MS, forceRefre
 
   const pendingRequest = fetch(url, {
     credentials: 'include',
-    headers: purposeHeaders(path),
+    headers: purposeHeaders(path, purposeId),
   })
     .then(async (response) => {
       await requireOk(response)

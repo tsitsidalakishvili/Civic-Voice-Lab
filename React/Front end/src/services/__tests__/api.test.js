@@ -32,6 +32,16 @@ describe('session API transport', () => {
     expect(fetch.mock.calls[1][1].headers).toEqual({})
   })
 
+  it('supports an explicit approved purpose for cross-module requests', async () => {
+    fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await getJson('/crm/summary', { cacheMs: 0, purposeId: 'dd-investigation' })
+
+    expect(fetch.mock.calls[0][1].headers).toEqual({
+      'X-FS-Purpose-Id': 'dd-investigation',
+    })
+  })
+
   it('adds the session CSRF token to mutations', async () => {
     setSessionCsrfToken('synthetic-csrf')
     fetch.mockResolvedValue(new Response(null, { status: 204 }))

@@ -306,7 +306,7 @@ export function DueDiligencePage({
     Promise.all([
       getJson('/due-diligence/summary'),
       getJson('/due-diligence/competitors?limit=5'),
-      getJson('/crm/summary'),
+      getJson('/crm/summary', { purposeId: 'dd-investigation' }),
     ])
       .then(([summaryPayload, listPayload, crmSummaryPayload]) => {
         if (!mounted) return
@@ -653,6 +653,7 @@ export function DueDiligencePage({
     try {
       const people = await getJson(
         `/crm/people/summary?q=${encodeURIComponent(query)}&limit=200`,
+        { purposeId: 'dd-investigation' },
       )
       const watchlistMatches = await getJson(
         `/due-diligence/watchlist-matches?q=${encodeURIComponent(query)}&limit=50`,
