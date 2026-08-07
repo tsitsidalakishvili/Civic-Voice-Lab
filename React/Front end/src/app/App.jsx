@@ -39,7 +39,14 @@ import { DeliberationQuestionnaire } from '@/views/DeliberationQuestionnaire'
 import { DeliberationPublicReport } from '@/views/DeliberationPublicReport'
 import { PlatformAccessGate } from '@/views/PlatformAccessGate'
 import { clearAuthCredentials } from '@/services/runtimeAuth'
-import { clearApiSessionState, getJson, onApiAuthEvent, requestJson, setSessionCsrfToken } from '@/services/api'
+import {
+  clearApiSessionState,
+  getJson,
+  onApiAuthEvent,
+  requestJson,
+  setActiveProcessingPurposeModule,
+  setSessionCsrfToken,
+} from '@/services/api'
 import { PublicCampaignPage } from '@/modules'
 import { parseStoredList } from '@/utils/deck'
 import { getRuntimeConfig } from '@/config/runtime'
@@ -146,6 +153,7 @@ function AppShell_() {
     const fromUrl = new URLSearchParams(window.location.search).get('module')
     return modules.find((m) => m.id === fromUrl)?.id || null
   })
+  setActiveProcessingPurposeModule(isPublicView ? '' : activeModuleId)
   const [recentModuleIds, setRecentModuleIds] = useState(() =>
     parseStoredList(localStorage.getItem(recentModulesStorageKey)),
   )

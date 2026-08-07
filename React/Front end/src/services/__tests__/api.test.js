@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearApiSessionState, getJson, requestJson, setSessionCsrfToken } from '../api'
+import {
+  clearApiSessionState,
+  getJson,
+  requestJson,
+  setActiveProcessingPurposeModule,
+  setSessionCsrfToken,
+} from '../api'
 
 describe('session API transport', () => {
   beforeEach(() => {
     clearApiSessionState()
+    setActiveProcessingPurposeModule('')
     globalThis.fetch = vi.fn()
   })
   afterEach(() => vi.restoreAllMocks())
@@ -40,6 +47,22 @@ describe('session API transport', () => {
     expect(fetch.mock.calls[0][1].headers).toEqual({
       'X-FS-Purpose-Id': 'dd-investigation',
     })
+  })
+
+  it.each([
+    ['crm', '/crm/summary', 'crm-operations'],
+    ['deliberation', '/crm/segments', 'survey-consensus'],
+    ['campaigns', '/crm/campaigns', 'campaign-operations'],
+    ['deliberation', '/exports/job-1', 'survey-consensus'],
+    ['data-hub', '/data-chat/ask', 'data-exploration'],
+    ['campaigns', '/audience-discovery/analysis/start', 'audience-research'],
+  ])('maps %s requests to their approved purpose', async (moduleId, path, purposeId) => {
+    setActiveProcessingPurposeModule(moduleId)
+    fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await getJson(path, { cacheMs: 0 })
+
+    expect(fetch.mock.calls[0][1].headers).toEqual({ 'X-FS-Purpose-Id': purposeId })
   })
 
   it('adds the session CSRF token to mutations', async () => {

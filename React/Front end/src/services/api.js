@@ -11,16 +11,46 @@ const inflightGetRequests = new Map()
 const authListeners = new Set()
 let cacheGeneration = 0
 let csrfToken = ''
+let activePurposeModule = ''
 
 const DUE_DILIGENCE_PURPOSE_ID = 'dd-investigation'
+const MODULE_PURPOSE_IDS = Object.freeze({
+  crm: 'crm-operations',
+  deliberation: 'survey-consensus',
+  campaigns: 'campaign-operations',
+  'due-diligence': DUE_DILIGENCE_PURPOSE_ID,
+  'data-hub': 'data-exploration',
+})
+
+export function setActiveProcessingPurposeModule(moduleId = '') {
+  activePurposeModule = String(moduleId || '').trim()
+}
 
 function purposeHeaders(path, explicitPurposeId = '') {
   const purposeId = String(explicitPurposeId || '').trim()
   if (purposeId) return { 'X-FS-Purpose-Id': purposeId }
   const normalizedPath = `/${String(path || '').replace(/^\/+/, '')}`
-  return (normalizedPath === '/due-diligence' || normalizedPath.startsWith('/due-diligence/'))
-    ? { 'X-FS-Purpose-Id': DUE_DILIGENCE_PURPOSE_ID }
-    : {}
+  if (normalizedPath === '/due-diligence' || normalizedPath.startsWith('/due-diligence/')) {
+    return { 'X-FS-Purpose-Id': DUE_DILIGENCE_PURPOSE_ID }
+  }
+  if (normalizedPath === '/audience-discovery' || normalizedPath.startsWith('/audience-discovery/')) {
+    return { 'X-FS-Purpose-Id': 'audience-research' }
+  }
+  if (
+    normalizedPath === '/data-chat' || normalizedPath.startsWith('/data-chat/') ||
+    normalizedPath === '/data-hub' || normalizedPath.startsWith('/data-hub/')
+  ) {
+    return { 'X-FS-Purpose-Id': 'data-exploration' }
+  }
+  if (
+    normalizedPath === '/crm' || normalizedPath.startsWith('/crm/') ||
+    normalizedPath === '/exports' || normalizedPath.startsWith('/exports/') ||
+    normalizedPath.includes('/export')
+  ) {
+    const modulePurposeId = MODULE_PURPOSE_IDS[activePurposeModule]
+    return modulePurposeId ? { 'X-FS-Purpose-Id': modulePurposeId } : {}
+  }
+  return {}
 }
 
 function buildUrl(path) {

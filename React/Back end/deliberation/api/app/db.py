@@ -282,18 +282,27 @@ def init_approved_processing_purposes():
                   event.userAgentHash = '',
                   event.createdAt = datetime()
     """
-    params = {
-        "purposeVersionId": "dd-investigation:v1",
-        "purposeId": "dd-investigation",
-        "name": "Internal due-diligence investigations",
-        "workflow": "due-diligence",
-        "lawfulBasis": "Owner-approved internal due-diligence risk assessment",
-        "owner": "Freedom Square",
-        "actorId": "release-owner",
-        "eventId": "purpose-approval:dd-investigation:v1",
-    }
+    approved = [
+        ("dd-investigation", "Internal due-diligence investigations", "due-diligence"),
+        ("crm-operations", "Internal constituent relationship management", "crm"),
+        ("survey-consensus", "Survey and consensus operations", "deliberation"),
+        ("campaign-operations", "Campaign and audience operations", "campaigns"),
+        ("audience-research", "Audience discovery and aggregate research", "audience-discovery"),
+        ("data-exploration", "Internal data exploration", "data-exploration"),
+    ]
     with driver.session(database=get_active_database()) as session:
-        _execute_write(session, query, params)
+        for purpose_id, name, workflow in approved:
+            params = {
+                "purposeVersionId": f"{purpose_id}:v1",
+                "purposeId": purpose_id,
+                "name": name,
+                "workflow": workflow,
+                "lawfulBasis": f"Owner-approved {name.casefold()}",
+                "owner": "Freedom Square",
+                "actorId": "release-owner",
+                "eventId": f"purpose-approval:{purpose_id}:v1",
+            }
+            _execute_write(session, query, params)
 
 
 def db_health() -> dict:

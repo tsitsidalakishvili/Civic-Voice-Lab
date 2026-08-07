@@ -12,16 +12,30 @@ class ApprovedProcessingPurposeTests(unittest.TestCase):
         with patch.object(db, "get_driver", return_value=driver):
             db.init_approved_processing_purposes()
 
-        transaction = session.execute_write.call_args.args[0]
-        tx = MagicMock()
-        transaction(tx)
-        query, params = tx.run.call_args.args
+        seeded = {}
+        for call in session.execute_write.call_args_list:
+            transaction = call.args[0]
+            tx = MagicMock()
+            transaction(tx)
+            query, params = tx.run.call_args.args
+            self.assertIn("MERGE (purpose:ProcessingPurpose", query)
+            self.assertIn("MERGE (event:ComplianceAuditEvent", query)
+            seeded[params["purposeId"]] = params
 
-        self.assertIn("MERGE (purpose:ProcessingPurpose", query)
-        self.assertIn("MERGE (event:ComplianceAuditEvent", query)
-        self.assertEqual(params["purposeId"], "dd-investigation")
-        self.assertEqual(params["purposeVersionId"], "dd-investigation:v1")
-        self.assertEqual(params["eventId"], "purpose-approval:dd-investigation:v1")
+        self.assertEqual(
+            set(seeded),
+            {
+                "dd-investigation",
+                "crm-operations",
+                "survey-consensus",
+                "campaign-operations",
+                "audience-research",
+                "data-exploration",
+            },
+        )
+        for purpose_id, params in seeded.items():
+            self.assertEqual(params["purposeVersionId"], f"{purpose_id}:v1")
+            self.assertEqual(params["eventId"], f"purpose-approval:{purpose_id}:v1")
 
 
 if __name__ == "__main__":
