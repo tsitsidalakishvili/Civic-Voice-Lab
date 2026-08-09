@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -225,6 +226,10 @@ def get_settings() -> Settings:
     if session_cookie_samesite not in {"lax", "strict", "none"}:
         raise ValueError("FS_SESSION_COOKIE_SAMESITE must be lax, strict, or none.")
     access_users_file = str(os.getenv("FS_ACCESS_USERS_FILE", "")).strip()
+    if not access_users_file:
+        render_secret_file = Path("/etc/secrets/access_users.json")
+        if render_secret_file.is_file():
+            access_users_file = str(render_secret_file)
     return Settings(
         app_title=str(os.getenv("APP_TITLE", "Civic Voice Lab API")).strip()
         or "Civic Voice Lab API",
