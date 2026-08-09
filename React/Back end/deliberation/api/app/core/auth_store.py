@@ -353,6 +353,41 @@ def authorize_shared_credential(settings: Settings) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def authorize_password_user(settings: Settings, email: str) -> dict[str, Any] | None:
+    """Create or refresh one file-authorized user; every listed user has equal access."""
+    normalized = normalize_exact_email(email)
+    email_hash = keyed_hash(settings, "allowlist-email", normalized)
+    entry_key = keyed_hash(settings, "allowlist-entry", f"password:{email_hash}")
+    rows = _write(
+        """
+        MERGE (entry:AuthAllowlistEntry {entryKey: $entryKey})
+        ON CREATE SET entry.allowlistId = $allowlistId,
+                      entry.emailHash = $emailHash,
+                      entry.normalizedEmail = $normalizedEmail,
+                      entry.provider = 'password', entry.issuer = 'fs:access-users-file',
+                      entry.subject = $subject, entry.createdAt = datetime(),
+                      entry.addedAt = datetime(), entry.addedBy = 'server-config',
+                      entry.version = 1, entry.status = 'active'
+        SET entry.roles = ['admin'], entry.caseScopes = ['*'],
+            entry.purposeScopes = ['*'], entry.reason = 'file-access-user',
+            entry.status = 'active', entry.updatedAt = datetime()
+        RETURN entry.allowlistId AS allowlistId, entry.normalizedEmail AS email,
+               entry.provider AS provider, entry.issuer AS issuer,
+               entry.subject AS subject, entry.roles AS roles,
+               entry.caseScopes AS caseScopes, entry.purposeScopes AS purposeScopes,
+               entry.version AS version
+        """,
+        {
+            "entryKey": entry_key,
+            "allowlistId": str(uuid4()),
+            "emailHash": email_hash,
+            "normalizedEmail": normalized,
+            "subject": email_hash,
+        },
+    )
+    return rows[0] if rows else None
+
+
 def create_auth_session(
     settings: Settings, principal: dict[str, Any]
 ) -> tuple[str, str, dict[str, Any]]:

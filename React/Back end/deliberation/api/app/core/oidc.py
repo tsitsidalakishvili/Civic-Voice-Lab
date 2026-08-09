@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from .auth_store import (
     authorize_and_bind_allowlist,
+    authorize_password_user,
     authorize_shared_credential,
     consume_oidc_transaction,
     create_auth_session,
@@ -24,6 +25,7 @@ from .auth_store import (
     record_auth_audit,
     revoke_auth_session,
 )
+from .access_users import authenticate_access_user
 from .config import Settings, get_settings
 from .errors import CONTRACT_VERSION, error_response
 from .rate_limit import rate_limiter
@@ -113,14 +115,27 @@ def password_login(request: Request, payload: PasswordLoginIn):
             retryable=True,
             headers={"Retry-After": str(retry_after)},
         )
-    expires_at = datetime.fromisoformat(
-        settings.shared_credential_expires_at.replace("Z", "+00:00")
-    ).astimezone(timezone.utc)
-    username_ok = secrets.compare_digest(
-        str(payload.username or ""), settings.shared_username
-    )
-    password_ok = _verify_shared_password(settings, payload.password)
-    if expires_at <= datetime.now(timezone.utc) or not (username_ok and password_ok):
+    matched_email = None
+    legacy_valid = False
+    if settings.access_users_file:
+        try:
+            matched_email = authenticate_access_user(
+                settings.access_users_file, payload.username, payload.password
+            )
+        except ValueError:
+            matched_email = None
+    else:
+        expires_at = datetime.fromisoformat(
+            settings.shared_credential_expires_at.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+        username_ok = secrets.compare_digest(
+            str(payload.username or ""), settings.shared_username
+        )
+        password_ok = _verify_shared_password(settings, payload.password)
+        legacy_valid = (
+            expires_at > datetime.now(timezone.utc) and username_ok and password_ok
+        )
+    if not matched_email and not legacy_valid:
         record_auth_audit(
             settings,
             "login_failed",
@@ -137,7 +152,11 @@ def password_login(request: Request, payload: PasswordLoginIn):
             "The username or password is incorrect.",
             request_id=request_id,
         )
-    principal = authorize_shared_credential(settings)
+    principal = (
+        authorize_password_user(settings, matched_email)
+        if matched_email
+        else authorize_shared_credential(settings)
+    )
     if principal is None:
         return error_response(
             503,
@@ -152,7 +171,7 @@ def password_login(request: Request, payload: PasswordLoginIn):
         "login_succeeded",
         outcome="success",
         provider="password",
-        issuer="fs:shared-credential",
+        issuer="fs:access-users-file" if matched_email else "fs:shared-credential",
         subject=str(principal.get("subject") or ""),
         allowlist_id=str(principal.get("allowlistId") or ""),
         request_id=request_id,

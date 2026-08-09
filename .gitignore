@@ -4,6 +4,8 @@
 **/.env.demo
 **/.env.auth
 **/.env.auth.local
+**/access_users.local.json
+**/initial_access_password.local.txt
 .streamlit/secrets.toml
 **/public/runtime-config.js
 # Ship default SPA runtime config (empty API_BASE_URL); local overrides stay gitignored elsewhere.

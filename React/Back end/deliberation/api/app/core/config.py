@@ -121,6 +121,7 @@ class Settings:
     oidc_entra_tenant_id: str
     oidc_entra_allow_guests: bool
     oidc_allowed_emails_json: str
+    access_users_file: str
     shared_username: str
     shared_password_hash: str
     shared_credential_expires_at: str
@@ -149,7 +150,10 @@ class Settings:
     @property
     def auth_secret_configured(self) -> bool:
         if self.auth_mode == "password":
-            return bool(self.shared_username and self.shared_password_hash)
+            return bool(
+                self.access_users_file
+                or (self.shared_username and self.shared_password_hash)
+            )
         if self.auth_mode == "oidc" and not self.auth_emergency_bearer_gate:
             return self.oidc_configured
         if self.auth_mode == "api_key":
@@ -220,6 +224,7 @@ def get_settings() -> Settings:
     ).strip().lower() or "lax"
     if session_cookie_samesite not in {"lax", "strict", "none"}:
         raise ValueError("FS_SESSION_COOKIE_SAMESITE must be lax, strict, or none.")
+    access_users_file = str(os.getenv("FS_ACCESS_USERS_FILE", "")).strip()
     return Settings(
         app_title=str(os.getenv("APP_TITLE", "Civic Voice Lab API")).strip()
         or "Civic Voice Lab API",
@@ -258,6 +263,7 @@ def get_settings() -> Settings:
         oidc_allowed_emails_json=str(
             os.getenv("FS_ALLOWED_EMAILS_JSON", "")
         ).strip(),
+        access_users_file=access_users_file,
         shared_username=str(os.getenv("FS_SHARED_USERNAME", "")).strip(),
         shared_password_hash=str(os.getenv("FS_SHARED_PASSWORD_HASH", "")).strip(),
         shared_credential_expires_at=str(
@@ -336,37 +342,55 @@ def validate_auth_startup(settings: Settings | None = None) -> None:
             raise RuntimeError("FS_AUTH_API_KEY is required when API-key authentication is enabled.")
         return
     if mode == "password":
-        required = {
-            "FS_SHARED_USERNAME": current.shared_username,
-            "FS_SHARED_PASSWORD_HASH": current.shared_password_hash,
-            "FS_SHARED_CREDENTIAL_EXPIRES_AT": current.shared_credential_expires_at,
-            "FS_SESSION_SECRET": current.session_secret,
-            "FS_FRONTEND_ORIGIN": current.frontend_origin,
-        }
-        missing = [name for name, value in required.items() if not value]
-        if missing:
-            raise RuntimeError(
-                "Password authentication configuration is incomplete: "
-                + ", ".join(sorted(missing))
-            )
-        if len(current.shared_username) < 8 or len(current.shared_username) > 128:
-            raise RuntimeError("FS_SHARED_USERNAME must contain 8 to 128 characters.")
-        parts = current.shared_password_hash.split("$")
-        if len(parts) != 4 or parts[0] != "pbkdf2_sha256":
-            raise RuntimeError("FS_SHARED_PASSWORD_HASH must use the supported PBKDF2 format.")
-        try:
-            iterations = int(parts[1])
-            expires_at = datetime.fromisoformat(
-                current.shared_credential_expires_at.replace("Z", "+00:00")
-            )
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError("Shared credential security parameters are invalid.") from exc
-        if iterations < 600_000:
-            raise RuntimeError("FS_SHARED_PASSWORD_HASH must use at least 600000 iterations.")
-        if expires_at.tzinfo is None:
-            raise RuntimeError("FS_SHARED_CREDENTIAL_EXPIRES_AT must include a timezone.")
-        if expires_at.astimezone(timezone.utc) <= datetime.now(timezone.utc):
-            raise RuntimeError("The shared credential has expired.")
+        if current.access_users_file:
+            from .access_users import load_access_users
+
+            try:
+                load_access_users(current.access_users_file)
+            except ValueError as exc:
+                raise RuntimeError(str(exc)) from exc
+            required = {
+                "FS_SESSION_SECRET": current.session_secret,
+                "FS_FRONTEND_ORIGIN": current.frontend_origin,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise RuntimeError(
+                    "Password authentication configuration is incomplete: "
+                    + ", ".join(sorted(missing))
+                )
+        else:
+            required = {
+                "FS_SHARED_USERNAME": current.shared_username,
+                "FS_SHARED_PASSWORD_HASH": current.shared_password_hash,
+                "FS_SHARED_CREDENTIAL_EXPIRES_AT": current.shared_credential_expires_at,
+                "FS_SESSION_SECRET": current.session_secret,
+                "FS_FRONTEND_ORIGIN": current.frontend_origin,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise RuntimeError(
+                    "Password authentication configuration is incomplete: "
+                    + ", ".join(sorted(missing))
+                )
+            if len(current.shared_username) < 8 or len(current.shared_username) > 128:
+                raise RuntimeError("FS_SHARED_USERNAME must contain 8 to 128 characters.")
+            parts = current.shared_password_hash.split("$")
+            if len(parts) != 4 or parts[0] != "pbkdf2_sha256":
+                raise RuntimeError("FS_SHARED_PASSWORD_HASH must use the supported PBKDF2 format.")
+            try:
+                iterations = int(parts[1])
+                expires_at = datetime.fromisoformat(
+                    current.shared_credential_expires_at.replace("Z", "+00:00")
+                )
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError("Shared credential security parameters are invalid.") from exc
+            if iterations < 600_000:
+                raise RuntimeError("FS_SHARED_PASSWORD_HASH must use at least 600000 iterations.")
+            if expires_at.tzinfo is None:
+                raise RuntimeError("FS_SHARED_CREDENTIAL_EXPIRES_AT must include a timezone.")
+            if expires_at.astimezone(timezone.utc) <= datetime.now(timezone.utc):
+                raise RuntimeError("The shared credential has expired.")
         if len(current.session_secret) < 32:
             raise RuntimeError("FS_SESSION_SECRET must contain at least 32 characters.")
         if current.cors_origins != (current.frontend_origin,):

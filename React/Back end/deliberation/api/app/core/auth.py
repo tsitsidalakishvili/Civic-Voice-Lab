@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .auth_store import keyed_hash, load_auth_session, record_auth_audit
+from .access_users import is_access_email_listed
+from .auth_store import keyed_hash, load_auth_session, record_auth_audit, revoke_auth_session
 from .config import Settings, get_settings
 from .errors import CONTRACT_VERSION, error_response
 from .rate_limit import rate_limiter
@@ -316,6 +317,29 @@ class OptionalAuthMiddleware(BaseHTTPMiddleware):
         request.state.principal = principal
         request.state.auth_session = session
         request.state.session_id_hash = session.get("sessionIdHash")
+
+        if (
+            principal.get("provider") == "password"
+            and settings.access_users_file
+            and not is_access_email_listed(
+                settings.access_users_file, str(principal.get("email") or "")
+            )
+        ):
+            revoke_auth_session(str(session.get("sessionIdHash") or ""))
+            response = error_response(
+                403,
+                "ACCESS_REVOKED",
+                "Access has been revoked.",
+                request_id=str(request.state.request_id),
+            )
+            response.delete_cookie(
+                settings.session_cookie_name,
+                path="/",
+                secure=settings.session_cookie_secure,
+                httponly=True,
+                samesite=settings.session_cookie_samesite,
+            )
+            return response
 
         rate_key = f"protected:{principal['principalId']}:{request.url.path.casefold()}"
         limit = 20 if ("export" in request.url.path.casefold() or "search" in request.url.path.casefold()) else 240
