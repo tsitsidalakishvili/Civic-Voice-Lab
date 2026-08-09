@@ -1833,6 +1833,18 @@ ${link}`
     }
   }
 
+  const handleStartModeration = async () => {
+    if (!activeId) return
+    try {
+      const pending = await getJson(
+        `/conversations/${activeId}/comments?status=pending&include_stats=false`,
+      )
+      setPendingComments(Array.isArray(pending) ? pending : [])
+    } catch (err) {
+      setConvoError(err.message || 'Unable to load the review queue.')
+    }
+  }
+
   const handleLoadModerationLog = async () => {
     if (!activeId) return
     setModerationLogError('')

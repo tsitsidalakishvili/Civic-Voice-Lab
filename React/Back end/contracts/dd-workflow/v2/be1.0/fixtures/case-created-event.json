@@ -1,0 +1,15 @@
+{
+  "eventId": "event-synthetic-case-created",
+  "eventType": "case_created",
+  "caseId": "case-synthetic-be1",
+  "workflowVersion": 1,
+  "actor": {
+    "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+    "method": "oidc_session",
+    "statementCode": "case_prepared",
+    "attestedAt": "2026-08-09T12:00:00Z"
+  },
+  "purposeId": "dd-investigation",
+  "createdAt": "2026-08-09T12:00:00Z",
+  "payload": { "subjectCategory": "organization" }
+}

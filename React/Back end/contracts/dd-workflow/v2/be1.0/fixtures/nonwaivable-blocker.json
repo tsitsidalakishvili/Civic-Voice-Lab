@@ -1,0 +1,18 @@
+{
+  "detail": "A non-waivable blocker cannot be waived.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_BLOCKER_NON_WAIVABLE",
+    "message": "A non-waivable blocker cannot be waived.",
+    "requestId": "request-synthetic-waiver",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 1,
+      "actualWorkflowVersion": 1,
+      "blockers": [],
+      "allowedTransitions": [],
+      "blockerCodes": ["DD_PURPOSE_AUTHORIZATION_REQUIRED"]
+    }
+  }
+}

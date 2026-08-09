@@ -1,0 +1,13 @@
+{
+  "detail": "Changing an established processing purpose requires a separate reviewed reclassification workflow.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_PURPOSE_CHANGE_NOT_SUPPORTED",
+    "message": "Changing an established processing purpose requires a separate reviewed reclassification workflow.",
+    "requestId": "request-synthetic-409-dd_purpose_change_not_supported",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

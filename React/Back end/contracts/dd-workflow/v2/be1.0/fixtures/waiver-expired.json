@@ -1,0 +1,13 @@
+{
+  "detail": "A waiver cannot be expired when it is created.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_WAIVER_EXPIRY_INVALID",
+    "message": "A waiver cannot be expired when it is created.",
+    "requestId": "request-synthetic-422-dd_waiver_expiry_invalid",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "expectedWorkflowVersion": 2,
+  "transitionCode": "complete_identity",
+  "toStage": "sources",
+  "waivers": [
+    {
+      "blockerCode": "DD_DUPLICATE_REVIEW_PENDING",
+      "reason": "Synthetic documented exception for contract validation.",
+      "attestation": { "attested": true },
+      "expiresAt": null
+    },
+    {
+      "blockerCode": "DD_PRIOR_SCREENING_REVIEW_PENDING",
+      "reason": "Synthetic time-limited exception for contract validation.",
+      "attestation": { "attested": true },
+      "expiresAt": "2026-08-16T12:00:00Z"
+    }
+  ],
+  "attestations": {
+    "preparedBy": { "attested": true },
+    "reviewedBy": null
+  }
+}

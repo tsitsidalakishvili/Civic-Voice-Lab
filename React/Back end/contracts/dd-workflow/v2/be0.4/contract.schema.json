@@ -1,0 +1,1031 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json",
+  "title": "Freedom Square Due Diligence read contract",
+  "description": "Read-only BE0.4 contract library. Runtime routes and BE1+ mutations are not implemented by this artifact.",
+  "$defs": {
+    "ContractVersion": { "const": "dd-workflow.v2" },
+    "FixtureVersion": { "const": "dd-workflow.v2-be0.4" },
+    "Stage": {
+      "type": "string",
+      "enum": ["intake", "identity", "sources", "investigation", "findings", "review", "decision", "monitoring", "closed"]
+    },
+    "LifecycleStatus": {
+      "type": "string",
+      "enum": ["active", "monitoring", "closed", "archived"]
+    },
+    "UnitInterval": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "TriageScore": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "NonNullTimestamp": { "type": "string", "format": "date-time" },
+    "NullableTimestamp": {
+      "anyOf": [
+        { "$ref": "#/$defs/NonNullTimestamp" },
+        { "type": "null" }
+      ]
+    },
+    "NullableDate": {
+      "anyOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    },
+    "SafeRelativePath": {
+      "type": "string",
+      "pattern": "^/(?!/)[^?#\\\\\\r\\n]*$",
+      "description": "Same-app path without query or fragment. Server validation additionally canonicalizes percent encoding and rejects traversal, controls, schemes and backslashes."
+    },
+    "JsonParam": {
+      "anyOf": [
+        { "type": "string", "maxLength": 500 },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/JsonParam" } }
+      ]
+    },
+    "JsonParams": {
+      "type": "object",
+      "maxProperties": 30,
+      "additionalProperties": { "$ref": "#/$defs/JsonParam" }
+    },
+    "Page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextCursor", "hasMore", "limit"],
+      "properties": {
+        "nextCursor": { "type": ["string", "null"] },
+        "hasMore": { "type": "boolean" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+      }
+    },
+    "Access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purposeId", "policy", "omittedFields", "maskedFields"],
+      "properties": {
+        "purposeId": { "type": ["string", "null"] },
+        "policy": { "const": "deny-by-default" },
+        "omittedFields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "maskedFields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "AssignmentRef": {
+      "type": "object",
+      "description": "Display and assignment metadata only; never an attestation or authorization identity.",
+      "additionalProperties": false,
+      "required": ["actorId", "displayName", "teamId"],
+      "properties": {
+        "actorId": { "type": ["string", "null"] },
+        "displayName": { "type": ["string", "null"] },
+        "teamId": { "type": ["string", "null"] }
+      },
+      "anyOf": [
+        { "properties": { "actorId": { "type": "string", "minLength": 1 } } },
+        { "properties": { "displayName": { "type": "string", "minLength": 1 } } },
+        { "properties": { "teamId": { "type": "string", "minLength": 1 } } }
+      ]
+    },
+    "ActorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "displayName"],
+      "properties": {
+        "actorId": { "type": "string", "minLength": 1 },
+        "displayName": { "type": ["string", "null"] }
+      }
+    },
+    "ActorAttestation": {
+      "type": "object",
+      "description": "Canonical server-issued attestation. Mutation clients never supply actor identity, method or time.",
+      "additionalProperties": false,
+      "required": ["actor", "method", "statementCode", "attestedAt"],
+      "properties": {
+        "actor": { "$ref": "#/$defs/ActorRef" },
+        "method": { "type": "string", "enum": ["oidc_session", "local_file_session"] },
+        "statementCode": {
+          "type": "string",
+          "enum": ["case_prepared", "case_reviewed", "decision_submitted", "blocker_waived", "identity_reviewed", "report_prepared"]
+        },
+        "attestedAt": { "$ref": "#/$defs/NonNullTimestamp" }
+      }
+    },
+    "Action": {
+      "type": "object",
+      "description": "Display-only capability hint in BE0. Unknown actionCode values must not be rendered or executed. Backend authorization remains mandatory.",
+      "additionalProperties": false,
+      "required": ["actionCode", "messageKey", "params", "stage", "method", "route", "blocking", "requiresCsrf", "requiresIdempotency"],
+      "properties": {
+        "actionCode": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,79}$" },
+        "messageKey": { "type": "string", "pattern": "^dd\\." },
+        "params": { "$ref": "#/$defs/JsonParams" },
+        "stage": { "anyOf": [{ "$ref": "#/$defs/Stage" }, { "type": "null" }] },
+        "method": { "type": "string", "enum": ["GET", "POST", "PATCH", "DELETE"] },
+        "route": { "anyOf": [{ "$ref": "#/$defs/SafeRelativePath" }, { "type": "null" }] },
+        "blocking": { "type": "boolean" },
+        "requiresCsrf": { "type": "boolean" },
+        "requiresIdempotency": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "GET" } }, "required": ["method"] },
+          "then": {
+            "properties": {
+              "requiresCsrf": { "const": false },
+              "requiresIdempotency": { "const": false }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "method": { "enum": ["POST", "PATCH", "DELETE"] } }, "required": ["method"] },
+          "then": {
+            "properties": {
+              "route": { "$ref": "#/$defs/SafeRelativePath" },
+              "requiresCsrf": { "const": true },
+              "requiresIdempotency": { "const": true }
+            }
+          }
+        }
+      ]
+    },
+    "IdentifierDisplay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value", "displayValue", "masked", "omitted", "issuer", "country"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "value": { "type": ["string", "null"] },
+        "displayValue": { "type": ["string", "null"] },
+        "masked": { "type": "boolean" },
+        "omitted": { "type": "boolean" },
+        "issuer": { "type": ["string", "null"] },
+        "country": { "type": ["string", "null"] }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "omitted": { "const": true },
+            "masked": { "const": false },
+            "value": { "type": "null" },
+            "displayValue": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "omitted": { "const": false },
+            "masked": { "const": true },
+            "value": { "type": "null" },
+            "displayValue": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "properties": {
+            "omitted": { "const": false },
+            "masked": { "const": false },
+            "value": { "type": "string", "minLength": 1 },
+            "displayValue": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "QueueSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayName", "masked", "omitted", "category"],
+      "properties": {
+        "displayName": { "type": ["string", "null"] },
+        "masked": { "type": "boolean" },
+        "omitted": { "type": "boolean" },
+        "category": {
+          "type": "string",
+          "enum": ["person", "organization", "public_body", "asset", "vessel", "other"]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "omitted": { "const": true },
+            "masked": { "const": false },
+            "displayName": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "omitted": { "const": false },
+            "masked": { "const": true },
+            "displayName": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "properties": {
+            "omitted": { "const": false },
+            "masked": { "const": false },
+            "displayName": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "Freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "ageDays", "slaDays", "asOf"],
+      "properties": {
+        "state": { "type": "string", "enum": ["fresh", "stale", "unknown"] },
+        "ageDays": { "type": ["number", "null"], "minimum": 0 },
+        "slaDays": { "type": ["number", "null"], "minimum": 0 },
+        "asOf": { "$ref": "#/$defs/NullableTimestamp" }
+      }
+    },
+    "AuthorityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "tier", "independence", "evidenceIds"],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1 },
+        "tier": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "independence": { "type": "string", "enum": ["independent", "related", "unknown"] },
+        "evidenceIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "DeepLinkTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["entity", "relationship", "statement", "evidence", "finding", "path_run", "connector_run", "source", "decision", "report_snapshot", "monitoring_run", "hypothesis", "resolution_candidate", "canonical_entity", "note"]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "SummaryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "text", "nature", "priority", "evidenceIds", "authority", "freshness", "verificationState", "target"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "nature": {
+          "type": "string",
+          "enum": ["verified_fact", "source_claim", "allegation", "inference", "hypothesis", "analyst_assessment", "limitation", "coverage", "action", "decision", "monitoring_change"]
+        },
+        "priority": { "type": "integer", "minimum": 1, "maximum": 3, "description": "1 is highest priority; 3 is context." },
+        "evidenceIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "authority": { "type": "array", "items": { "$ref": "#/$defs/AuthorityRef" } },
+        "freshness": { "$ref": "#/$defs/Freshness" },
+        "verificationState": {
+          "type": "string",
+          "enum": ["needs_review", "verified", "disputed", "rejected", "superseded", "not_applicable"]
+        },
+        "target": { "anyOf": [{ "$ref": "#/$defs/DeepLinkTarget" }, { "type": "null" }] }
+      }
+    },
+    "Sla": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deadline", "state", "remainingHours"],
+      "properties": {
+        "deadline": { "$ref": "#/$defs/NullableTimestamp" },
+        "state": { "type": "string", "enum": ["none", "on_track", "due_soon", "overdue"] },
+        "remainingHours": { "type": ["number", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "overdue" } }, "required": ["state"] },
+          "then": { "properties": { "remainingHours": { "type": "number", "exclusiveMaximum": 0 } } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "none" } }, "required": ["state"] },
+          "then": { "properties": { "deadline": { "type": "null" }, "remainingHours": { "type": "null" } } }
+        }
+      ]
+    },
+    "Blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "stage", "severity", "blocking", "messageKey", "params", "remediation", "waiverPolicy"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^DD_[A-Z0-9_]+$" },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+        "blocking": { "type": "boolean" },
+        "messageKey": { "type": "string", "pattern": "^dd\\." },
+        "params": { "$ref": "#/$defs/JsonParams" },
+        "remediation": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] },
+        "waiverPolicy": { "type": "string", "enum": ["allowed", "forbidden"] }
+      }
+    },
+    "Completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "state", "completedAt", "actorAttestation"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/Stage" },
+        "state": { "type": "string", "enum": ["complete", "incomplete", "not_applicable", "unknown"] },
+        "completedAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "actorAttestation": { "anyOf": [{ "$ref": "#/$defs/ActorAttestation" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "complete" } }, "required": ["state"] },
+          "then": { "properties": { "completedAt": { "$ref": "#/$defs/NonNullTimestamp" } } }
+        },
+        {
+          "if": { "properties": { "state": { "enum": ["incomplete", "not_applicable", "unknown"] } }, "required": ["state"] },
+          "then": { "properties": { "completedAt": { "type": "null" }, "actorAttestation": { "type": "null" } } }
+        }
+      ]
+    },
+    "TransitionOffer": {
+      "type": "object",
+      "description": "Display-only in BE0.4. Mutation is draft-be1+ and non-executable.",
+      "additionalProperties": false,
+      "required": ["transitionCode", "messageKey", "params", "toStage", "availability", "requiredWaiverCodes", "requiredAttestations"],
+      "properties": {
+        "transitionCode": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,79}$" },
+        "messageKey": { "type": "string", "pattern": "^dd\\." },
+        "params": { "$ref": "#/$defs/JsonParams" },
+        "toStage": { "$ref": "#/$defs/Stage" },
+        "availability": { "type": "string", "enum": ["allowed", "requires_waivers"] },
+        "requiredWaiverCodes": { "type": "array", "items": { "type": "string", "pattern": "^DD_[A-Z0-9_]+$" }, "uniqueItems": true },
+        "requiredAttestations": { "type": "array", "items": { "type": "string", "enum": ["preparedBy", "reviewedBy"] }, "uniqueItems": true }
+      }
+    },
+    "Waiver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["waiverId", "blockerCode", "reason", "actor", "createdAt", "expiresAt", "active"],
+      "properties": {
+        "waiverId": { "type": "string" },
+        "blockerCode": { "type": "string", "pattern": "^DD_[A-Z0-9_]+$" },
+        "reason": { "type": "string", "minLength": 1 },
+        "actor": { "$ref": "#/$defs/ActorAttestation" },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "expiresAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "active": { "type": "boolean" }
+      }
+    },
+    "Alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "script", "language", "type"],
+      "properties": {
+        "value": { "type": "string", "minLength": 1 },
+        "script": { "type": "string", "enum": ["Geor", "Latn", "Cyrl", "other"] },
+        "language": { "type": ["string", "null"] },
+        "type": { "type": "string", "enum": ["official", "former", "transliteration", "social_display", "nickname", "also_known_as", "other"] }
+      }
+    },
+    "DateRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/NullableDate" },
+        "to": { "$ref": "#/$defs/NullableDate" }
+      }
+    },
+    "Intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "purposeDetails", "intendedDecision", "requestor", "owner", "subjectCategory", "jurisdictions", "dateRange", "identifiers", "aliases", "diligenceDepth", "processingPurposeId", "lawfulBasisRef", "deadline", "retentionClass", "conflictDeclaration", "priorScreening"],
+      "properties": {
+        "purpose": { "type": "string", "enum": ["vendor_onboarding", "partner_review", "counterparty_review", "appointment_review", "grant_review", "conflict_check", "investigative_research", "other"] },
+        "purposeDetails": { "type": ["string", "null"] },
+        "intendedDecision": { "type": "string", "enum": ["approve", "approve_with_conditions", "decline", "escalate", "monitor", "inform_only", "other"] },
+        "requestor": { "$ref": "#/$defs/AssignmentRef" },
+        "owner": { "anyOf": [{ "$ref": "#/$defs/AssignmentRef" }, { "type": "null" }] },
+        "subjectCategory": { "type": "string", "enum": ["person", "organization", "public_body", "asset", "vessel", "other"] },
+        "jurisdictions": { "type": "array", "items": { "type": "string", "minLength": 2, "maxLength": 3 }, "uniqueItems": true },
+        "dateRange": { "$ref": "#/$defs/DateRange" },
+        "identifiers": { "type": "array", "items": { "$ref": "#/$defs/IdentifierDisplay" } },
+        "aliases": { "type": "array", "items": { "$ref": "#/$defs/Alias" } },
+        "diligenceDepth": { "type": "string", "enum": ["basic", "standard", "enhanced"] },
+        "processingPurposeId": { "type": "string", "minLength": 1 },
+        "lawfulBasisRef": { "type": "string", "minLength": 1 },
+        "deadline": { "$ref": "#/$defs/NullableTimestamp" },
+        "retentionClass": { "type": "string", "minLength": 1 },
+        "conflictDeclaration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "details", "attestedBy", "attestedAt"],
+          "properties": {
+            "status": { "type": "string", "enum": ["unknown", "declared_none", "declared_conflict"] },
+            "details": { "type": ["string", "null"] },
+            "attestedBy": { "anyOf": [{ "$ref": "#/$defs/ActorAttestation" }, { "type": "null" }] },
+            "attestedAt": { "$ref": "#/$defs/NullableTimestamp" }
+          }
+        },
+        "priorScreening": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "refs"],
+          "properties": {
+            "status": { "type": "string", "enum": ["unknown", "none", "available"] },
+            "refs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        }
+      }
+    },
+    "DuplicateCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "subjectDisplay", "subjectMasked", "confidence", "reasons", "conflicts", "state", "analystDecision", "actions"],
+      "properties": {
+        "caseId": { "type": "string" },
+        "subjectDisplay": { "type": ["string", "null"] },
+        "subjectMasked": { "type": "boolean" },
+        "confidence": { "$ref": "#/$defs/UnitInterval" },
+        "reasons": { "type": "array", "items": { "$ref": "#/$defs/ComparisonReason" } },
+        "conflicts": { "type": "array", "items": { "$ref": "#/$defs/ComparisonReason" } },
+        "state": { "type": "string", "enum": ["pending", "dismissed", "linked_existing", "continued_new"] },
+        "analystDecision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["decision", "actor", "decidedAt"],
+              "properties": {
+                "decision": { "type": "string", "enum": ["dismiss_duplicate", "link_existing", "continue_new"] },
+                "actor": { "$ref": "#/$defs/ActorAttestation" },
+                "decidedAt": { "$ref": "#/$defs/NonNullTimestamp" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } }
+      }
+    },
+    "ComparisonReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "field", "summary"],
+      "properties": {
+        "code": { "type": "string" },
+        "field": { "type": "string" },
+        "summary": { "type": "string" }
+      }
+    },
+    "CaseRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "workflowVersion", "stage", "lifecycleStatus", "migrationNeedsReview", "archivedFromStage", "intake", "duplicateCandidates", "nextAction", "sla", "blockerSummary"],
+      "properties": {
+        "caseId": { "type": "string" },
+        "workflowVersion": { "type": "integer", "minimum": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "lifecycleStatus": { "$ref": "#/$defs/LifecycleStatus" },
+        "migrationNeedsReview": { "type": "boolean" },
+        "archivedFromStage": { "anyOf": [{ "$ref": "#/$defs/Stage" }, { "type": "null" }] },
+        "intake": { "$ref": "#/$defs/Intake" },
+        "duplicateCandidates": { "type": "array", "items": { "$ref": "#/$defs/DuplicateCandidate" } },
+        "nextAction": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] },
+        "sla": { "$ref": "#/$defs/Sla" },
+        "blockerSummary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "blocking", "nonWaivable"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "blocking": { "type": "integer", "minimum": 0 },
+            "nonWaivable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "CaseDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "case", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "case": { "$ref": "#/$defs/CaseRecord" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "CaseSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "workflowVersion", "stage", "lifecycleStatus", "subject", "owner", "lastActivityAt", "nextAction", "sla", "blockerSummary"],
+      "properties": {
+        "caseId": { "type": "string" },
+        "workflowVersion": { "type": "integer", "minimum": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "lifecycleStatus": { "$ref": "#/$defs/LifecycleStatus" },
+        "subject": { "$ref": "#/$defs/QueueSubject" },
+        "owner": { "anyOf": [{ "$ref": "#/$defs/AssignmentRef" }, { "type": "null" }] },
+        "lastActivityAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "nextAction": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] },
+        "sla": { "$ref": "#/$defs/Sla" },
+        "blockerSummary": { "$ref": "#/$defs/CounterSummary" }
+      }
+    },
+    "CounterSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "blocking", "nonWaivable"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "blocking": { "type": "integer", "minimum": 0 },
+        "nonWaivable": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "CaseListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "items", "page", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/CaseSummary" } },
+        "page": { "$ref": "#/$defs/Page" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "QueueItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "stage", "lifecycleStatus", "subject", "owner", "sla", "blockingCount", "unresolvedCandidateCount", "openFindingCount", "lastActivityAt", "nextAction"],
+      "properties": {
+        "caseId": { "type": "string" },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "lifecycleStatus": { "$ref": "#/$defs/LifecycleStatus" },
+        "subject": { "$ref": "#/$defs/QueueSubject" },
+        "owner": { "anyOf": [{ "$ref": "#/$defs/AssignmentRef" }, { "type": "null" }] },
+        "sla": { "$ref": "#/$defs/Sla" },
+        "blockingCount": { "type": "integer", "minimum": 0 },
+        "unresolvedCandidateCount": { "type": "integer", "minimum": 0 },
+        "openFindingCount": { "type": "integer", "minimum": 0 },
+        "lastActivityAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "nextAction": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] }
+      }
+    },
+    "QueueResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "items", "page", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/QueueItem" } },
+        "page": { "$ref": "#/$defs/Page" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "WorkflowCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "connectors", "identity", "findings", "contradictionsOpen"],
+      "properties": {
+        "overall": { "$ref": "#/$defs/UnitInterval" },
+        "connectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "partial", "zeroResults", "unavailable", "permissionRequired", "error"],
+          "properties": {
+            "complete": { "type": "integer", "minimum": 0 },
+            "partial": { "type": "integer", "minimum": 0 },
+            "zeroResults": { "type": "integer", "minimum": 0 },
+            "unavailable": { "type": "integer", "minimum": 0 },
+            "permissionRequired": { "type": "integer", "minimum": 0 },
+            "error": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "identity": { "$ref": "#/$defs/Progress" },
+        "findings": { "$ref": "#/$defs/Progress" },
+        "contradictionsOpen": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "resolved", "total"],
+      "properties": {
+        "state": { "type": "string", "enum": ["not_applicable", "unknown", "incomplete", "complete"] },
+        "resolved": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "WorkflowResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "workflowVersion", "stage", "lifecycleStatus", "migrationNeedsReview", "completion", "blockers", "allowedTransitions", "waivers", "coverage", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "workflowVersion": { "type": "integer", "minimum": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "lifecycleStatus": { "$ref": "#/$defs/LifecycleStatus" },
+        "migrationNeedsReview": { "type": "boolean" },
+        "completion": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "$ref": "#/$defs/Completion" } },
+        "blockers": { "type": "array", "items": { "$ref": "#/$defs/Blocker" } },
+        "allowedTransitions": { "type": "array", "items": { "$ref": "#/$defs/TransitionOffer" } },
+        "waivers": { "type": "array", "items": { "$ref": "#/$defs/Waiver" } },
+        "coverage": { "$ref": "#/$defs/WorkflowCoverage" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ConnectorRunStatus": {
+      "type": "string",
+      "enum": ["complete", "partial", "zero_results", "unavailable", "permission_required", "error"]
+    },
+    "ConnectorFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "messageKey", "params", "retryable", "stage"],
+      "properties": {
+        "code": { "type": "string" },
+        "messageKey": { "type": "string", "pattern": "^dd\\." },
+        "params": { "$ref": "#/$defs/JsonParams" },
+        "retryable": { "type": "boolean" },
+        "stage": { "type": "string", "enum": ["configuration", "authorization", "request", "parse", "persistence", "synthesis"] }
+      }
+    },
+    "PartialReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "messageKey", "params"],
+      "properties": {
+        "code": { "type": "string" },
+        "messageKey": { "type": "string", "pattern": "^dd\\." },
+        "params": { "$ref": "#/$defs/JsonParams" }
+      }
+    },
+    "ConnectorState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectorId", "labelKey", "eligible", "selected", "required", "eligibilityReasonCode", "neverRun", "latestRunId", "latestExecutionStatus", "lastAttemptAt", "lastSuccessAt", "sourceUpdatedAt", "freshness", "reducedCoverage", "blocking", "availableActions", "retryAction"],
+      "properties": {
+        "connectorId": { "type": "string" },
+        "labelKey": { "type": "string" },
+        "eligible": { "type": "boolean" },
+        "selected": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "eligibilityReasonCode": { "type": ["string", "null"] },
+        "neverRun": { "type": "boolean" },
+        "latestRunId": { "type": ["string", "null"] },
+        "latestExecutionStatus": { "anyOf": [{ "$ref": "#/$defs/ConnectorRunStatus" }, { "type": "null" }] },
+        "lastAttemptAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "lastSuccessAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "sourceUpdatedAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "freshness": { "$ref": "#/$defs/Freshness" },
+        "reducedCoverage": { "type": "boolean" },
+        "blocking": { "type": "boolean" },
+        "availableActions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "retryAction": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "neverRun": { "const": true } }, "required": ["neverRun"] },
+          "then": {
+            "properties": {
+              "latestRunId": { "type": "null" },
+              "latestExecutionStatus": { "type": "null" },
+              "lastAttemptAt": { "type": "null" },
+              "lastSuccessAt": { "type": "null" },
+              "sourceUpdatedAt": { "type": "null" },
+              "freshness": {
+                "allOf": [
+                  { "$ref": "#/$defs/Freshness" },
+                  { "properties": { "state": { "const": "unknown" }, "ageDays": { "type": "null" }, "asOf": { "type": "null" } } }
+                ]
+              },
+              "retryAction": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "ConnectorCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jurisdictions", "from", "to", "queryScope", "complete"],
+      "properties": {
+        "jurisdictions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "from": { "$ref": "#/$defs/NullableTimestamp" },
+        "to": { "$ref": "#/$defs/NullableTimestamp" },
+        "queryScope": { "type": "string" },
+        "complete": { "type": ["boolean", "null"] }
+      }
+    },
+    "ConnectorRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectorRunId", "retryOfConnectorRunId", "connectorId", "status", "resultCount", "coverage", "attemptedAt", "lastSuccessAt", "sourceUpdatedAt", "freshness", "partialReason", "failure", "retryAction", "blocking", "reducedCoverage", "workflowVersionObserved"],
+      "properties": {
+        "connectorRunId": { "type": "string" },
+        "retryOfConnectorRunId": { "type": ["string", "null"] },
+        "connectorId": { "type": "string" },
+        "status": { "$ref": "#/$defs/ConnectorRunStatus" },
+        "resultCount": { "type": ["integer", "null"], "minimum": 0 },
+        "coverage": { "$ref": "#/$defs/ConnectorCoverage" },
+        "attemptedAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "lastSuccessAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "sourceUpdatedAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "freshness": { "$ref": "#/$defs/Freshness" },
+        "partialReason": { "anyOf": [{ "$ref": "#/$defs/PartialReason" }, { "type": "null" }] },
+        "failure": { "anyOf": [{ "$ref": "#/$defs/ConnectorFailure" }, { "type": "null" }] },
+        "retryAction": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] },
+        "blocking": { "type": "boolean" },
+        "reducedCoverage": { "type": "boolean" },
+        "workflowVersionObserved": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "zero_results" } }, "required": ["status"] },
+          "then": { "properties": { "resultCount": { "const": 0 }, "partialReason": { "type": "null" }, "failure": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "complete" } }, "required": ["status"] },
+          "then": { "properties": { "resultCount": { "type": "integer", "minimum": 1 }, "partialReason": { "type": "null" }, "failure": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "partial" } }, "required": ["status"] },
+          "then": { "properties": { "partialReason": { "$ref": "#/$defs/PartialReason" } } }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["unavailable", "permission_required", "error"] } }, "required": ["status"] },
+          "then": { "properties": { "resultCount": { "type": "null" }, "partialReason": { "type": "null" }, "failure": { "$ref": "#/$defs/ConnectorFailure" } } }
+        }
+      ]
+    },
+    "ConnectorStateListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "items", "page", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/ConnectorState" } },
+        "page": { "$ref": "#/$defs/Page" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ConnectorStateDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "connector", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "connector": { "$ref": "#/$defs/ConnectorState" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ConnectorRunListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "items", "page", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRun" } },
+        "page": { "$ref": "#/$defs/Page" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ConnectorRunDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "connectorRun", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "connectorRun": { "$ref": "#/$defs/ConnectorRun" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ConnectorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectorId", "connectorRunId", "labelKey", "target"],
+      "properties": {
+        "connectorId": { "type": "string" },
+        "connectorRunId": { "type": ["string", "null"] },
+        "labelKey": { "type": "string" },
+        "target": { "$ref": "#/$defs/DeepLinkTarget" }
+      }
+    },
+    "Assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overallAssessment", "confidence", "coverageCompleteness", "unresolvedIdentityCount", "materialFindingIds", "verifiedMaterialFindingCount", "contradictionCount", "unresolvedMaterialContradictionCount", "sources", "requiredActions", "triage", "policy", "generatedAt", "workflowVersion"],
+      "properties": {
+        "overallAssessment": { "type": "string", "enum": ["insufficient_coverage", "no_material_verified_findings", "material_findings", "requires_escalation", "legacy_unclassified"] },
+        "confidence": { "$ref": "#/$defs/UnitInterval" },
+        "coverageCompleteness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "unresolvedIdentityCount": { "type": "integer", "minimum": 0 },
+        "materialFindingIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "verifiedMaterialFindingCount": { "type": "integer", "minimum": 0 },
+        "contradictionCount": { "type": "integer", "minimum": 0 },
+        "unresolvedMaterialContradictionCount": { "type": "integer", "minimum": 0 },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stale", "unavailable", "permissionRequired"],
+          "properties": {
+            "stale": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRef" } },
+            "unavailable": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRef" } },
+            "permissionRequired": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRef" } }
+          }
+        },
+        "requiredActions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "triage": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "level", "automated", "explanation", "deprecated"],
+              "properties": {
+                "score": { "$ref": "#/$defs/TriageScore" },
+                "level": { "type": "string", "enum": ["unknown", "low", "medium", "high"] },
+                "automated": { "const": true },
+                "explanation": { "type": ["string", "null"] },
+                "deprecated": { "const": true }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policyId", "policyVersion", "minimumCoverageThreshold", "materialityThreshold", "requiredConnectorIds", "generatedAt"],
+          "properties": {
+            "policyId": { "type": "string" },
+            "policyVersion": { "type": "integer", "minimum": 1 },
+            "minimumCoverageThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+            "materialityThreshold": { "type": "string", "enum": ["high", "critical"] },
+            "requiredConnectorIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "generatedAt": { "$ref": "#/$defs/NonNullTimestamp" }
+          }
+        },
+        "generatedAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "workflowVersion": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "AssessmentResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "assessment", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "assessment": { "$ref": "#/$defs/Assessment" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ReportSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshotId", "title", "snapshotType", "schemaOrigin", "createdAt", "createdBy", "summaryPoints", "findingIds", "statementIds", "pathRunIds", "evidenceIds", "limitations"],
+      "properties": {
+        "snapshotId": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "snapshotType": { "type": "string", "enum": ["internal_dossier", "decision_brief"] },
+        "schemaOrigin": { "type": "string", "enum": ["v2", "v1_legacy"] },
+        "createdAt": { "$ref": "#/$defs/NullableTimestamp" },
+        "createdBy": { "anyOf": [{ "$ref": "#/$defs/ActorAttestation" }, { "type": "null" }] },
+        "summaryPoints": { "type": "array", "items": { "$ref": "#/$defs/SummaryPoint" } },
+        "findingIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "statementIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "pathRunIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "evidenceIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "limitations": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "schemaOrigin": { "const": "v2" } }, "required": ["schemaOrigin"] },
+          "then": {
+            "properties": {
+              "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+              "createdBy": { "$ref": "#/$defs/ActorAttestation" }
+            }
+          }
+        }
+      ]
+    },
+    "ReportListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "items", "page", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/ReportSnapshot" } },
+        "page": { "$ref": "#/$defs/Page" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "ReportDetailResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "caseId", "snapshot", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "caseId": { "type": "string" },
+        "snapshot": { "$ref": "#/$defs/ReportSnapshot" },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "WorkflowSchemaResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "fixtureVersion", "schemaStatus", "stages", "transitionMatrix", "retentionClasses", "correctionAppealPolicies", "provisionalPolicies", "actionCodes", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "fixtureVersion": { "$ref": "#/$defs/FixtureVersion" },
+        "schemaStatus": { "const": "read_fixture_frozen" },
+        "stages": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "$ref": "#/$defs/Stage" }, "uniqueItems": true },
+        "transitionMatrix": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to", "transitionCode"],
+            "properties": {
+              "from": { "$ref": "#/$defs/Stage" },
+              "to": { "$ref": "#/$defs/Stage" },
+              "transitionCode": { "type": "string" }
+            }
+          }
+        },
+        "retentionClasses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PolicyOption" }
+        },
+        "correctionAppealPolicies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PolicyOption" }
+        },
+        "provisionalPolicies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["policyId", "status", "policyVersion"],
+            "properties": {
+              "policyId": { "type": "string" },
+              "status": { "const": "provisional" },
+              "policyVersion": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "actionCodes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "_access": { "$ref": "#/$defs/Access" }
+      }
+    },
+    "PolicyOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "labelKey", "descriptionKey", "action"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["provisional", "active", "disabled"] },
+        "labelKey": { "type": "string" },
+        "descriptionKey": { "type": "string" },
+        "action": { "anyOf": [{ "$ref": "#/$defs/Action" }, { "type": "null" }] }
+      }
+    },
+    "StandardErrorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detail", "error"],
+      "properties": {
+        "detail": { "type": "string" },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contractVersion", "code", "message", "requestId", "retryable", "details"],
+          "properties": {
+            "contractVersion": { "const": "fs-compliance.v1" },
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "requestId": { "type": "string" },
+            "retryable": { "type": "boolean" },
+            "details": {
+              "type": "object",
+              "required": ["workflowContractVersion"],
+              "properties": {
+                "workflowContractVersion": { "$ref": "#/$defs/ContractVersion" },
+                "expectedWorkflowVersion": { "type": "integer", "minimum": 1 },
+                "actualWorkflowVersion": { "type": "integer", "minimum": 1 },
+                "blockers": { "type": "array", "items": { "$ref": "#/$defs/Blocker" } },
+                "allowedTransitions": { "type": "array", "items": { "$ref": "#/$defs/TransitionOffer" } }
+              },
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

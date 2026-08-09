@@ -454,11 +454,18 @@ function AppShell_() {
                         </ThemeIcon>
                         <div>
                           <div className="module-tile__header">
-                            <Text fw={600}>{module.label}</Text>
+                            {/* Lead with the task; keep the product name as a
+                                secondary label so returning users stay oriented. */}
+                            <Text fw={600}>{module.task || module.label}</Text>
                             {module.status ? (
                               <span className="pill pill--status">{module.status}</span>
                             ) : null}
                           </div>
+                          {module.task ? (
+                            <Text size="xs" c="dimmed" className="module-tile__product">
+                              {module.label}
+                            </Text>
+                          ) : null}
                           <Text size="sm" c="dimmed">{module.description}</Text>
                         </div>
                       </Group>

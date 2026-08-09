@@ -312,6 +312,58 @@ export function PublicCampaignPage({
     }
   }
 
+  // Derived below the handlers but above the list-view early return: every hook
+  // must run on both the list and detail renders or the hook order changes.
+  const displayCurrency =
+    fundingSummary?.currency || campaign?.currency || 'GEL'
+  const raisedAmount = Number(
+    fundingSummary?.fundsRaisedAmount ?? campaign?.fundsRaisedAmount ?? 0,
+  )
+  const targetAmount = Number(
+    fundingSummary?.fundingTargetAmount ?? campaign?.fundingTargetAmount ?? 0,
+  )
+  const fundingProgress = targetAmount
+    ? Math.min((raisedAmount / targetAmount) * 100, 100)
+    : 0
+  const campaignPulse = useMemo(
+    () => [
+      {
+        label: isDetail ? 'Funding progress' : 'Public campaigns',
+        value: isDetail ? `${fundingProgress.toFixed(0)}%` : publicCampaigns.length,
+        icon: <IconSpeakerphone size={18} />,
+        progress: isDetail ? Math.round(fundingProgress) : undefined,
+      },
+      {
+        label: 'Raised',
+        value: isDetail ? `${raisedAmount.toLocaleString()} ${displayCurrency}` : '-',
+        icon: <IconChartDots size={18} />,
+        note: isDetail ? 'Verified contributions' : 'Select a campaign',
+      },
+      {
+        label: 'Contributors',
+        value: isDetail
+          ? fundingSummary?.contributorCount ?? settledContributions.length
+          : '-',
+        icon: <IconUsers size={18} />,
+      },
+      {
+        label: 'Target',
+        value: isDetail ? `${targetAmount.toLocaleString()} ${displayCurrency}` : '-',
+        icon: <IconTarget size={18} />,
+      },
+    ],
+    [
+      displayCurrency,
+      fundingProgress,
+      fundingSummary?.contributorCount,
+      isDetail,
+      publicCampaigns.length,
+      raisedAmount,
+      settledContributions.length,
+      targetAmount,
+    ],
+  )
+
   if (!isDetail) {
     return (
       <div className="public-campaign">
@@ -453,55 +505,6 @@ export function PublicCampaignPage({
     )
   }
 
-  const displayCurrency =
-    fundingSummary?.currency || campaign?.currency || 'GEL'
-  const raisedAmount = Number(
-    fundingSummary?.fundsRaisedAmount ?? campaign?.fundsRaisedAmount ?? 0,
-  )
-  const targetAmount = Number(
-    fundingSummary?.fundingTargetAmount ?? campaign?.fundingTargetAmount ?? 0,
-  )
-  const fundingProgress = targetAmount
-    ? Math.min((raisedAmount / targetAmount) * 100, 100)
-    : 0
-  const campaignPulse = useMemo(
-    () => [
-      {
-        label: isDetail ? 'Funding progress' : 'Public campaigns',
-        value: isDetail ? `${fundingProgress.toFixed(0)}%` : publicCampaigns.length,
-        icon: <IconSpeakerphone size={18} />,
-        progress: isDetail ? Math.round(fundingProgress) : undefined,
-      },
-      {
-        label: 'Raised',
-        value: isDetail ? `${raisedAmount.toLocaleString()} ${displayCurrency}` : '-',
-        icon: <IconChartDots size={18} />,
-        note: isDetail ? 'Verified contributions' : 'Select a campaign',
-      },
-      {
-        label: 'Contributors',
-        value: isDetail
-          ? fundingSummary?.contributorCount ?? settledContributions.length
-          : '-',
-        icon: <IconUsers size={18} />,
-      },
-      {
-        label: 'Target',
-        value: isDetail ? `${targetAmount.toLocaleString()} ${displayCurrency}` : '-',
-        icon: <IconTarget size={18} />,
-      },
-    ],
-    [
-      displayCurrency,
-      fundingProgress,
-      fundingSummary?.contributorCount,
-      isDetail,
-      publicCampaigns.length,
-      raisedAmount,
-      settledContributions.length,
-      targetAmount,
-    ],
-  )
   const timelineStart = campaign?.executionStartDate || campaign?.startDate || '-'
   const timelineEnd =
     campaign?.expectedCompletionDate || campaign?.endDate || '-'

@@ -1,0 +1,10 @@
+{
+  "dryRun": true,
+  "migrationVersion": "dd-workflow.v2-be1.0",
+  "plannedCount": 2,
+  "skippedCount": 0,
+  "errorCount": 0,
+  "stageCounts": { "review": 1, "sources": 1 },
+  "migrationNeedsReviewCount": 2,
+  "errors": []
+}

@@ -1,0 +1,51 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "items": [
+    {
+      "caseId": "case-synthetic-queue-a",
+      "stage": "sources",
+      "lifecycleStatus": "active",
+      "subject": { "displayName": "Visible Synthetic Organization", "masked": false, "omitted": false, "category": "organization" },
+      "owner": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst", "teamId": null },
+      "sla": { "deadline": "2026-08-08T09:00:00+04:00", "state": "overdue", "remainingHours": -25 },
+      "blockingCount": 2,
+      "unresolvedCandidateCount": 1,
+      "openFindingCount": 0,
+      "lastActivityAt": "2026-08-07T10:00:00+04:00",
+      "nextAction": null
+    },
+    {
+      "caseId": "case-synthetic-queue-b",
+      "stage": "sources",
+      "lifecycleStatus": "active",
+      "subject": { "displayName": "M••••d Synthetic Subject", "masked": true, "omitted": false, "category": "person" },
+      "owner": null,
+      "sla": { "deadline": "2026-08-20T17:00:00+04:00", "state": "due_soon", "remainingHours": 272 },
+      "blockingCount": 1,
+      "unresolvedCandidateCount": 2,
+      "openFindingCount": 1,
+      "lastActivityAt": "2026-08-07T10:00:00+04:00",
+      "nextAction": null
+    },
+    {
+      "caseId": "case-synthetic-queue-c",
+      "stage": "review",
+      "lifecycleStatus": "active",
+      "subject": { "displayName": null, "masked": false, "omitted": true, "category": "other" },
+      "owner": { "actorId": null, "displayName": "Synthetic Review Team", "teamId": "team-synthetic-review" },
+      "sla": { "deadline": null, "state": "none", "remainingHours": null },
+      "blockingCount": 0,
+      "unresolvedCandidateCount": 0,
+      "openFindingCount": 2,
+      "lastActivityAt": "2026-08-06T10:00:00+04:00",
+      "nextAction": null
+    }
+  ],
+  "page": { "nextCursor": null, "hasMore": false, "limit": 50 },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": ["items[2].subject.displayName"],
+    "maskedFields": ["items[1].subject.displayName"]
+  }
+}

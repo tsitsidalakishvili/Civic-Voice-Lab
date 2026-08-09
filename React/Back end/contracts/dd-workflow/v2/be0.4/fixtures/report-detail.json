@@ -1,0 +1,195 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "snapshot": {
+    "snapshotId": "report-synthetic-v2-001",
+    "title": "Synthetic internal dossier",
+    "snapshotType": "internal_dossier",
+    "schemaOrigin": "v2",
+    "createdAt": "2026-08-08T10:00:00+04:00",
+    "createdBy": {
+      "actor": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst" },
+      "method": "oidc_session",
+      "statementCode": "report_prepared",
+      "attestedAt": "2026-08-08T10:00:00+04:00"
+    },
+    "summaryPoints": [
+      {
+        "label": "Synthetic entity fact",
+        "text": "Synthetic verified-fact example.",
+        "nature": "verified_fact",
+        "priority": 1,
+        "evidenceIds": ["evidence-synthetic-001"],
+        "authority": [{ "sourceId": "source-synthetic-official", "tier": 1, "independence": "independent", "evidenceIds": ["evidence-synthetic-001"] }],
+        "freshness": { "state": "fresh", "ageDays": 1, "slaDays": 30, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "verified",
+        "target": { "type": "entity", "id": "entity-synthetic-001" }
+      },
+      {
+        "label": "Synthetic relationship claim",
+        "text": "Synthetic source-claim example.",
+        "nature": "source_claim",
+        "priority": 2,
+        "evidenceIds": ["evidence-synthetic-002"],
+        "authority": [{ "sourceId": "source-synthetic-secondary", "tier": 4, "independence": "unknown", "evidenceIds": ["evidence-synthetic-002"] }],
+        "freshness": { "state": "stale", "ageDays": 68, "slaDays": 30, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "needs_review",
+        "target": { "type": "relationship", "id": "relationship-synthetic-001" }
+      },
+      {
+        "label": "Synthetic allegation",
+        "text": "Synthetic allegation example; not presented as fact.",
+        "nature": "allegation",
+        "priority": 1,
+        "evidenceIds": ["evidence-synthetic-003"],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "disputed",
+        "target": { "type": "statement", "id": "statement-synthetic-001" }
+      },
+      {
+        "label": "Synthetic inference",
+        "text": "Synthetic inference example requiring analyst review.",
+        "nature": "inference",
+        "priority": 2,
+        "evidenceIds": ["evidence-synthetic-004"],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 0, "slaDays": 7, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "rejected",
+        "target": { "type": "evidence", "id": "evidence-synthetic-004" }
+      },
+      {
+        "label": "Synthetic hypothesis",
+        "text": "Synthetic hypothesis example.",
+        "nature": "hypothesis",
+        "priority": 3,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "needs_review",
+        "target": { "type": "finding", "id": "finding-synthetic-001" }
+      },
+      {
+        "label": "Synthetic analyst assessment",
+        "text": "Synthetic analyst-assessment example.",
+        "nature": "analyst_assessment",
+        "priority": 2,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 0, "slaDays": null, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "not_applicable",
+        "target": { "type": "path_run", "id": "path-run-synthetic-001" }
+      },
+      {
+        "label": "Synthetic limitation",
+        "text": "One synthetic connector was unavailable.",
+        "nature": "limitation",
+        "priority": 1,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "not_applicable",
+        "target": { "type": "connector_run", "id": "connector-run-unavailable-004" }
+      },
+      {
+        "label": "Synthetic coverage",
+        "text": "Synthetic source-coverage context.",
+        "nature": "coverage",
+        "priority": 2,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "stale", "ageDays": 55, "slaDays": 30, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "not_applicable",
+        "target": { "type": "source", "id": "source-synthetic-secondary" }
+      },
+      {
+        "label": "Synthetic action",
+        "text": "Review the synthetic contradiction.",
+        "nature": "action",
+        "priority": 1,
+        "evidenceIds": ["evidence-synthetic-005"],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 0, "slaDays": 7, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "needs_review",
+        "target": { "type": "decision", "id": "decision-synthetic-001" }
+      },
+      {
+        "label": "Synthetic decision",
+        "text": "Synthetic decision-summary example.",
+        "nature": "decision",
+        "priority": 1,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 0, "slaDays": null, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "not_applicable",
+        "target": { "type": "report_snapshot", "id": "report-synthetic-v2-001" }
+      },
+      {
+        "label": "Synthetic monitoring change",
+        "text": "Synthetic monitoring-change example.",
+        "nature": "monitoring_change",
+        "priority": 2,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 0, "slaDays": 1, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "superseded",
+        "target": { "type": "monitoring_run", "id": "monitoring-run-synthetic-001" }
+      },
+      {
+        "label": "Synthetic hypothesis target",
+        "text": "Deep-link target coverage example.",
+        "nature": "hypothesis",
+        "priority": 3,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "needs_review",
+        "target": { "type": "hypothesis", "id": "hypothesis-synthetic-001" }
+      },
+      {
+        "label": "Synthetic resolution candidate",
+        "text": "Deep-link target coverage example.",
+        "nature": "analyst_assessment",
+        "priority": 3,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "needs_review",
+        "target": { "type": "resolution_candidate", "id": "resolution-candidate-synthetic-001" }
+      },
+      {
+        "label": "Synthetic canonical entity",
+        "text": "Deep-link target coverage example.",
+        "nature": "verified_fact",
+        "priority": 3,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "fresh", "ageDays": 1, "slaDays": 30, "asOf": "2026-08-08T10:00:00+04:00" },
+        "verificationState": "verified",
+        "target": { "type": "canonical_entity", "id": "canonical-entity-synthetic-001" }
+      },
+      {
+        "label": "Synthetic note",
+        "text": "Deep-link target coverage example.",
+        "nature": "analyst_assessment",
+        "priority": 3,
+        "evidenceIds": [],
+        "authority": [],
+        "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+        "verificationState": "not_applicable",
+        "target": { "type": "note", "id": "note-synthetic-001" }
+      }
+    ],
+    "findingIds": ["finding-synthetic-001"],
+    "statementIds": ["statement-synthetic-001"],
+    "pathRunIds": ["path-run-synthetic-001"],
+    "evidenceIds": ["evidence-synthetic-001", "evidence-synthetic-002", "evidence-synthetic-003", "evidence-synthetic-004", "evidence-synthetic-005"],
+    "limitations": ["This is synthetic contract data and makes no real-world claim."]
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

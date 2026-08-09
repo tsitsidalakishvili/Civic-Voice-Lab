@@ -1,0 +1,13 @@
+{
+  "detail": "The duplicate candidate is unavailable.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_DUPLICATE_CANDIDATE_NOT_FOUND",
+    "message": "The duplicate candidate is unavailable.",
+    "requestId": "request-synthetic-404-dd_duplicate_candidate_not_found",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

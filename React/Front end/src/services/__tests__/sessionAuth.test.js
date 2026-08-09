@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { loginWithCredentials, safeReturnPath } from '../sessionAuth'
+import { fetchAuthCapabilities, loginWithCredentials, organizationLoginUrl, safeReturnPath } from '../sessionAuth'
 import { validateProductionApiOrigin } from '../../config/runtime'
 
 describe('safeReturnPath', () => {
@@ -30,8 +30,41 @@ describe('temporary staff login', () => {
   it('returns a generic error for rejected credentials', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
     await expect(loginWithCredentials('wrong-user', 'wrong-password')).rejects.toThrow(
-      'The username or password is incorrect.',
+      'The email or password is incorrect.',
     )
+  })
+
+  it('does not blame the credential when password sign-in is disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
+    await expect(loginWithCredentials('user', 'password')).rejects.toThrow(
+      'Password sign-in is not enabled on this server.',
+    )
+  })
+})
+
+describe('advertised sign-in methods', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads the public auth status endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled: true, mode: 'oidc', configured: true, organizationLogin: true, passwordLogin: false }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(fetchAuthCapabilities()).resolves.toMatchObject({
+      mode: 'oidc',
+      organizationLogin: true,
+      passwordLogin: false,
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/platform\/auth\/status$/),
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('builds an organization login URL with a safe return path', () => {
+    expect(organizationLoginUrl('https://evil.test')).toContain('returnTo=%2F')
+    expect(organizationLoginUrl('/crm')).toContain('returnTo=%2Fcrm')
   })
 })
 

@@ -20,7 +20,7 @@ Public views support supporter signup, event registration, campaign sharing, del
 
 ## Roles
 
-The current implementation provides a platform access gate and bearer-token or API-key protection; it is not a full fine-grained RBAC system. Until RBAC is implemented, deploy separate environments or gateways when users need materially different privileges.
+The current implementation supports bearer/API-key access, exact-email password sessions for a small team, and organization OIDC. The newer due-diligence workflow enforces `admin`, `compliance`, and `investigator` roles plus purpose and case scopes, but authorization is not yet uniformly fine-grained across every legacy module. Use the [private deployment baseline](PRIVATE_DEPLOYMENT.md) and separate environments or gateways where privileges materially differ.
 
 Recommended operational roles:
 
@@ -43,8 +43,8 @@ Recommended operational roles:
 
 ## Current limitations
 
-- Authentication is shared-secret based; fine-grained authorization, SSO, and comprehensive audit trails are not evident in the current code.
+- Authorization maturity differs by module. OIDC and scoped due-diligence authorization exist, while legacy routes still require a deliberate access review.
+- Exact-email password-file authentication is intended only for a very small private team; organization OIDC with MFA is the target as risk or user count grows.
 - Health checks verify the API/database path but do not establish full business readiness for every external connector.
 - Several integrations are optional and degrade or return configuration errors when credentials are absent.
 - Legacy Streamlit applications remain for reference and should not receive new production work by default.
-

@@ -53,9 +53,12 @@ export const buildModules = (t) => {
       status: 'In Progress',
       Component: HowItWorksPage,
     },
+    // `task` is the plain-language action shown on the home screen; `label` stays
+    // the product name so existing users still recognise where they landed.
     {
       id: 'crm',
       label: t('module.network'),
+      task: t('task.crm'),
       description: t('module.network.desc'),
       Component: CRMPage,
       // No status = Ready/Active
@@ -64,24 +67,28 @@ export const buildModules = (t) => {
     {
       id: 'deliberation',
       label: t('module.deliberation'),
+      task: t('task.deliberation'),
       description: t('module.deliberation.desc'),
       Component: DeliberationPage,
     },
     {
       id: 'campaigns',
       label: 'Campaigns & Audience',
+      task: t('task.campaigns'),
       description: 'Match campaigns, issues, and causes to the messengers who can amplify them, with reach projections.',
       Component: CampaignsAudienceWorkspace,
     },
     {
       id: 'due-diligence',
       label: t('module.dueDiligence'),
+      task: t('task.dueDiligence'),
       description: t('module.dueDiligence.desc'),
       Component: DueDiligencePage,
     },
     {
       id: 'data-hub',
       label: t('module.dataHub'),
+      task: t('task.dataHub'),
       description: t('module.dataHub.desc'),
       Component: DataHubPage,
     },
@@ -135,16 +142,19 @@ export const buildModuleSections = (t) => ({
     'due-diligence': {
       title: t('module.dueDiligence'),
       description: t('module.dueDiligence.desc'),
-      flowTitle: 'Sources → entities → findings',
-      flowSummary: 'Integrate sourced data, resolve identities, trace evidence paths, and publish defensible findings.',
-      defaultTab: 'sources',
+      flowTitle: t('dd.flowTitle'),
+      flowSummary: t('dd.flowSummary'),
+      // Land on the screen that can actually start work. The previous default,
+      // 'sources', dropped every user into stage one of the expert workflow.
+      defaultTab: 'overview',
       sections: [
-        { label: '1. Sources', type: 'tab', value: 'sources', hint: 'Register and inspect datasets and provenance.' },
-        { label: '2. Entities', type: 'tab', value: 'entities', hint: 'Review normalized entities and statements.' },
-        { label: '3. Resolve', type: 'tab', value: 'resolve', hint: 'Accept, reject, or defer identity candidates.' },
-        { label: '4. Follow the money', type: 'tab', value: 'follow-the-money', hint: 'Run path questions on the evidence graph.' },
-        { label: '5. Findings', type: 'tab', value: 'findings', hint: 'Review hypotheses and preserve evidence.' },
-        { label: '6. Publish', type: 'tab', value: 'publish', hint: 'Publish accepted findings with provenance.' },
+        { label: t('nav.dd.start'), type: 'tab', value: 'overview', hint: t('nav.dd.startHint') },
+        { label: t('nav.dd.evidence'), type: 'tab', value: 'checks', hint: t('nav.dd.evidenceHint') },
+        { label: t('nav.dd.report'), type: 'tab', value: 'graph', hint: t('nav.dd.reportHint') },
+        { label: t('nav.dd.decision'), type: 'tab', value: 'decision', hint: t('nav.dd.decisionHint') },
+        { label: t('nav.dd.history'), type: 'tab', value: 'reports', hint: t('nav.dd.historyHint') },
+        { label: t('nav.dd.media'), type: 'tab', value: 'sources', hint: t('nav.dd.mediaHint') },
+        { label: t('nav.dd.advanced'), type: 'tab', value: 'advanced', hint: t('nav.dd.advancedHint') },
       ],
     },
   'data-hub': {

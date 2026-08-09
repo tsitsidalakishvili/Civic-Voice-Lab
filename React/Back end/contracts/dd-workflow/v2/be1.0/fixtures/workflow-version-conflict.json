@@ -1,0 +1,17 @@
+{
+  "detail": "The workflow version is stale.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_WORKFLOW_VERSION_CONFLICT",
+    "message": "The workflow version is stale.",
+    "requestId": "request-synthetic-conflict",
+    "retryable": true,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 1,
+      "actualWorkflowVersion": 2,
+      "blockers": [],
+      "allowedTransitions": []
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "case": {
+    "caseId": "case-synthetic-georgian-001",
+    "workflowVersion": 12,
+    "stage": "sources",
+    "lifecycleStatus": "active",
+    "migrationNeedsReview": false,
+    "archivedFromStage": null,
+    "intake": {
+      "purpose": "investigative_research",
+      "purposeDetails": "Synthetic contract-validation investigation only.",
+      "intendedDecision": "inform_only",
+      "requestor": {
+        "actorId": "actor-synthetic-requestor",
+        "displayName": "Synthetic Requestor",
+        "teamId": "team-synthetic-research"
+      },
+      "owner": {
+        "actorId": "actor-synthetic-owner",
+        "displayName": "Synthetic Analyst",
+        "teamId": "team-synthetic-research"
+      },
+      "subjectCategory": "organization",
+      "jurisdictions": ["GE"],
+      "dateRange": { "from": "2024-01-01", "to": "2026-07-31" },
+      "identifiers": [
+        {
+          "type": "registration_number",
+          "value": "SYNTHETIC-0001",
+          "displayValue": "SYNTHETIC-0001",
+          "masked": false,
+          "omitted": false,
+          "issuer": "synthetic-registry",
+          "country": "GE"
+        },
+        {
+          "type": "tax_identifier",
+          "value": null,
+          "displayValue": "••••0002",
+          "masked": true,
+          "omitted": false,
+          "issuer": "synthetic-tax-authority",
+          "country": "GE"
+        },
+        {
+          "type": "restricted_internal_reference",
+          "value": null,
+          "displayValue": null,
+          "masked": false,
+          "omitted": true,
+          "issuer": null,
+          "country": null
+        }
+      ],
+      "aliases": [
+        { "value": "სატესტო ორგანიზაცია", "script": "Geor", "language": "ka", "type": "official" },
+        { "value": "Satesto Organizatsia", "script": "Latn", "language": "ka-Latn", "type": "transliteration" }
+      ],
+      "diligenceDepth": "enhanced",
+      "processingPurposeId": "dd-investigation-synthetic",
+      "lawfulBasisRef": "basis-synthetic-public-interest-review",
+      "deadline": "2026-08-31T17:00:00+04:00",
+      "retentionClass": "dd-standard-provisional",
+      "conflictDeclaration": {
+        "status": "declared_none",
+        "details": null,
+        "attestedBy": {
+          "actor": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst" },
+          "method": "oidc_session",
+          "statementCode": "case_prepared",
+          "attestedAt": "2026-08-01T09:30:00+04:00"
+        },
+        "attestedAt": "2026-08-01T09:30:00+04:00"
+      },
+      "priorScreening": { "status": "none", "refs": [] }
+    },
+    "duplicateCandidates": [
+      {
+        "caseId": "case-synthetic-duplicate-002",
+        "subjectDisplay": "სატესტო ორგანიზაცია — ფილიალი",
+        "subjectMasked": false,
+        "confidence": null,
+        "reasons": [
+          { "code": "ALIAS_SIMILAR", "field": "aliases", "summary": "A transliterated alias is similar; no calibrated score is available." }
+        ],
+        "conflicts": [
+          { "code": "REGISTRATION_CONFLICT", "field": "identifiers.registration_number", "summary": "Synthetic registration numbers differ." }
+        ],
+        "state": "pending",
+        "analystDecision": null,
+        "actions": []
+      }
+    ],
+    "nextAction": {
+      "actionCode": "view_sources",
+      "messageKey": "dd.action.view_sources",
+      "params": { "caseId": "case-synthetic-georgian-001" },
+      "stage": "sources",
+      "method": "GET",
+      "route": "/due-diligence/cases/case-synthetic-georgian-001/connectors",
+      "blocking": false,
+      "requiresCsrf": false,
+      "requiresIdempotency": false
+    },
+    "sla": {
+      "deadline": "2026-08-31T17:00:00+04:00",
+      "state": "on_track",
+      "remainingHours": 536
+    },
+    "blockerSummary": { "total": 3, "blocking": 2, "nonWaivable": 1 }
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": ["case.intake.identifiers[2]"],
+    "maskedFields": ["case.intake.identifiers[1].value"]
+  }
+}

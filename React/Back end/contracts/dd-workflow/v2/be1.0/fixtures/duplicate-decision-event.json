@@ -1,0 +1,25 @@
+{
+  "eventId": "event-synthetic-decision",
+  "eventType": "duplicate_candidate_decided",
+  "caseId": "case-synthetic-be1",
+  "workflowVersion": 3,
+  "actor": {
+    "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+    "method": "oidc_session",
+    "statementCode": "identity_reviewed",
+    "attestedAt": "2026-08-09T12:10:00Z"
+  },
+  "purposeId": "dd-investigation",
+  "createdAt": "2026-08-09T12:10:00Z",
+  "payload": {
+    "candidateCaseId": "case-synthetic-candidate",
+    "decision": "link_existing",
+    "rationale": "Synthetic case relationship only.",
+    "mergePerformed": false
+  },
+  "decisionId": "event-synthetic-decision",
+  "candidateCaseId": "case-synthetic-candidate",
+  "decision": "link_existing",
+  "rationale": "Synthetic case relationship only.",
+  "mergePerformed": false
+}

@@ -1,0 +1,261 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Freedom Square Due Diligence read contract",
+    "version": "dd-workflow.v2-be0.4",
+    "description": "Frozen read-fixture contract only. This document does not register runtime routes or authorize any mutation."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [{ "url": "/", "description": "Same application origin" }],
+  "x-contract-version": "dd-workflow.v2",
+  "x-fixture-version": "dd-workflow.v2-be0.4",
+  "x-schema-status": "read_fixture_frozen",
+  "x-runtime-behavior-changed": false,
+  "x-draft-non-executable-actions": [
+    { "actionCode": "complete_intake", "milestone": "draft-be1+" },
+    { "actionCode": "start_connector", "milestone": "draft-be2+" },
+    { "actionCode": "retry_connector", "milestone": "draft-be2+" },
+    { "actionCode": "create_report_snapshot", "milestone": "draft-be4+" }
+  ],
+  "paths": {
+    "/due-diligence/workflow/schema": {
+      "get": {
+        "operationId": "getDueDiligenceWorkflowSchemaV2",
+        "summary": "Read frozen workflow vocabulary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/WorkflowSchema" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases": {
+      "get": {
+        "operationId": "listDueDiligenceCasesV2",
+        "summary": "List case summaries with masked subjects",
+        "parameters": [
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/StageFilter" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/CaseList" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/queue": {
+      "get": {
+        "operationId": "getDueDiligenceQueueV2",
+        "summary": "Read deterministic non-risk case queue",
+        "description": "Default excludes closed and archived cases. Order is stage policy, owner/SLA/blockers, oldest activity, then caseId as the stable tie-breaker.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/StageFilter" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Queue" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "getDueDiligenceCaseV2",
+        "summary": "Read a case",
+        "responses": {
+          "200": { "$ref": "#/components/responses/CaseDetail" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/workflow": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "getDueDiligenceWorkflowV2",
+        "summary": "Read authoritative workflow state",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Workflow" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/transitions": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "operationId": "transitionDueDiligenceCaseDraftBe1",
+        "summary": "DRAFT ONLY — non-executable transition placeholder",
+        "description": "draft-be1+; not implemented, not callable, and not approved as a mutation contract. BE0 consumers may display transition offers but must not execute them.",
+        "x-contract-status": "draft-be1+",
+        "x-executable": false,
+        "responses": {
+          "409": { "$ref": "#/components/responses/TransitionVersionConflict" },
+          "501": {
+            "description": "The draft mutation is intentionally unavailable in BE0.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StandardErrorResponse" } } }
+          }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connectors": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceConnectorStatesV2",
+        "summary": "List policy-eligible connector states",
+        "parameters": [{ "$ref": "#/components/parameters/Cursor" }, { "$ref": "#/components/parameters/Limit" }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConnectorStateList" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connectors/{connectorId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/CaseId" },
+        { "$ref": "#/components/parameters/ConnectorId" }
+      ],
+      "get": {
+        "operationId": "getDueDiligenceConnectorStateV2",
+        "summary": "Read a connector state",
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConnectorStateDetail" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connector-runs": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceConnectorRunsV2",
+        "summary": "List immutable connector run reads",
+        "parameters": [{ "$ref": "#/components/parameters/Cursor" }, { "$ref": "#/components/parameters/Limit" }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConnectorRunList" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connector-runs/{connectorRunId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/CaseId" },
+        { "$ref": "#/components/parameters/ConnectorRunId" }
+      ],
+      "get": {
+        "operationId": "getDueDiligenceConnectorRunV2",
+        "summary": "Read an immutable connector run",
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConnectorRunDetail" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/assessment": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "getDueDiligenceAssessmentV2",
+        "summary": "Read a live-computed assessment tied to workflowVersion",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Assessment" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/reports": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceReportsV2",
+        "summary": "List case-scoped immutable report snapshots",
+        "description": "snapshotType omitted returns both internal_dossier and decision_brief. Non-null createdAt sorts descending; null legacy timestamps sort last; snapshotId is the deterministic tie-breaker.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Limit" },
+          {
+            "name": "snapshotType",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["internal_dossier", "decision_brief"] }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReportList" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/reports/{snapshotId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/CaseId" },
+        { "$ref": "#/components/parameters/SnapshotId" }
+      ],
+      "get": {
+        "operationId": "getDueDiligenceReportV2",
+        "summary": "Read an immutable case-scoped report snapshot",
+        "responses": {
+          "200": { "$ref": "#/components/responses/ReportDetail" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "CaseId": { "name": "caseId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "ConnectorId": { "name": "connectorId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "ConnectorRunId": { "name": "connectorRunId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "SnapshotId": { "name": "snapshotId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "Cursor": { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1 } },
+      "Limit": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } },
+      "StageFilter": { "name": "stage", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/Stage" } }
+    },
+    "schemas": {
+      "Stage": { "$ref": "./contract.schema.json#/$defs/Stage" },
+      "WorkflowSchemaResponse": { "$ref": "./contract.schema.json#/$defs/WorkflowSchemaResponse" },
+      "CaseDetailResponse": { "$ref": "./contract.schema.json#/$defs/CaseDetailResponse" },
+      "CaseListResponse": { "$ref": "./contract.schema.json#/$defs/CaseListResponse" },
+      "QueueResponse": { "$ref": "./contract.schema.json#/$defs/QueueResponse" },
+      "WorkflowResponse": { "$ref": "./contract.schema.json#/$defs/WorkflowResponse" },
+      "ConnectorStateListResponse": { "$ref": "./contract.schema.json#/$defs/ConnectorStateListResponse" },
+      "ConnectorStateDetailResponse": { "$ref": "./contract.schema.json#/$defs/ConnectorStateDetailResponse" },
+      "ConnectorRunListResponse": { "$ref": "./contract.schema.json#/$defs/ConnectorRunListResponse" },
+      "ConnectorRunDetailResponse": { "$ref": "./contract.schema.json#/$defs/ConnectorRunDetailResponse" },
+      "AssessmentResponse": { "$ref": "./contract.schema.json#/$defs/AssessmentResponse" },
+      "ReportListResponse": { "$ref": "./contract.schema.json#/$defs/ReportListResponse" },
+      "ReportDetailResponse": { "$ref": "./contract.schema.json#/$defs/ReportDetailResponse" },
+      "StandardErrorResponse": { "$ref": "./contract.schema.json#/$defs/StandardErrorResponse" }
+    },
+    "responses": {
+      "WorkflowSchema": { "description": "Frozen schema vocabulary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowSchemaResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/workflow-schema.json" } } } } },
+      "CaseDetail": { "description": "Case detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CaseDetailResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/case-detail.json" } } } } },
+      "CaseList": { "description": "Case list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CaseListResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/cases-list.json" } } } } },
+      "Queue": { "description": "Case queue", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueueResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/queue.json" } } } } },
+      "Workflow": { "description": "Workflow read", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/workflow.json" } } } } },
+      "TransitionVersionConflict": { "description": "Stale display-only offer", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StandardErrorResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/transition-version-conflict.json" } } } } },
+      "ConnectorStateList": { "description": "Connector state list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConnectorStateListResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/connectors-list.json" } } } } },
+      "ConnectorStateDetail": { "description": "Connector state detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConnectorStateDetailResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/connector-state-detail.json" } } } } },
+      "ConnectorRunList": { "description": "Connector run list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConnectorRunListResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/connector-runs-list.json" } } } } },
+      "ConnectorRunDetail": { "description": "Connector run detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConnectorRunDetailResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/connector-run-detail.json" } } } } },
+      "Assessment": { "description": "Assessment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AssessmentResponse" }, "examples": { "withoutTriage": { "externalValue": "./fixtures/assessment.json" }, "withDeprecatedTriage": { "externalValue": "./fixtures/assessment-with-triage.json" } } } } },
+      "ReportList": { "description": "Report list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportListResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/reports-list.json" } } } } },
+      "ReportDetail": { "description": "Report detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportDetailResponse" }, "examples": { "synthetic": { "externalValue": "./fixtures/report-detail.json" } } } } },
+      "StandardError": { "description": "fs-compliance.v1 error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StandardErrorResponse" } } } }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "intake": {
+    "purpose": "investigative_research",
+    "purposeDetails": "Synthetic contract fixture only.",
+    "intendedDecision": "inform_only",
+    "requestor": { "actorId": "actor-synthetic-requestor", "displayName": "Synthetic Requestor", "teamId": "team-synthetic" },
+    "owner": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator", "teamId": "team-synthetic" },
+    "subjectCategory": "organization",
+    "jurisdictions": ["GE"],
+    "dateRange": { "from": "2024-01-01", "to": "2026-08-01" },
+    "identifiers": [
+      { "type": "company_registration_number", "value": "SYNTHETIC-0001", "issuer": "synthetic-registry", "country": "GE" }
+    ],
+    "aliases": [
+      { "value": "სატესტო ორგანიზაცია", "script": "Geor", "language": "ka", "type": "official" },
+      { "value": "Satesto Organizatsia", "script": "Latn", "language": "ka-Latn", "type": "transliteration" }
+    ],
+    "diligenceDepth": "enhanced",
+    "processingPurposeId": "dd-investigation",
+    "lawfulBasisRef": "basis-synthetic-approved",
+    "deadline": "2026-08-31T17:00:00+04:00",
+    "retentionClass": "dd-standard-provisional",
+    "conflictDeclaration": { "status": "declared_none", "details": null, "attestation": { "attested": true } },
+    "priorScreening": { "status": "none", "refs": [] }
+  },
+  "preparationAttestation": { "attested": true }
+}

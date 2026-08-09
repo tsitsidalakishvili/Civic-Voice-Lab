@@ -1,0 +1,20 @@
+{
+  "eventId": "event-synthetic-scan",
+  "eventType": "duplicate_scan_completed",
+  "caseId": "case-synthetic-be1",
+  "workflowVersion": 2,
+  "actor": {
+    "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+    "method": "oidc_session",
+    "statementCode": "identity_reviewed",
+    "attestedAt": "2026-08-09T12:05:00Z"
+  },
+  "purposeId": "dd-investigation",
+  "createdAt": "2026-08-09T12:05:00Z",
+  "payload": { "candidateCount": 1, "changed": true, "leadOnly": true },
+  "scanId": "event-synthetic-scan",
+  "scannedAt": "2026-08-09T12:05:00Z",
+  "candidateCount": 1,
+  "changed": true,
+  "leadOnly": true
+}

@@ -1,0 +1,26 @@
+{
+  "expectedWorkflowVersion": 1,
+  "intake": {
+    "purpose": "investigative_research",
+    "purposeDetails": "Synthetic updated scope; full replacement semantics.",
+    "intendedDecision": "inform_only",
+    "requestor": { "actorId": "actor-synthetic-requestor", "displayName": "Synthetic Requestor", "teamId": "team-synthetic" },
+    "owner": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator", "teamId": "team-synthetic" },
+    "subjectCategory": "organization",
+    "jurisdictions": ["GE"],
+    "dateRange": { "from": "2024-01-01", "to": "2026-08-01" },
+    "identifiers": [],
+    "aliases": [
+      { "value": "სატესტო ორგანიზაცია", "script": "Geor", "language": "ka", "type": "official" },
+      { "value": "Satesto Organizatsia", "script": "Latn", "language": "ka-Latn", "type": "transliteration" }
+    ],
+    "diligenceDepth": "standard",
+    "processingPurposeId": "dd-investigation",
+    "lawfulBasisRef": "basis-synthetic-approved",
+    "deadline": null,
+    "retentionClass": "dd-standard-provisional",
+    "conflictDeclaration": { "status": "declared_none", "details": null, "attestation": { "attested": true } },
+    "priorScreening": { "status": "available", "refs": ["evidence-synthetic-001"] }
+  },
+  "preparationAttestation": { "attested": true }
+}

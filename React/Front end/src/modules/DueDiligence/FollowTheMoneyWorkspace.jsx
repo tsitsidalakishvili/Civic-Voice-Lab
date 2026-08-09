@@ -4,6 +4,8 @@ import {
   IconArrowRight,
   IconCheck,
   IconDatabase,
+  IconBrandFacebook,
+  IconBuildingStore,
   IconExternalLink,
   IconFileCheck,
   IconGitMerge,
@@ -16,6 +18,7 @@ import { getJson, requestJson } from '../../services/api'
 import { InvestigationGraph } from './InvestigationGraph.jsx'
 import { CorporateRegistryDossier, CorporateRegistrySources } from './CorporateRegistry.jsx'
 import { ApifyFacebookConnector } from './ApifyFacebookConnector.jsx'
+import { MediaConnector } from './MediaConnector.jsx'
 
 const pct = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 const pretty = (value) => String(value || '').replaceAll('-', ' ').replaceAll('_', ' ')
@@ -55,7 +58,7 @@ function SourceTopology({ datasets }) {
   </section>
 }
 
-export function FollowTheMoneyWorkspace({ caseId, activeStage, reportId }) {
+export function FollowTheMoneyWorkspace({ caseId, activeStage, reportId, subjectName = '', subjectType = 'Person' }) {
   const [workspace, setWorkspace] = useState(null)
   const [datasets, setDatasets] = useState([])
   const [entities, setEntities] = useState([])
@@ -207,10 +210,16 @@ export function FollowTheMoneyWorkspace({ caseId, activeStage, reportId }) {
     {notice ? <div className="dd-graph-notice">{notice}</div> : null}
 
     {activeStage === 'sources' ? <>
-      <WorkspaceHeader eyebrow="01 · Inputs" title="Sources and datasets" description="Register, import, and monitor the datasets that make this investigation defensible." aside={<div className="ftm-count"><strong>{workspace?.counts?.datasets || datasets.length}</strong><span>datasets</span></div>} />
+      <WorkspaceHeader eyebrow="01 · Collect" title="Sources & connectors" description="See what is already connected, then add or refresh evidence through approved backend connectors." aside={<div className="ftm-count"><strong>{workspace?.counts?.datasets || datasets.length}</strong><span>connected datasets</span></div>} />
       <SourceTopology datasets={datasets} />
-      <ApifyFacebookConnector caseId={caseId} onImported={refreshWorkspace} />
-      <CorporateRegistrySources caseId={caseId} onEnriched={refreshWorkspace} />
+      <section className="dd-connector-library">
+        <div className="dd-connector-library__header"><div><span className="dd-card-kicker">Add or refresh evidence</span><h3>Connector library</h3><p>Open only the source you need. Every import stays source-scoped and preserves provenance.</p></div><span className="ftm-status is-ready">Backend mediated</span></div>
+        <div className="dd-connector-library__items">
+          <details open><summary><span className="dd-connector-library__icon is-media"><IconNews size={19}/></span><span><strong>Georgian media</strong><small>Netgazeti, Publika, Interpressnews</small></span><span className="dd-connector-library__action">Search publishers</span></summary><MediaConnector caseId={caseId} initialSubject={subjectName} subjectType={subjectType} onImported={refreshWorkspace}/></details>
+          <details><summary><span className="dd-connector-library__icon is-registry"><IconBuildingStore size={19}/></span><span><strong>Corporate registry</strong><small>Companyinfo secondary · NAPR verification</small></span><span className="dd-connector-library__action">Enrich company</span></summary><CorporateRegistrySources caseId={caseId} onEnriched={refreshWorkspace} /></details>
+          <details><summary><span className="dd-connector-library__icon is-social"><IconBrandFacebook size={19}/></span><span><strong>Public social content</strong><small>Public groups · unresolved identities</small></span><span className="dd-connector-library__action">Import evidence</span></summary><ApifyFacebookConnector caseId={caseId} onImported={refreshWorkspace} /></details>
+        </div>
+      </section>
     </> : null}
 
     {activeStage === 'entities' ? <>

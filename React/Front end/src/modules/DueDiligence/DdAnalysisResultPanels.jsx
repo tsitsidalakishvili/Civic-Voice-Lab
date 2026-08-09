@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '../../services/api'
+import { downloadFile } from '../../services/api'
 
 const moneyTotalsText = (totals) => {
   if (!totals || typeof totals !== 'object') return '-'
@@ -66,14 +66,16 @@ export function DdAnalysisResultPanels({
       ) : null}
       {analysisResult.reportId ? (
         <div className="filter-row">
-          <a
+          <button
             className="button-secondary"
-            href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
-            target="_blank"
-            rel="noreferrer"
+            type="button"
+            onClick={() => downloadFile(
+              `/due-diligence/reports/${analysisResult.reportId}/pdf`,
+              `due-diligence-${analysisResult.reportId}.pdf`,
+            )}
           >
             Download PDF report
-          </a>
+          </button>
           {showViewFullSourcesButton && onViewFullSources ? (
             <button className="button-secondary" type="button" onClick={onViewFullSources}>
               View full sources

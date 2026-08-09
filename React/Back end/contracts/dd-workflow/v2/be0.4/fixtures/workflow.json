@@ -1,0 +1,103 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "workflowVersion": 12,
+  "stage": "sources",
+  "lifecycleStatus": "active",
+  "migrationNeedsReview": false,
+  "completion": [
+    {
+      "stage": "intake",
+      "state": "complete",
+      "completedAt": "2026-08-01T09:30:00+04:00",
+      "actorAttestation": {
+        "actor": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst" },
+        "method": "oidc_session",
+        "statementCode": "case_prepared",
+        "attestedAt": "2026-08-01T09:30:00+04:00"
+      }
+    },
+    { "stage": "identity", "state": "incomplete", "completedAt": null, "actorAttestation": null },
+    { "stage": "sources", "state": "unknown", "completedAt": null, "actorAttestation": null },
+    { "stage": "investigation", "state": "not_applicable", "completedAt": null, "actorAttestation": null },
+    { "stage": "findings", "state": "unknown", "completedAt": null, "actorAttestation": null },
+    { "stage": "review", "state": "unknown", "completedAt": null, "actorAttestation": null },
+    { "stage": "decision", "state": "unknown", "completedAt": null, "actorAttestation": null },
+    { "stage": "monitoring", "state": "not_applicable", "completedAt": null, "actorAttestation": null },
+    { "stage": "closed", "state": "unknown", "completedAt": null, "actorAttestation": null }
+  ],
+  "blockers": [
+    {
+      "code": "DD_SOURCE_COVERAGE_LIMITED",
+      "stage": "sources",
+      "severity": "warning",
+      "blocking": true,
+      "messageKey": "dd.blocker.source_coverage_limited",
+      "params": { "connectorCount": 2 },
+      "remediation": {
+        "actionCode": "review_blocker",
+        "messageKey": "dd.action.review_source_coverage",
+        "params": { "caseId": "case-synthetic-georgian-001" },
+        "stage": "sources",
+        "method": "GET",
+        "route": "/due-diligence/cases/case-synthetic-georgian-001/connectors",
+        "blocking": true,
+        "requiresCsrf": false,
+        "requiresIdempotency": false
+      },
+      "waiverPolicy": "allowed"
+    },
+    {
+      "code": "DD_SOURCE_STALE_SECONDARY",
+      "stage": "sources",
+      "severity": "warning",
+      "blocking": true,
+      "messageKey": "dd.blocker.source_stale_secondary",
+      "params": { "connectorId": "synthetic-secondary" },
+      "remediation": null,
+      "waiverPolicy": "allowed"
+    },
+    {
+      "code": "DD_PURPOSE_AUTHORIZATION_REQUIRED",
+      "stage": "review",
+      "severity": "error",
+      "blocking": true,
+      "messageKey": "dd.blocker.purpose_authorization_required",
+      "params": {},
+      "remediation": null,
+      "waiverPolicy": "forbidden"
+    }
+  ],
+  "allowedTransitions": [
+    {
+      "transitionCode": "complete_sources_with_waivers",
+      "messageKey": "dd.transition.complete_sources_with_waivers",
+      "params": {},
+      "toStage": "investigation",
+      "availability": "requires_waivers",
+      "requiredWaiverCodes": ["DD_SOURCE_COVERAGE_LIMITED", "DD_SOURCE_STALE_SECONDARY"],
+      "requiredAttestations": ["preparedBy"]
+    }
+  ],
+  "waivers": [],
+  "coverage": {
+    "overall": null,
+    "connectors": {
+      "complete": 1,
+      "partial": 1,
+      "zeroResults": 1,
+      "unavailable": 1,
+      "permissionRequired": 1,
+      "error": 1
+    },
+    "identity": { "state": "incomplete", "resolved": 1, "total": 2 },
+    "findings": { "state": "not_applicable", "resolved": 0, "total": 0 },
+    "contradictionsOpen": 1
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

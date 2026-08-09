@@ -1,0 +1,377 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Freedom Square Due Diligence BE1 contract",
+    "version": "dd-workflow.v2-be1.0",
+    "description": "BE1 intake, duplicate-lead and workflow-transition contract. Runtime is gated by FS_DD_WORKFLOW_V2_ENABLED and remains off by default. BE0.4 read schemas remain authoritative."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [{ "url": "/", "description": "Exact same application origin" }],
+  "x-contract-version": "dd-workflow.v2",
+  "x-mutation-contract-version": "dd-workflow.v2-be1.0",
+  "x-schema-status": "be1_review_candidate_rc2",
+  "x-feature-flag": { "name": "FS_DD_WORKFLOW_V2_ENABLED", "default": false },
+  "x-security-boundary": {
+    "authentication": "OIDC or approved local-file session",
+    "authorization": "role, case scope, purpose scope and field policy are enforced server-side",
+    "csrf": "All mutations require the platform CSRF and exact Origin/Referer controls",
+    "idempotency": "All mutations require Idempotency-Key; replay is evaluated before workflow version",
+    "attestations": "Clients send only {attested:true}; actor, method, statement and time are server-issued"
+  },
+  "security": [{ "fsSession": [] }],
+  "paths": {
+    "/due-diligence/workflow/schema": {
+      "get": {
+        "operationId": "getDueDiligenceWorkflowSchemaV2",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1workflow~1schema/get",
+        "responses": {
+          "200": { "$ref": "../be0.4/openapi.json#/components/responses/WorkflowSchema" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases": {
+      "get": { "$ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases/get" },
+      "post": {
+        "summary": "Legacy create is rejected before mutation while v2 is enabled",
+        "x-legacy-write": true,
+        "x-disabled-when-v2-enabled": true,
+        "responses": { "409": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/v2": {
+      "post": {
+        "operationId": "createDueDiligenceCaseV2",
+        "summary": "Create a minimal v2 case and complete intake projection",
+        "x-executable": true,
+        "x-contract-status": "be1-review-candidate-rc2",
+        "x-required-roles": ["investigator", "compliance", "admin"],
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/PurposeId" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateCase" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/CreateCase" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" },
+          "409": { "$ref": "#/components/responses/StandardError" },
+          "422": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/queue": {
+      "get": {
+        "operationId": "getDueDiligenceQueueV2",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1queue/get",
+        "responses": {
+          "200": { "$ref": "../be0.4/openapi.json#/components/responses/Queue" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": { "$ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}/get" },
+      "patch": {
+        "summary": "Legacy direct status mutation is rejected before mutation while v2 is enabled",
+        "x-legacy-write": true,
+        "x-disabled-when-v2-enabled": true,
+        "responses": { "409": { "$ref": "#/components/responses/StandardError" } }
+      },
+      "delete": {
+        "summary": "Legacy hard delete is disabled before mutation while v2 is enabled",
+        "x-legacy-write": true,
+        "x-disabled-when-v2-enabled": true,
+        "responses": { "409": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/workflow": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "getDueDiligenceWorkflowV2",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1workflow/get",
+        "responses": {
+          "200": { "$ref": "../be0.4/openapi.json#/components/responses/Workflow" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/intake": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "put": {
+        "operationId": "replaceDueDiligenceIntakeV2",
+        "summary": "Fully replace v2 intake with optimistic concurrency",
+        "description": "All IntakeInput keys are required, using explicit null or empty arrays. The purpose header equals the proposed processingPurposeId. The principal must be authorized for current and proposed purposes; changing an established purpose is not supported in BE1.",
+        "x-executable": true,
+        "x-contract-status": "be1-review-candidate-rc2",
+        "x-required-roles": ["investigator", "compliance", "admin"],
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/PurposeId" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/IntakeReplace" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/IntakeMutation" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" },
+          "409": { "$ref": "#/components/responses/StandardError" },
+          "422": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/duplicate-candidates/scan": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "operationId": "scanDueDiligenceDuplicateCandidatesV2",
+        "summary": "Create lead-only duplicate candidates",
+        "description": "A scan never merges, confirms identity or creates an adverse finding. Name-only similarity remains a masked lead with conservative confidence.",
+        "x-executable": true,
+        "x-contract-status": "be1-review-candidate-rc2",
+        "x-required-roles": ["investigator", "compliance", "admin"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/PurposeId" }, { "$ref": "#/components/parameters/CsrfToken" }],
+        "requestBody": { "$ref": "#/components/requestBodies/DuplicateScan" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/DuplicateScan" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" },
+          "409": { "$ref": "#/components/responses/StandardError" },
+          "422": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/duplicate-candidates/{candidateCaseId}/decisions": {
+      "parameters": [
+        { "$ref": "#/components/parameters/CaseId" },
+        { "$ref": "#/components/parameters/CandidateCaseId" }
+      ],
+      "post": {
+        "operationId": "decideDueDiligenceDuplicateCandidateV2",
+        "summary": "Record an analyst duplicate-lead decision without merging",
+        "description": "Allowed decisions are continue_new, link_existing and dismiss_duplicate. open_existing remains a separately authorized GET navigation action and is not a mutation.",
+        "x-executable": true,
+        "x-contract-status": "be1-review-candidate-rc2",
+        "x-required-roles": ["investigator", "compliance", "admin"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/PurposeId" }, { "$ref": "#/components/parameters/CsrfToken" }],
+        "requestBody": { "$ref": "#/components/requestBodies/DuplicateDecision" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/DuplicateDecision" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" },
+          "409": { "$ref": "#/components/responses/StandardError" },
+          "422": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/transitions": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "operationId": "transitionDueDiligenceCaseV2",
+        "summary": "Execute the exact currently offered transition",
+        "description": "transitionCode and toStage must both match a fresh TransitionOffer. All required waivers are validated and persisted atomically. Governance blockers remain non-waivable.",
+        "x-executable": true,
+        "x-contract-status": "be1-review-candidate-rc2",
+        "x-required-roles": ["investigator", "compliance", "admin"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/PurposeId" }, { "$ref": "#/components/parameters/CsrfToken" }],
+        "requestBody": { "$ref": "#/components/requestBodies/Transition" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Transition" },
+          "401": { "$ref": "#/components/responses/StandardError" },
+          "403": { "$ref": "#/components/responses/StandardError" },
+          "404": { "$ref": "#/components/responses/StandardError" },
+          "409": { "$ref": "#/components/responses/StandardError" },
+          "422": { "$ref": "#/components/responses/StandardError" }
+        }
+      }
+    },
+    "/due-diligence/cases/{caseId}/decision": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "summary": "Legacy direct decision is rejected before mutation while v2 is enabled",
+        "x-legacy-write": true,
+        "x-disabled-when-v2-enabled": true,
+        "responses": { "409": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/archive": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "summary": "Legacy archive is rejected before mutation while v2 is enabled",
+        "x-legacy-write": true,
+        "x-disabled-when-v2-enabled": true,
+        "responses": { "409": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connectors": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceConnectorStatesV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1connectors/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connectors/{connectorId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }, { "$ref": "../be0.4/openapi.json#/components/parameters/ConnectorId" }],
+      "get": {
+        "operationId": "getDueDiligenceConnectorStateV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1connectors~1{connectorId}/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connector-runs": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceConnectorRunsV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1connector-runs/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connector-runs/{connectorRunId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }, { "$ref": "../be0.4/openapi.json#/components/parameters/ConnectorRunId" }],
+      "get": {
+        "operationId": "getDueDiligenceConnectorRunV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1connector-runs~1{connectorRunId}/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/assessment": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "getDueDiligenceAssessmentV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1assessment/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/connectors/{connectorId}/runs": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }, { "$ref": "../be0.4/openapi.json#/components/parameters/ConnectorId" }],
+      "post": {
+        "summary": "DRAFT BE2+ connector start; non-executable",
+        "x-contract-status": "draft-be2+",
+        "x-executable": false,
+        "responses": { "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/findings": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "summary": "DRAFT BE3+ finding mutation; non-executable",
+        "x-contract-status": "draft-be3+",
+        "x-executable": false,
+        "responses": { "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/reports": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "get": {
+        "operationId": "listDueDiligenceReportsV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1reports/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      },
+      "post": {
+        "summary": "DRAFT BE4+ report creation; non-executable",
+        "x-contract-status": "draft-be4+",
+        "x-executable": false,
+        "responses": { "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/reports/{snapshotId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }, { "$ref": "../be0.4/openapi.json#/components/parameters/SnapshotId" }],
+      "get": {
+        "operationId": "getDueDiligenceReportV2UnavailableBe1",
+        "x-frozen-read-contract-ref": "../be0.4/openapi.json#/paths/~1due-diligence~1cases~1{caseId}~1reports~1{snapshotId}/get",
+        "x-runtime-status": "unavailable-be1",
+        "responses": { "401": { "$ref": "#/components/responses/StandardError" }, "403": { "$ref": "#/components/responses/StandardError" }, "404": { "$ref": "#/components/responses/StandardError" }, "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    },
+    "/due-diligence/cases/{caseId}/monitoring-runs": {
+      "parameters": [{ "$ref": "#/components/parameters/CaseId" }],
+      "post": {
+        "summary": "DRAFT BE5+ monitoring mutation; non-executable",
+        "x-contract-status": "draft-be5+",
+        "x-executable": false,
+        "responses": { "501": { "$ref": "#/components/responses/StandardError" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "fsSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-fs_session",
+        "description": "Opaque Secure HttpOnly server session. Browsers send it with credentials; frontend code cannot read it."
+      }
+    },
+    "parameters": {
+      "CaseId": { "name": "caseId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "CandidateCaseId": { "name": "candidateCaseId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "PurposeId": { "name": "X-FS-Purpose-Id", "in": "header", "required": true, "schema": { "type": "string", "minLength": 2 }, "description": "Must equal the request processingPurposeId for create/intake replacement and an authorized current purpose for other mutations." },
+      "CsrfToken": { "name": "X-FS-CSRF", "in": "header", "required": true, "schema": { "type": "string", "minLength": 16 }, "description": "CSRF token bootstrapped from GET /auth/me. Exact Origin or Referer validation is also enforced by shared auth middleware." },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 12, "maxLength": 200, "pattern": "^[!-~]+$" } }
+    },
+    "headers": {
+      "IdempotentReplay": { "description": "true only when the original stored response is replayed", "schema": { "type": "boolean" } },
+      "ContractVersion": { "description": "Read contract marker", "schema": { "const": "dd-workflow.v2" } },
+      "CacheControl": { "description": "Responses are not shared-cacheable", "schema": { "const": "no-store" } }
+    },
+    "requestBodies": {
+      "CreateCase": { "required": true, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/CreateCaseRequest" }, "examples": { "synthetic": { "externalValue": "fixtures/create-case-request.json" } } } } },
+      "IntakeReplace": { "required": true, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/IntakeReplaceRequest" }, "examples": { "synthetic": { "externalValue": "fixtures/replace-intake-request.json" } } } } },
+      "DuplicateScan": { "required": true, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/DuplicateScanRequest" }, "examples": { "synthetic": { "externalValue": "fixtures/duplicate-scan-request.json" } } } } },
+      "DuplicateDecision": { "required": true, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/DuplicateDecisionRequest" }, "examples": { "synthetic": { "externalValue": "fixtures/duplicate-decision-request.json" } } } } },
+      "Transition": { "required": true, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/TransitionRequest" }, "examples": { "multiWaiver": { "externalValue": "fixtures/transition-multi-waiver-request.json" } } } } }
+    },
+    "responses": {
+      "CreateCase": { "description": "Created or an idempotent replay of the original 201 response", "headers": { "Idempotent-Replay": { "$ref": "#/components/headers/IdempotentReplay" }, "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } }, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/CreateCaseResponse" }, "examples": { "created": { "externalValue": "fixtures/create-case-response.json" } } } } },
+      "IntakeMutation": { "description": "Intake replacement result", "headers": { "Idempotent-Replay": { "$ref": "#/components/headers/IdempotentReplay" }, "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } }, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/IntakeMutationResponse" }, "examples": { "changed": { "externalValue": "fixtures/intake-changed-response.json" }, "noop": { "externalValue": "fixtures/intake-noop-response.json" } } } } },
+      "DuplicateScan": { "description": "Lead-only scan result", "headers": { "Idempotent-Replay": { "$ref": "#/components/headers/IdempotentReplay" }, "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } }, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/DuplicateScanResponse" }, "examples": { "changed": { "externalValue": "fixtures/duplicate-scan-changed-response.json" }, "unchanged": { "externalValue": "fixtures/duplicate-scan-unchanged-response.json" } } } } },
+      "DuplicateDecision": { "description": "Audited lead decision result; mergePerformed is false", "headers": { "Idempotent-Replay": { "$ref": "#/components/headers/IdempotentReplay" }, "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } }, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/DuplicateDecisionResponse" }, "examples": { "linked": { "externalValue": "fixtures/duplicate-decision-response.json" } } } } },
+      "Transition": { "description": "Atomic transition result", "headers": { "Idempotent-Replay": { "$ref": "#/components/headers/IdempotentReplay" }, "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } }, "content": { "application/json": { "schema": { "$ref": "mutation.schema.json#/$defs/TransitionResponse" }, "examples": { "multiWaiver": { "externalValue": "fixtures/transition-response.json" }, "idempotentReplayAfterAdvance": { "externalValue": "fixtures/idempotent-replay-response.json" } } } } },
+      "StandardError": {
+        "description": "Sanitized fs-compliance.v1 error envelope",
+        "headers": { "X-FS-DD-Contract-Version": { "$ref": "#/components/headers/ContractVersion" }, "Cache-Control": { "$ref": "#/components/headers/CacheControl" } },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "mutation.schema.json#/$defs/StandardErrorResponse" },
+            "examples": {
+              "workflowDisabled": { "externalValue": "fixtures/workflow-v2-disabled.json" },
+              "workflowVersionConflict": { "externalValue": "fixtures/workflow-version-conflict.json" },
+              "idempotencyKeyReused": { "externalValue": "fixtures/idempotency-key-reused.json" },
+              "purposeMismatch": { "externalValue": "fixtures/purpose-mismatch.json" },
+              "purposeChangeNotSupported": { "externalValue": "fixtures/purpose-change-not-supported.json" },
+              "identifierProhibited": { "externalValue": "fixtures/identifier-prohibited.json" },
+              "transitionOutOfOrder": { "externalValue": "fixtures/transition-out-of-order.json" },
+              "transitionBlocked": { "externalValue": "fixtures/transition-blocked.json" },
+              "waiverNotRequired": { "externalValue": "fixtures/waiver-not-required.json" },
+              "nonwaivableBlocker": { "externalValue": "fixtures/nonwaivable-blocker.json" },
+              "attestationRequired": { "externalValue": "fixtures/attestation-required.json" },
+              "duplicateCandidateNotFound": { "externalValue": "fixtures/duplicate-candidate-not-found.json" },
+              "legacyMutationDisabled": { "externalValue": "fixtures/legacy-mutation-disabled.json" },
+              "duplicateWaiverValidation": { "externalValue": "fixtures/duplicate-waiver-validation.json" },
+              "waiverExpired": { "externalValue": "fixtures/waiver-expired.json" },
+              "actorExtraFieldValidation": { "externalValue": "fixtures/actor-extra-field-validation.json" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

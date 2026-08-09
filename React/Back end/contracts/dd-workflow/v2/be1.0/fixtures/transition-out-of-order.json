@@ -1,0 +1,17 @@
+{
+  "detail": "The requested transition is not currently offered.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_TRANSITION_OUT_OF_ORDER",
+    "message": "The requested transition is not currently offered.",
+    "requestId": "request-synthetic-409-dd_transition_out_of_order",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 2,
+      "actualWorkflowVersion": 2,
+      "blockers": [],
+      "allowedTransitions": []
+    }
+  }
+}

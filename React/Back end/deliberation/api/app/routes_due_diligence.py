@@ -12,7 +12,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from reportlab.lib import colors
@@ -25,6 +25,12 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from .db import get_active_database, get_driver
 from .investigation_ftm import _relationship_schema, persist_investigation_projection
 from .investigation_reuse import ftm_schema_metadata, infer_ftm_property_type, validate_ftm_entity
+from .dd_workflow_v2 import (
+    get_case_v2_for_legacy_route,
+    legacy_mutation_disabled_response,
+    list_cases_v2_for_legacy_route,
+    workflow_v2_enabled,
+)
 
 router = APIRouter()
 
@@ -222,7 +228,9 @@ class DueDiligenceAnalysisRequest(BaseModel):
     media_source_ids: List[str] = Field(default_factory=lambda: ["netgazeti", "publika", "interpressnews"], alias="mediaSourceIds")
     media_topics: List[str] = Field(default_factory=list, alias="mediaTopics")
     media_max_results: int = Field(default=12, alias="mediaMaxResults", ge=1, le=50)
-    demo: bool = Field(default=True)
+    # Demo data fabricates sanctions/PEP hits carrying the real subject's name, so
+    # it must never be the default for a screening request. Opt in explicitly.
+    demo: bool = Field(default=False)
 
 
 class WikidataResult(BaseModel):
@@ -277,7 +285,7 @@ class DebatePrepRequest(BaseModel):
     use_wikipedia: bool = Field(default=True, alias="useWikipedia")
     use_google: bool = Field(default=True, alias="useGoogle")
     use_local_media: bool = Field(default=True, alias="useLocalMedia")
-    demo: bool = Field(default=True)
+    demo: bool = Field(default=False)
 
 
 class DebatePrepMention(BaseModel):
@@ -324,6 +332,68 @@ class DueDiligenceAnalysisOut(BaseModel):
     sources: List[str] = []
     summary: Dict[str, object]
     warnings: List[str]
+    report_id: Optional[str] = Field(default=None, alias="reportId")
+    stored_at: Optional[str] = Field(default=None, alias="storedAt")
+
+
+class DueDiligenceFullCheckRequest(BaseModel):
+    """Input for the one-click full check.
+
+    There is deliberately no ``demo`` field: the full check must never fabricate
+    entities carrying a real subject's name, so it always runs the underlying
+    analysis with ``demo=False``.
+    """
+
+    subject: Optional[str] = None
+    subject_type: Optional[str] = Field(default=None, alias="subjectType")
+    max_news: int = Field(default=8, alias="maxNews", ge=1, le=20)
+    use_local_media: bool = Field(default=True, alias="useLocalMedia")
+    media_source_ids: List[str] = Field(
+        default_factory=lambda: ["netgazeti", "publika", "interpressnews"],
+        alias="mediaSourceIds",
+    )
+    media_topics: List[str] = Field(default_factory=list, alias="mediaTopics")
+    media_max_results: int = Field(default=12, alias="mediaMaxResults", ge=1, le=50)
+    identification_code: Optional[str] = Field(
+        default=None, alias="identificationCode"
+    )
+
+
+class DueDiligenceSourceStatusOut(BaseModel):
+    id: str
+    label: str
+    status: str
+    hit_count: int = Field(default=0, alias="hitCount")
+    detail: str = ""
+    requires_configuration: bool = Field(
+        default=False, alias="requiresConfiguration"
+    )
+
+
+class DueDiligenceFullCheckResultsOut(BaseModel):
+    wikidata: List[WikidataResult] = []
+    wikipedia: List[WikipediaResult] = []
+    opensanctions: List[OpenSanctionsResult] = []
+    news: List[NewsResult] = []
+    declarations: List[AssetDeclarationResult] = []
+    media: Optional[Dict[str, object]] = None
+    company_registry: Optional[Dict[str, object]] = Field(
+        default=None, alias="companyRegistry"
+    )
+    facebook: Optional[Dict[str, object]] = None
+
+
+class DueDiligenceFullCheckOut(BaseModel):
+    case_id: str = Field(alias="caseId")
+    subject: str
+    subject_type: str = Field(alias="subjectType")
+    generated_at: str = Field(alias="generatedAt")
+    demo: bool = False
+    sources: List[DueDiligenceSourceStatusOut] = []
+    summary: Dict[str, object]
+    results: DueDiligenceFullCheckResultsOut
+    ai_report: Optional[Dict[str, object]] = Field(default=None, alias="aiReport")
+    warnings: List[str] = []
     report_id: Optional[str] = Field(default=None, alias="reportId")
     stored_at: Optional[str] = Field(default=None, alias="storedAt")
 
@@ -1773,6 +1843,7 @@ def _store_dd_report(
     payload: Dict[str, object],
     sources: List[str],
     case_id: Optional[str] = None,
+    is_demo: bool = False,
 ) -> Tuple[Optional[str], Optional[str]]:
     driver = get_driver()
     query = """
@@ -1790,7 +1861,8 @@ def _store_dd_report(
         r.declarationHits = $declarationHits,
         r.sources = $sources,
         r.summaryJson = $summaryJson,
-        r.payloadJson = $payloadJson
+        r.payloadJson = $payloadJson,
+        r.isDemo = $isDemo
     WITH r
     OPTIONAL MATCH (c:Competitor {nameKey: toLower($subject), competitorType: $subjectType})
     FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END | MERGE (c)-[:HAS_DD_REPORT]->(r))
@@ -1818,6 +1890,7 @@ def _store_dd_report(
         "summaryJson": json.dumps(summary),
         "payloadJson": json.dumps(payload),
         "caseId": case_id,
+        "isDemo": bool(is_demo),
     }
     with _db_session(driver) as session:
         records = _execute_write(session, query, params)
@@ -3804,6 +3877,7 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     declaration_results: List[AssetDeclarationResult] = []
     media_result: Optional[Dict[str, object]] = None
     local_media_used = False
+    demo_data_used = False
 
     if payload.use_wikidata:
         wikidata_results, error = _wikidata_search(subject)
@@ -3852,6 +3926,7 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
     if payload.demo and (payload.use_wikidata or payload.use_wikipedia or payload.use_opensanctions or payload.use_news) and not (
         wikidata_results or wikipedia_results or opensanctions_results or news_results or declaration_results
     ):
+        demo_data_used = True
         demo = _demo_results(subject)
         if payload.use_wikidata:
             wikidata_results = [WikidataResult(**row) for row in demo["wikidata"]]
@@ -3951,6 +4026,7 @@ def analyze_due_diligence(payload: DueDiligenceAnalysisRequest):
         payload=payload_blob,
         sources=sources,
         case_id=case_id,
+        is_demo=demo_data_used,
     )
     if report_id and case_id:
         try:
@@ -4072,7 +4148,10 @@ def list_due_diligence_cases(
     status: Optional[str] = Query(None),
     subject: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
+    request: Request = None,
 ):
+    if workflow_v2_enabled():
+        return list_cases_v2_for_legacy_route(request, limit=limit)
     driver = get_driver()
     normalized_status = _normalize_case_status(status) if status else None
     subject_filter = subject.strip() if subject else None
@@ -4124,7 +4203,10 @@ def list_due_diligence_cases(
 
 
 @router.post("/cases", response_model=DueDiligenceCaseOut)
-def create_due_diligence_case(payload: DueDiligenceCaseCreate):
+def create_due_diligence_case(payload: DueDiligenceCaseCreate, request: Request = None):
+    blocked = legacy_mutation_disabled_response(request, "create_case_v2") if workflow_v2_enabled() else None
+    if blocked is not None:
+        return blocked
     subject_georgian = str(payload.subject_georgian or "").strip()
     subject_english = str(payload.subject_english or "").strip()
     subject = _case_display_subject(payload.subject, subject_georgian, subject_english)
@@ -4180,7 +4262,9 @@ def create_due_diligence_case(payload: DueDiligenceCaseCreate):
 
 
 @router.get("/cases/{case_id}", response_model=DueDiligenceCaseOut)
-def get_due_diligence_case(case_id: str):
+def get_due_diligence_case(case_id: str, request: Request = None):
+    if workflow_v2_enabled():
+        return get_case_v2_for_legacy_route(request, case_id)
     driver = get_driver()
     query = """
     MATCH (c:DueDiligenceCase {caseId: $caseId})
@@ -4212,7 +4296,10 @@ def get_due_diligence_case(case_id: str):
 
 
 @router.patch("/cases/{case_id}", response_model=DueDiligenceCaseOut)
-def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
+def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate, request: Request = None):
+    blocked = legacy_mutation_disabled_response(request, "replace_intake_v2") if workflow_v2_enabled() else None
+    if blocked is not None:
+        return blocked
     subject_georgian = str(payload.subject_georgian).strip() if payload.subject_georgian is not None else None
     subject_english = str(payload.subject_english).strip() if payload.subject_english is not None else None
     subject = payload.subject.strip() if payload.subject else None
@@ -4274,15 +4361,22 @@ def update_due_diligence_case(case_id: str, payload: DueDiligenceCaseUpdate):
 
 
 @router.post("/cases/{case_id}/archive", response_model=DueDiligenceCaseOut)
-def archive_due_diligence_case(case_id: str):
+def archive_due_diligence_case(case_id: str, request: Request = None):
+    blocked = legacy_mutation_disabled_response(request, "archive_case_draft_be5") if workflow_v2_enabled() else None
+    if blocked is not None:
+        return blocked
     return update_due_diligence_case(
         case_id,
         DueDiligenceCaseUpdate(status="Archived"),
+        request,
     )
 
 
 @router.delete("/cases/{case_id}")
-def delete_due_diligence_case(case_id: str):
+def delete_due_diligence_case(case_id: str, request: Request = None):
+    blocked = legacy_mutation_disabled_response(request, "archive_case_draft_be5") if workflow_v2_enabled() else None
+    if blocked is not None:
+        return blocked
     driver = get_driver()
     query = """
     MATCH (c:DueDiligenceCase {caseId: $caseId})
@@ -4443,7 +4537,10 @@ def update_due_diligence_case_task(case_id: str, task_id: str, payload: DueDilig
 
 
 @router.post("/cases/{case_id}/decision", response_model=DueDiligenceDecisionOut)
-def create_due_diligence_decision(case_id: str, payload: DueDiligenceDecisionCreate):
+def create_due_diligence_decision(case_id: str, payload: DueDiligenceDecisionCreate, request: Request = None):
+    blocked = legacy_mutation_disabled_response(request, "decision_draft_be4") if workflow_v2_enabled() else None
+    if blocked is not None:
+        return blocked
     outcome = payload.outcome.strip()
     if not outcome:
         raise HTTPException(status_code=400, detail="Decision outcome is required")
@@ -5375,8 +5472,623 @@ def download_due_diligence_report_pdf(report_id: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# One-click full check
+#
+# Runs every configured due-diligence source for a case and reports an honest
+# per-source status. A source that is not configured, or that is blocked by a
+# permission gate, must never fail the whole call and must never be silently
+# dropped from the response: it is reported with "not-configured"/"blocked" and
+# a detail naming the exact environment variable an operator has to set.
+# ---------------------------------------------------------------------------
+
+FULL_CHECK_STATUS_OK = "ok"
+FULL_CHECK_STATUS_NO_DATA = "no-data"
+FULL_CHECK_STATUS_NOT_CONFIGURED = "not-configured"
+FULL_CHECK_STATUS_BLOCKED = "blocked"
+FULL_CHECK_STATUS_ERROR = "error"
+
+FULL_CHECK_SOURCE_LABELS: Dict[str, str] = {
+    "wikidata": "Wikidata",
+    "wikipedia": "Wikipedia",
+    "opensanctions": "OpenSanctions (sanctions & PEP screening)",
+    "news": "International news (GDELT)",
+    "declarations": "Georgian asset declarations",
+    "georgian-media": "Georgian media monitor",
+    "company-registry": "Georgian company registry (Companyinfo.ge)",
+    "facebook": "Facebook public groups (Apify)",
+}
+
+# Order matters: the first matching keyword wins, so more specific source names
+# are checked before the generic local-media keywords.
+_FULL_CHECK_WARNING_ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("wikidata", ("wikidata",)),
+    ("wikipedia", ("wikipedia",)),
+    ("opensanctions", ("opensanctions",)),
+    ("news", ("gdelt",)),
+    ("declarations", ("declaration",)),
+    (
+        "georgian-media",
+        (
+            "netgazeti",
+            "publika",
+            "interpressnews",
+            "local media",
+            "media monitor",
+            "rss",
+            "georgian media",
+        ),
+    ),
+)
 
 
+def _full_check_source(
+    source_id: str,
+    status: str,
+    detail: str,
+    hit_count: int = 0,
+    requires_configuration: bool = False,
+) -> Dict[str, object]:
+    return {
+        "id": source_id,
+        "label": FULL_CHECK_SOURCE_LABELS.get(source_id, source_id),
+        "status": status,
+        "hitCount": int(hit_count or 0),
+        "detail": detail,
+        "requiresConfiguration": bool(requires_configuration),
+    }
 
 
+def _full_check_warnings_by_source(warnings: List[str]) -> Dict[str, List[str]]:
+    grouped: Dict[str, List[str]] = {}
+    for warning in warnings:
+        text = str(warning or "").strip()
+        if not text:
+            continue
+        lowered = text.casefold()
+        for source_id, keywords in _FULL_CHECK_WARNING_ROUTES:
+            if any(keyword in lowered for keyword in keywords):
+                grouped.setdefault(source_id, []).append(text)
+                break
+    return grouped
 
+
+# Warnings that only mean "the source ran and matched nothing". These must not
+# be reported as errors: an empty result is data, a failure is not.
+_FULL_CHECK_NO_MATCH_PHRASES: Tuple[str, ...] = (
+    "no extractable matches",
+    "no matches",
+    "no mentions found",
+    "found no matches",
+    "returned no ",
+    "no results",
+)
+
+
+def _full_check_is_no_match_notice(text: str) -> bool:
+    lowered = str(text or "").casefold()
+    return any(phrase in lowered for phrase in _FULL_CHECK_NO_MATCH_PHRASES)
+
+
+def _full_check_core_source(
+    source_id: str,
+    hit_count: int,
+    warnings: List[str],
+    *,
+    ok_detail: str,
+    empty_detail: str,
+) -> Dict[str, object]:
+    """Derive an honest status for one of the sources driven by /analyze."""
+    if warnings:
+        joined = " ".join(warnings)
+        lowered = joined.casefold()
+        if "not configured" in lowered or "no api key" in lowered:
+            env_var = "OPENSANCTIONS_API_KEY" if source_id == "opensanctions" else ""
+            detail = (
+                f"Not configured: set {env_var} to enable this source."
+                if env_var
+                else f"Not configured: {joined}"
+            )
+            return _full_check_source(
+                source_id,
+                FULL_CHECK_STATUS_NOT_CONFIGURED,
+                detail,
+                hit_count=hit_count,
+                requires_configuration=True,
+            )
+        failures = [
+            item for item in warnings if not _full_check_is_no_match_notice(item)
+        ]
+        notices = [item for item in warnings if _full_check_is_no_match_notice(item)]
+        if hit_count:
+            if not failures:
+                return _full_check_source(
+                    source_id, FULL_CHECK_STATUS_OK, ok_detail, hit_count=hit_count
+                )
+            return _full_check_source(
+                source_id,
+                FULL_CHECK_STATUS_OK,
+                f"{ok_detail} Partial problems: {' '.join(failures)}",
+                hit_count=hit_count,
+            )
+        if failures:
+            return _full_check_source(
+                source_id, FULL_CHECK_STATUS_ERROR, " ".join(failures)
+            )
+        # Only "nothing matched" notices: the source worked, it just found nothing.
+        return _full_check_source(
+            source_id, FULL_CHECK_STATUS_NO_DATA, " ".join(notices) or empty_detail
+        )
+    if hit_count:
+        return _full_check_source(
+            source_id, FULL_CHECK_STATUS_OK, ok_detail, hit_count=hit_count
+        )
+    return _full_check_source(source_id, FULL_CHECK_STATUS_NO_DATA, empty_detail)
+
+
+def _full_check_identification_codes(case_id: str) -> List[str]:
+    """Identification codes already recorded on this case's investigation graph.
+
+    The Georgian company registry can only be queried by identification code.
+    We never invent one: this returns codes that are already stored for the
+    case, and an empty list when the case has none.
+    """
+    query = """
+    MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    OPTIONAL MATCH (caseNode)-[:HAS_INVESTIGATION_ENTITY]->(entity:InvestigationEntity)
+    WHERE entity.identificationCode IS NOT NULL
+      AND trim(toString(entity.identificationCode)) <> ''
+    WITH caseNode, collect(DISTINCT trim(toString(entity.identificationCode))) AS entityCodes
+    OPTIONAL MATCH (caseNode)-[:HAS_COMPANY_ENRICHMENT_JOB]->(job:CompanyRegistryEnrichmentJob)
+    WHERE job.identificationCode IS NOT NULL
+      AND trim(toString(job.identificationCode)) <> ''
+    WITH entityCodes + collect(DISTINCT trim(toString(job.identificationCode))) AS codes
+    RETURN codes AS codes
+    """
+    try:
+        with _db_session(get_driver()) as session:
+            records = _execute_read(session, query, {"caseId": case_id})
+    except Exception:
+        return []
+    if not records:
+        return []
+    raw = records[0].get("codes") or []
+    seen: List[str] = []
+    for value in raw:
+        code = str(value or "").strip()
+        if code and code not in seen:
+            seen.append(code)
+    return seen
+
+
+def _full_check_facebook_snapshot(case_id: str) -> Dict[str, object]:
+    """Count Facebook material already imported for this case.
+
+    This is read-only on purpose. The full check never starts a paid managed
+    Apify run; it only surfaces what has already been imported.
+    """
+    query = """
+    MATCH (caseNode:DueDiligenceCase {caseId: $caseId})
+    OPTIONAL MATCH (caseNode)-[:HAS_INVESTIGATION_ENTITY]->(entity:InvestigationEntity {platform: 'facebook'})
+    WITH caseNode, count(DISTINCT entity) AS entityCount
+    OPTIONAL MATCH (caseNode)-[:USES_INVESTIGATION_EVIDENCE]->(evidence:InvestigationEvidence {platform: 'facebook'})
+    WITH caseNode, entityCount, count(DISTINCT evidence) AS evidenceCount
+    OPTIONAL MATCH (run:InvestigationImportRun {caseId: $caseId, connector: 'apify', platform: 'facebook'})
+    WITH entityCount, evidenceCount, run ORDER BY run.createdAt DESC
+    WITH entityCount, evidenceCount, collect(run)[0] AS latest
+    RETURN entityCount AS entityCount,
+           evidenceCount AS evidenceCount,
+           latest.runId AS lastRunId,
+           toString(latest.createdAt) AS lastImportedAt
+    """
+    try:
+        with _db_session(get_driver()) as session:
+            records = _execute_read(session, query, {"caseId": case_id})
+    except Exception as exc:
+        return {"error": str(exc), "entityCount": 0, "evidenceCount": 0}
+    if not records:
+        return {"entityCount": 0, "evidenceCount": 0}
+    row = records[0].data()
+    return {
+        "entityCount": int(row.get("entityCount") or 0),
+        "evidenceCount": int(row.get("evidenceCount") or 0),
+        "lastRunId": row.get("lastRunId") or None,
+        "lastImportedAt": row.get("lastImportedAt") or None,
+    }
+
+
+def _full_check_company_registry(
+    case_id: str, requested_code: Optional[str]
+) -> Tuple[Dict[str, object], Optional[Dict[str, object]]]:
+    """Run the Georgian company registry source, or explain why it cannot run."""
+    # Imported lazily: investigation_companyinfo imports from this module.
+    from .investigation_companyinfo import (
+        CompanyInfoEnrichmentRequest,
+        _companyinfo_config,
+        enrich_company_from_companyinfo,
+    )
+
+    try:
+        config = _companyinfo_config()
+    except Exception as exc:
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_ERROR,
+                f"Company registry configuration could not be read: {exc}",
+            ),
+            None,
+        )
+
+    if not (config.get("enabled") and config.get("permissionAcknowledged")):
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_BLOCKED,
+                (
+                    "Blocked by the reuse-permission gate. An operator must review the "
+                    "Companyinfo.ge terms and then set FS_COMPANYINFO_ENABLED=1 and "
+                    "FS_COMPANYINFO_PERMISSION_ACKNOWLEDGED=1."
+                ),
+                requires_configuration=True,
+            ),
+            None,
+        )
+
+    code = str(requested_code or "").strip()
+    if not code:
+        candidates = _full_check_identification_codes(case_id)
+        code = candidates[0] if candidates else ""
+    if not code:
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_NO_DATA,
+                (
+                    "The Georgian company registry can only be searched by identification "
+                    "code, and this case has none on file. Add the company identification "
+                    "code to the case and run the check again."
+                ),
+            ),
+            None,
+        )
+
+    try:
+        request_model = CompanyInfoEnrichmentRequest(identificationCode=code)
+    except Exception as exc:
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_NO_DATA,
+                (
+                    "The identification code on file is not a valid Georgian "
+                    f"identification code (9 to 11 digits): {exc}"
+                ),
+            ),
+            None,
+        )
+
+    try:
+        graph = enrich_company_from_companyinfo(case_id, request_model)
+    except HTTPException as exc:
+        detail = (
+            exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        )
+        status = (
+            FULL_CHECK_STATUS_BLOCKED
+            if exc.status_code == 403
+            else FULL_CHECK_STATUS_ERROR
+        )
+        message = str(detail.get("message") or detail.get("status") or exc.detail)
+        return (
+            _full_check_source(
+                "company-registry",
+                status,
+                f"Company registry lookup did not complete: {message}",
+                requires_configuration=status == FULL_CHECK_STATUS_BLOCKED,
+            ),
+            {"identificationCode": code, "error": detail},
+        )
+    except Exception as exc:
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_ERROR,
+                f"Company registry lookup failed: {exc}",
+            ),
+            {"identificationCode": code, "error": str(exc)},
+        )
+
+    result = graph.get("enrichmentResult") if isinstance(graph, dict) else None
+    result = result if isinstance(result, dict) else {}
+    counts = result.get("counts") if isinstance(result.get("counts"), dict) else {}
+    hit_count = sum(int(value or 0) for value in counts.values()) if counts else 0
+    if not hit_count and result.get("companyEntityId"):
+        hit_count = 1
+    payload = {"identificationCode": code, "enrichmentResult": result}
+    if hit_count:
+        return (
+            _full_check_source(
+                "company-registry",
+                FULL_CHECK_STATUS_OK,
+                f"Company registry returned {hit_count} record(s) for identification code {code}.",
+                hit_count=hit_count,
+            ),
+            payload,
+        )
+    return (
+        _full_check_source(
+            "company-registry",
+            FULL_CHECK_STATUS_NO_DATA,
+            f"No company registry records were returned for identification code {code}.",
+        ),
+        payload,
+    )
+
+
+def _full_check_facebook(case_id: str) -> Tuple[Dict[str, object], Dict[str, object]]:
+    """Report already-imported Facebook material. Never starts a paid Apify run."""
+    from .investigation_social import _imports_enabled, _managed_starts_enabled
+
+    snapshot = _full_check_facebook_snapshot(case_id)
+    entity_count = int(snapshot.get("entityCount") or 0)
+    evidence_count = int(snapshot.get("evidenceCount") or 0)
+    hit_count = entity_count + evidence_count
+    token_configured = bool(str(os.getenv("APIFY_API_TOKEN") or "").strip())
+    payload = {
+        **snapshot,
+        "tokenConfigured": token_configured,
+        "importsEnabled": bool(_imports_enabled()),
+        "managedStartsEnabled": bool(_managed_starts_enabled()),
+        "startedPaidRun": False,
+        "mode": "read-only",
+    }
+
+    if snapshot.get("error"):
+        return (
+            _full_check_source(
+                "facebook",
+                FULL_CHECK_STATUS_ERROR,
+                f"Stored Facebook material could not be read: {snapshot.get('error')}",
+            ),
+            payload,
+        )
+    if hit_count:
+        return (
+            _full_check_source(
+                "facebook",
+                FULL_CHECK_STATUS_OK,
+                (
+                    f"{hit_count} Facebook record(s) already imported for this case "
+                    "(no new scrape was started)."
+                ),
+                hit_count=hit_count,
+            ),
+            payload,
+        )
+    if not token_configured:
+        return (
+            _full_check_source(
+                "facebook",
+                FULL_CHECK_STATUS_NOT_CONFIGURED,
+                (
+                    "Nothing has been imported for this case and APIFY_API_TOKEN is not "
+                    "set, so Facebook data cannot be fetched. Set APIFY_API_TOKEN, then "
+                    "import an existing Apify run."
+                ),
+                requires_configuration=True,
+            ),
+            payload,
+        )
+    if not _imports_enabled():
+        return (
+            _full_check_source(
+                "facebook",
+                FULL_CHECK_STATUS_NOT_CONFIGURED,
+                (
+                    "Facebook imports are switched off. Set "
+                    "FS_APIFY_FACEBOOK_IMPORT_ENABLED=1 to allow them."
+                ),
+                requires_configuration=True,
+            ),
+            payload,
+        )
+    return (
+        _full_check_source(
+            "facebook",
+            FULL_CHECK_STATUS_NO_DATA,
+            (
+                "No Facebook records have been imported for this case yet. The full check "
+                "never starts a paid Apify run; import an existing run first."
+            ),
+        ),
+        payload,
+    )
+
+
+@router.post("/cases/{case_id}/full-check", response_model=DueDiligenceFullCheckOut)
+def run_due_diligence_full_check(
+    case_id: str, payload: Optional[DueDiligenceFullCheckRequest] = None
+):
+    """Run every due-diligence source for a case in one call.
+
+    Sits under /due-diligence, so the platform's purpose enforcement
+    (dd-investigation) and the investigator/compliance/admin role check apply.
+    No single source is allowed to fail the request: each reports its own status.
+    """
+    request_payload = payload or DueDiligenceFullCheckRequest()
+    case_row, _existing_report = _case_and_report_for_graph(case_id)
+    subject = str(request_payload.subject or "").strip() or _case_display_subject(
+        case_row.get("subject"),
+        case_row.get("subjectGeorgian"),
+        case_row.get("subjectEnglish"),
+    )
+    if not subject:
+        raise HTTPException(status_code=400, detail="Case has no subject to screen")
+    subject_type = _normalize_subject_type(
+        request_payload.subject_type or case_row.get("subjectType")
+    )
+
+    warnings: List[str] = []
+    sources: List[Dict[str, object]] = []
+    analysis: Dict[str, object] = {}
+    analysis_failed: Optional[str] = None
+
+    try:
+        analysis = analyze_due_diligence(
+            DueDiligenceAnalysisRequest(
+                subject=subject,
+                subjectType=subject_type,
+                caseId=case_id,
+                useWikidata=True,
+                useWikipedia=True,
+                useOpenSanctions=True,
+                useNews=True,
+                useDeclarations=True,
+                maxNews=request_payload.max_news,
+                useLocalMedia=request_payload.use_local_media,
+                mediaSourceIds=request_payload.media_source_ids,
+                mediaTopics=request_payload.media_topics,
+                mediaMaxResults=request_payload.media_max_results,
+                # Never fabricate entities that carry a real subject's name.
+                demo=False,
+            )
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        analysis_failed = str(exc)
+        warnings.append(f"Core source analysis failed: {exc}")
+
+    wikidata = list(analysis.get("wikidata") or [])
+    wikipedia = list(analysis.get("wikipedia") or [])
+    opensanctions = list(analysis.get("opensanctions") or [])
+    news = list(analysis.get("news") or [])
+    declarations = list(analysis.get("declarations") or [])
+    media = analysis.get("media") if isinstance(analysis.get("media"), dict) else None
+    media_mentions = len((media or {}).get("mentions") or [])
+    analysis_warnings = [str(item) for item in (analysis.get("warnings") or [])]
+    warnings.extend(analysis_warnings)
+    grouped_warnings = _full_check_warnings_by_source(analysis_warnings)
+
+    core_specs = (
+        (
+            "wikidata",
+            len(wikidata),
+            "Matched Wikidata entities.",
+            "No Wikidata entity matched this subject.",
+        ),
+        (
+            "wikipedia",
+            len(wikipedia),
+            "Matched Wikipedia articles.",
+            "No Wikipedia article matched this subject.",
+        ),
+        (
+            "opensanctions",
+            len(opensanctions),
+            "Sanctions/PEP screening returned matches; review them.",
+            "Sanctions/PEP screening ran and returned no match.",
+        ),
+        (
+            "news",
+            len(news),
+            "International news mentions found.",
+            "No international news mention matched this subject.",
+        ),
+        (
+            "declarations",
+            len(declarations),
+            "Public asset declaration records found.",
+            "No public asset declaration record matched this subject.",
+        ),
+        (
+            "georgian-media",
+            media_mentions,
+            "Georgian media mentions found across the configured sources.",
+            "No Georgian media mention matched this subject.",
+        ),
+    )
+    for source_id, hit_count, ok_detail, empty_detail in core_specs:
+        if analysis_failed:
+            sources.append(
+                _full_check_source(
+                    source_id,
+                    FULL_CHECK_STATUS_ERROR,
+                    f"This source did not run: {analysis_failed}",
+                )
+            )
+            continue
+        sources.append(
+            _full_check_core_source(
+                source_id,
+                hit_count,
+                grouped_warnings.get(source_id, []),
+                ok_detail=ok_detail,
+                empty_detail=empty_detail,
+            )
+        )
+
+    registry_source, registry_payload = _full_check_company_registry(
+        case_id, request_payload.identification_code
+    )
+    sources.append(registry_source)
+
+    facebook_source, facebook_payload = _full_check_facebook(case_id)
+    sources.append(facebook_source)
+
+    base_summary = (
+        analysis.get("summary") if isinstance(analysis.get("summary"), dict) else {}
+    )
+    summary: Dict[str, object] = dict(base_summary)
+    hit_counts = {str(row["id"]): int(row["hitCount"]) for row in sources}
+    status_counts: Dict[str, int] = {
+        FULL_CHECK_STATUS_OK: 0,
+        FULL_CHECK_STATUS_NO_DATA: 0,
+        FULL_CHECK_STATUS_NOT_CONFIGURED: 0,
+        FULL_CHECK_STATUS_BLOCKED: 0,
+        FULL_CHECK_STATUS_ERROR: 0,
+    }
+    for row in sources:
+        key = str(row["status"])
+        status_counts[key] = status_counts.get(key, 0) + 1
+    summary.update(
+        {
+            "riskLevel": base_summary.get("risk_level", "Unknown"),
+            "riskScore": int(base_summary.get("risk_score") or 0),
+            "coreTotalHits": int(base_summary.get("total_hits") or 0),
+            "totalHits": sum(hit_counts.values()),
+            "sourceHitCounts": hit_counts,
+            "sourceStatusCounts": status_counts,
+            "sourcesChecked": len(sources),
+            "sourcesWithData": status_counts[FULL_CHECK_STATUS_OK],
+            "sourcesRequiringConfiguration": sum(
+                1 for row in sources if row["requiresConfiguration"]
+            ),
+            "demo": False,
+        }
+    )
+
+    return {
+        "caseId": case_id,
+        "subject": subject,
+        "subjectType": subject_type,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "demo": False,
+        "sources": sources,
+        "summary": summary,
+        "results": {
+            "wikidata": wikidata,
+            "wikipedia": wikipedia,
+            "opensanctions": opensanctions,
+            "news": news,
+            "declarations": declarations,
+            "media": media,
+            "companyRegistry": registry_payload,
+            "facebook": facebook_payload,
+        },
+        "aiReport": analysis.get("aiReport"),
+        "warnings": warnings,
+        "reportId": analysis.get("reportId"),
+        "storedAt": analysis.get("storedAt"),
+    }

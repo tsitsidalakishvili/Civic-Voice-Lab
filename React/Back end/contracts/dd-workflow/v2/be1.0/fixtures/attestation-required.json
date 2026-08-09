@@ -1,0 +1,13 @@
+{
+  "detail": "The preparedBy attestation is required.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_ATTESTATION_REQUIRED",
+    "message": "The preparedBy attestation is required.",
+    "requestId": "request-synthetic-422-dd_attestation_required",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

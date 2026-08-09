@@ -1,0 +1,46 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "items": [
+    {
+      "snapshotId": "report-synthetic-v2-001",
+      "title": "Synthetic internal dossier",
+      "snapshotType": "internal_dossier",
+      "schemaOrigin": "v2",
+      "createdAt": "2026-08-08T10:00:00+04:00",
+      "createdBy": {
+        "actor": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst" },
+        "method": "oidc_session",
+        "statementCode": "report_prepared",
+        "attestedAt": "2026-08-08T10:00:00+04:00"
+      },
+      "summaryPoints": [],
+      "findingIds": ["finding-synthetic-001"],
+      "statementIds": ["statement-synthetic-001"],
+      "pathRunIds": ["path-run-synthetic-001"],
+      "evidenceIds": ["evidence-synthetic-001"],
+      "limitations": ["This is synthetic contract data and makes no real-world claim."]
+    },
+    {
+      "snapshotId": "report-synthetic-legacy-null-002",
+      "title": null,
+      "snapshotType": "internal_dossier",
+      "schemaOrigin": "v1_legacy",
+      "createdAt": null,
+      "createdBy": null,
+      "summaryPoints": [],
+      "findingIds": [],
+      "statementIds": [],
+      "pathRunIds": [],
+      "evidenceIds": [],
+      "limitations": ["Legacy snapshot time and actor are unavailable; no attestation was manufactured."]
+    }
+  ],
+  "page": { "nextCursor": null, "hasMore": false, "limit": 50 },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

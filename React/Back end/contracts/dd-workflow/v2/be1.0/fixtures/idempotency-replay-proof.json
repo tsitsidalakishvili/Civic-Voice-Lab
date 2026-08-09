@@ -1,0 +1,9 @@
+{
+  "scenario": "same_key_same_body_replayed_after_workflow_advance",
+  "originalWorkflowVersion": 2,
+  "advancedWorkflowVersion": 3,
+  "replayedWorkflowVersion": 2,
+  "idempotentReplay": true,
+  "newKeyAtOriginalVersionErrorCode": "DD_WORKFLOW_VERSION_CONFLICT",
+  "sameKeyDifferentBodyErrorCode": "DD_IDEMPOTENCY_KEY_REUSED"
+}

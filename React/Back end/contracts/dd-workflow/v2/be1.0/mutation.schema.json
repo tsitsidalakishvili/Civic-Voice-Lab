@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freedomsquare.ge/contracts/dd-workflow/v2/be1.0/mutation.schema.json",
+  "title": "Freedom Square Due Diligence BE1 mutation contract",
+  "description": "Additive BE1 mutation contract. BE0.4 remains the authoritative read-shape contract.",
+  "$defs": {
+    "ContractVersion": { "const": "dd-workflow.v2" },
+    "MutationContractVersion": { "const": "dd-workflow.v2-be1.0" },
+    "NonNullTimestamp": { "type": "string", "format": "date-time" },
+    "WorkflowVersion": { "type": "integer", "minimum": 1 },
+    "AttestationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attested"],
+      "properties": { "attested": { "const": true } }
+    },
+    "AssignmentInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "actorId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120 },
+        "displayName": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "teamId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120 }
+      },
+      "anyOf": [
+        { "required": ["actorId"], "properties": { "actorId": { "type": "string" } } },
+        { "required": ["displayName"], "properties": { "displayName": { "type": "string" } } },
+        { "required": ["teamId"], "properties": { "teamId": { "type": "string" } } }
+      ]
+    },
+    "IdentifierInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value", "issuer", "country"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["company_registration_number", "lei", "imo", "aircraft_registration", "tender_id", "contract_id"]
+        },
+        "value": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\u0000-\\u001F]+$" },
+        "issuer": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "country": { "type": ["string", "null"], "pattern": "^[A-Z]{2,3}$" }
+      }
+    },
+    "AliasInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "script", "language", "type"],
+      "properties": {
+        "value": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "script": { "enum": ["Geor", "Latn", "Cyrl", "other"] },
+        "language": { "type": ["string", "null"], "maxLength": 35 },
+        "type": { "enum": ["official", "former", "transliteration", "social_display", "nickname", "also_known_as", "other"] }
+      }
+    },
+    "DateRangeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": ["string", "null"], "format": "date" },
+        "to": { "type": ["string", "null"], "format": "date" }
+      },
+      "description": "When both dates are non-null, from must be less than or equal to to."
+    },
+    "ConflictDeclarationInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "details", "attestation"],
+      "properties": {
+        "status": { "enum": ["unknown", "declared_none", "declared_conflict"] },
+        "details": { "type": ["string", "null"], "maxLength": 2000 },
+        "attestation": { "oneOf": [{ "$ref": "#/$defs/AttestationRequest" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "unknown" } }, "required": ["status"] },
+          "then": { "properties": { "attestation": { "type": "null" } } },
+          "else": { "properties": { "attestation": { "$ref": "#/$defs/AttestationRequest" } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "declared_conflict" } }, "required": ["status"] },
+          "then": { "properties": { "details": { "type": "string", "minLength": 1, "maxLength": 2000 } } }
+        }
+      ]
+    },
+    "PriorScreeningInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "refs"],
+      "properties": {
+        "status": { "enum": ["unknown", "none", "available"] },
+        "refs": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 500 } }
+      }
+    },
+    "IntakeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose", "purposeDetails", "intendedDecision", "requestor", "owner", "subjectCategory",
+        "jurisdictions", "dateRange", "identifiers", "aliases", "diligenceDepth", "processingPurposeId",
+        "lawfulBasisRef", "deadline", "retentionClass", "conflictDeclaration", "priorScreening"
+      ],
+      "properties": {
+        "purpose": { "enum": ["vendor_onboarding", "partner_review", "counterparty_review", "appointment_review", "grant_review", "conflict_check", "investigative_research", "other"] },
+        "purposeDetails": { "type": ["string", "null"], "maxLength": 4000 },
+        "intendedDecision": { "enum": ["approve", "approve_with_conditions", "decline", "escalate", "monitor", "inform_only", "other"] },
+        "requestor": { "$ref": "#/$defs/AssignmentInput" },
+        "owner": { "oneOf": [{ "$ref": "#/$defs/AssignmentInput" }, { "type": "null" }] },
+        "subjectCategory": { "enum": ["person", "organization", "public_body", "asset", "vessel", "other"] },
+        "jurisdictions": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z]{2,3}$" } },
+        "dateRange": { "$ref": "#/$defs/DateRangeInput" },
+        "identifiers": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/IdentifierInput" } },
+        "aliases": { "type": "array", "minItems": 1, "maxItems": 200, "items": { "$ref": "#/$defs/AliasInput" } },
+        "diligenceDepth": { "enum": ["basic", "standard", "enhanced"] },
+        "processingPurposeId": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "lawfulBasisRef": { "type": "string", "minLength": 2, "maxLength": 300 },
+        "deadline": { "type": ["string", "null"], "format": "date-time" },
+        "retentionClass": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "conflictDeclaration": { "$ref": "#/$defs/ConflictDeclarationInput" },
+        "priorScreening": { "$ref": "#/$defs/PriorScreeningInput" }
+      }
+    },
+    "CreateCaseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intake", "preparationAttestation"],
+      "properties": {
+        "intake": { "$ref": "#/$defs/IntakeInput" },
+        "preparationAttestation": { "$ref": "#/$defs/AttestationRequest" }
+      }
+    },
+    "IntakeReplaceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedWorkflowVersion", "intake", "preparationAttestation"],
+      "properties": {
+        "expectedWorkflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "intake": { "$ref": "#/$defs/IntakeInput" },
+        "preparationAttestation": { "$ref": "#/$defs/AttestationRequest" }
+      }
+    },
+    "DuplicateScanRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedWorkflowVersion"],
+      "properties": { "expectedWorkflowVersion": { "$ref": "#/$defs/WorkflowVersion" } }
+    },
+    "DuplicateDecisionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedWorkflowVersion", "decision", "rationale", "attestation"],
+      "properties": {
+        "expectedWorkflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "decision": { "enum": ["continue_new", "link_existing", "dismiss_duplicate"] },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "attestation": { "$ref": "#/$defs/AttestationRequest" }
+      }
+    },
+    "WaiverInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockerCode", "reason", "attestation", "expiresAt"],
+      "properties": {
+        "blockerCode": { "type": "string", "pattern": "^DD_[A-Z0-9_]+$" },
+        "reason": { "type": "string", "minLength": 5, "maxLength": 2000 },
+        "attestation": { "$ref": "#/$defs/AttestationRequest" },
+        "expiresAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "TransitionAttestations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preparedBy", "reviewedBy"],
+      "properties": {
+        "preparedBy": { "oneOf": [{ "$ref": "#/$defs/AttestationRequest" }, { "type": "null" }] },
+        "reviewedBy": { "oneOf": [{ "$ref": "#/$defs/AttestationRequest" }, { "type": "null" }] }
+      }
+    },
+    "TransitionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedWorkflowVersion", "transitionCode", "toStage", "waivers", "attestations"],
+      "properties": {
+        "expectedWorkflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "transitionCode": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "toStage": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Stage" },
+        "waivers": { "type": "array", "maxItems": 30, "items": { "$ref": "#/$defs/WaiverInput" } },
+        "attestations": { "$ref": "#/$defs/TransitionAttestations" }
+      }
+    },
+    "WaiverEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["waiverId", "blockerCode", "reason", "actor", "createdAt", "expiresAt", "active"],
+      "properties": {
+        "waiverId": { "type": "string", "minLength": 1 },
+        "blockerCode": { "type": "string", "pattern": "^DD_[A-Z0-9_]+$" },
+        "reason": { "type": "string", "minLength": 5 },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+        "active": { "type": "boolean" }
+      }
+    },
+    "CaseCreatedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "caseId", "workflowVersion", "actor", "purposeId", "createdAt", "payload"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "eventType": { "const": "case_created" },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "purposeId": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subjectCategory"],
+          "properties": { "subjectCategory": { "enum": ["person", "organization", "public_body", "asset", "vessel", "other"] } }
+        }
+      }
+    },
+    "IntakeEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "caseId", "workflowVersion", "actor", "purposeId", "createdAt", "payload"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "eventType": { "enum": ["intake_replaced", "intake_replacement_noop"] },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "purposeId": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["changed"],
+          "properties": { "changed": { "type": "boolean" } }
+        }
+      }
+    },
+    "DuplicateScanEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "caseId", "workflowVersion", "actor", "purposeId", "createdAt", "payload", "scanId", "scannedAt", "candidateCount", "changed", "leadOnly"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "eventType": { "const": "duplicate_scan_completed" },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "purposeId": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidateCount", "changed", "leadOnly"],
+          "properties": {
+            "candidateCount": { "type": "integer", "minimum": 0 },
+            "changed": { "type": "boolean" },
+            "leadOnly": { "const": true }
+          }
+        },
+        "scanId": { "type": "string", "minLength": 1 },
+        "scannedAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "candidateCount": { "type": "integer", "minimum": 0 },
+        "changed": { "type": "boolean" },
+        "leadOnly": { "const": true }
+      }
+    },
+    "DuplicateDecisionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "caseId", "workflowVersion", "actor", "purposeId", "createdAt", "payload", "decisionId", "candidateCaseId", "decision", "rationale", "mergePerformed"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "eventType": { "const": "duplicate_candidate_decided" },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "purposeId": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidateCaseId", "decision", "rationale", "mergePerformed"],
+          "properties": {
+            "candidateCaseId": { "type": "string", "minLength": 1 },
+            "decision": { "enum": ["continue_new", "link_existing", "dismiss_duplicate"] },
+            "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "mergePerformed": { "const": false }
+          }
+        },
+        "decisionId": { "type": "string", "minLength": 1 },
+        "candidateCaseId": { "type": "string", "minLength": 1 },
+        "decision": { "enum": ["continue_new", "link_existing", "dismiss_duplicate"] },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "mergePerformed": { "const": false }
+      }
+    },
+    "TransitionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "caseId", "workflowVersion", "actor", "purposeId", "createdAt", "payload", "transitionId", "transitionCode", "fromStage", "toStage", "waivers"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "eventType": { "const": "workflow_transitioned" },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "actor": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/ActorAttestation" },
+        "purposeId": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/NonNullTimestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transitionCode", "fromStage", "toStage", "waiverIds"],
+          "properties": {
+            "transitionCode": { "type": "string", "minLength": 3, "maxLength": 80 },
+            "fromStage": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Stage" },
+            "toStage": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Stage" },
+            "waiverIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+          }
+        },
+        "transitionId": { "type": "string", "minLength": 1 },
+        "transitionCode": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "fromStage": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Stage" },
+        "toStage": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Stage" },
+        "waivers": { "type": "array", "items": { "$ref": "#/$defs/WaiverEvent" } }
+      }
+    },
+    "OperationEvent": {
+      "oneOf": [
+        { "$ref": "#/$defs/CaseCreatedEvent" },
+        { "$ref": "#/$defs/IntakeEvent" },
+        { "$ref": "#/$defs/DuplicateScanEvent" },
+        { "$ref": "#/$defs/DuplicateDecisionEvent" },
+        { "$ref": "#/$defs/TransitionEvent" }
+      ]
+    },
+    "MutationResponseBase": {
+      "type": "object",
+      "required": ["contractVersion", "mutationContractVersion", "caseId", "workflowVersion", "idempotentReplay", "case", "workflow", "_access"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "mutationContractVersion": { "$ref": "#/$defs/MutationContractVersion" },
+        "caseId": { "type": "string", "minLength": 1 },
+        "workflowVersion": { "$ref": "#/$defs/WorkflowVersion" },
+        "idempotentReplay": { "type": "boolean" },
+        "case": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/CaseRecord" },
+        "workflow": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/WorkflowResponse" },
+        "_access": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/Access" }
+      }
+    },
+    "CreateCaseResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/MutationResponseBase" },
+        { "type": "object", "required": ["caseCreatedEvent"], "properties": { "caseCreatedEvent": { "$ref": "#/$defs/CaseCreatedEvent" } } }
+      ],
+      "unevaluatedProperties": false
+    },
+    "IntakeMutationResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/MutationResponseBase" },
+        { "type": "object", "required": ["intakeEvent"], "properties": { "intakeEvent": { "$ref": "#/$defs/IntakeEvent" } } }
+      ],
+      "unevaluatedProperties": false
+    },
+    "DuplicateScanResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/MutationResponseBase" },
+        {
+          "type": "object",
+          "required": ["scanEvent", "duplicateCandidates"],
+          "properties": {
+            "scanEvent": { "$ref": "#/$defs/DuplicateScanEvent" },
+            "duplicateCandidates": { "type": "array", "items": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/DuplicateCandidate" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "DuplicateDecisionResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/MutationResponseBase" },
+        {
+          "type": "object",
+          "required": ["decisionEvent", "duplicateCandidates"],
+          "properties": {
+            "decisionEvent": { "$ref": "#/$defs/DuplicateDecisionEvent" },
+            "duplicateCandidates": { "type": "array", "items": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/DuplicateCandidate" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "TransitionResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/MutationResponseBase" },
+        {
+          "type": "object",
+          "required": ["transitionEvent"],
+          "properties": {
+            "transitionEvent": { "$ref": "#/$defs/TransitionEvent" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "StandardErrorResponse": { "$ref": "https://freedomsquare.ge/contracts/dd-workflow/v2/be0.4/contract.schema.json#/$defs/StandardErrorResponse" }
+  }
+}

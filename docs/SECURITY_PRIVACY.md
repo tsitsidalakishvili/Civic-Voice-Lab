@@ -4,7 +4,8 @@ Treat CRM, deliberation, audience-inference, and due-diligence data as confident
 
 ## Required controls before production
 
-- Keep `FS_AUTH_ENABLED=1`, configure a strong bearer token or API key, and narrowly define public rules.
+- Keep `FS_AUTH_ENABLED=1`. Use exact-email password sessions only for a small private team; prefer organization OIDC with MFA as usage or risk grows. Narrowly define public rules.
+- Protect session secrets, require Secure HttpOnly cookies in production, validate CSRF on mutations, restrict OIDC issuer/tenant/domain and redirect URI, and keep emergency bearer access disabled except during an approved rollback.
 - Use TLS and exact production CORS origins. CORS is not authentication.
 - Store secrets in an approved secret manager; rotate them and separate environments.
 - Restrict Neo4j network access and use a least-privilege database identity.
@@ -15,6 +16,8 @@ Treat CRM, deliberation, audience-inference, and due-diligence data as confident
 ## Privacy lifecycle
 
 Before collection, record purpose, owner, categories, source, consent or other lawful basis, recipients/processors, retention, deletion method, and automated inference. Collect only what is needed and provide appropriate correction/deletion handling.
+
+The application now exposes controls for approved processing purposes, notices, consent/withdrawal, preferences, rights requests, retention jobs, and legal holds. Their existence does not supply the underlying legal decisions: owners must configure, test, operate, and audit them.
 
 Retention periods are not defined in this repository. The owner must approve schedules for imports, graph data, rejected signups, deliberation content, evidence, exports, caches, logs, and backups. Do not retain by convenience or delete material subject to a legal hold.
 
@@ -33,4 +36,3 @@ Use lawful, authorized sources and respect source terms. Maintain provenance fro
 ## Security reporting
 
 Never place secrets or personal data in a public issue. Report vulnerabilities privately to the platform owner with the affected component, synthetic reproduction, impact, and containment. Add a root `SECURITY.md` with a monitored contact before external release.
-

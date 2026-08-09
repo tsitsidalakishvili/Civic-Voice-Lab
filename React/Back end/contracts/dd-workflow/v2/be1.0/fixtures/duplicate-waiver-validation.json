@@ -1,0 +1,21 @@
+{
+  "detail": "The request does not match the BE1 mutation contract.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_REQUEST_VALIDATION_FAILED",
+    "message": "The request does not match the BE1 mutation contract.",
+    "requestId": "request-synthetic-422-dd_request_validation_failed",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "errors": [
+        {
+          "location": [
+            "waivers"
+          ],
+          "type": "value_error"
+        }
+      ]
+    }
+  }
+}

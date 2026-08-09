@@ -1,0 +1,77 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "fixtureVersion": "dd-workflow.v2-be0.4",
+  "schemaStatus": "read_fixture_frozen",
+  "stages": [
+    "intake",
+    "identity",
+    "sources",
+    "investigation",
+    "findings",
+    "review",
+    "decision",
+    "monitoring",
+    "closed"
+  ],
+  "transitionMatrix": [
+    { "from": "intake", "to": "identity", "transitionCode": "complete_intake" },
+    { "from": "identity", "to": "sources", "transitionCode": "complete_identity" },
+    { "from": "sources", "to": "investigation", "transitionCode": "complete_sources" },
+    { "from": "investigation", "to": "findings", "transitionCode": "complete_investigation" },
+    { "from": "findings", "to": "review", "transitionCode": "submit_findings_for_review" },
+    { "from": "review", "to": "decision", "transitionCode": "complete_review" },
+    { "from": "decision", "to": "monitoring", "transitionCode": "start_monitoring" },
+    { "from": "decision", "to": "closed", "transitionCode": "close_after_decision" },
+    { "from": "monitoring", "to": "investigation", "transitionCode": "reopen_material_change" },
+    { "from": "monitoring", "to": "closed", "transitionCode": "close_monitoring" }
+  ],
+  "retentionClasses": [
+    {
+      "id": "dd-standard-provisional",
+      "status": "provisional",
+      "labelKey": "dd.policy.retention.standard.label",
+      "descriptionKey": "dd.policy.retention.standard.description",
+      "action": null
+    }
+  ],
+  "correctionAppealPolicies": [
+    {
+      "id": "dd-correction-route-provisional",
+      "status": "provisional",
+      "labelKey": "dd.policy.correction.default.label",
+      "descriptionKey": "dd.policy.correction.default.description",
+      "action": {
+        "actionCode": "view_correction_policy",
+        "messageKey": "dd.action.view_correction_policy",
+        "params": { "policyId": "dd-correction-route-provisional" },
+        "stage": "review",
+        "method": "GET",
+        "route": "/due-diligence/policies/correction/dd-correction-route-provisional",
+        "blocking": false,
+        "requiresCsrf": false,
+        "requiresIdempotency": false
+      }
+    }
+  ],
+  "provisionalPolicies": [
+    { "policyId": "dd-standard-provisional", "status": "provisional", "policyVersion": 1 },
+    { "policyId": "dd-correction-route-provisional", "status": "provisional", "policyVersion": 1 },
+    { "policyId": "dd-coverage-default-provisional", "status": "provisional", "policyVersion": 1 }
+  ],
+  "actionCodes": [
+    "open_case",
+    "review_identity",
+    "view_sources",
+    "start_connector",
+    "retry_connector",
+    "review_blocker",
+    "view_correction_policy",
+    "view_report"
+  ],
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

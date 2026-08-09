@@ -1,0 +1,111 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "items": [
+    {
+      "connectorId": "synthetic-company-registry",
+      "labelKey": "dd.connector.synthetic_company_registry",
+      "eligible": true,
+      "selected": true,
+      "required": true,
+      "eligibilityReasonCode": "POLICY_REQUIRED",
+      "neverRun": false,
+      "latestRunId": "connector-run-complete-001",
+      "latestExecutionStatus": "complete",
+      "lastAttemptAt": "2026-08-08T08:00:00+04:00",
+      "lastSuccessAt": "2026-08-08T08:00:00+04:00",
+      "sourceUpdatedAt": "2026-08-07T20:00:00+04:00",
+      "freshness": { "state": "fresh", "ageDays": 1, "slaDays": 30, "asOf": "2026-08-08T08:00:00+04:00" },
+      "reducedCoverage": false,
+      "blocking": false,
+      "availableActions": [],
+      "retryAction": null
+    },
+    {
+      "connectorId": "synthetic-never-run-required",
+      "labelKey": "dd.connector.synthetic_never_run_required",
+      "eligible": true,
+      "selected": true,
+      "required": true,
+      "eligibilityReasonCode": "POLICY_REQUIRED",
+      "neverRun": true,
+      "latestRunId": null,
+      "latestExecutionStatus": null,
+      "lastAttemptAt": null,
+      "lastSuccessAt": null,
+      "sourceUpdatedAt": null,
+      "freshness": { "state": "unknown", "ageDays": null, "slaDays": 7, "asOf": null },
+      "reducedCoverage": true,
+      "blocking": true,
+      "availableActions": [
+        {
+          "actionCode": "start_connector",
+          "messageKey": "dd.action.start_connector",
+          "params": { "connectorId": "synthetic-never-run-required" },
+          "stage": "sources",
+          "method": "POST",
+          "route": "/due-diligence/cases/case-synthetic-georgian-001/connectors/synthetic-never-run-required/runs",
+          "blocking": true,
+          "requiresCsrf": true,
+          "requiresIdempotency": true
+        }
+      ],
+      "retryAction": null
+    },
+    {
+      "connectorId": "synthetic-eligible-unselected",
+      "labelKey": "dd.connector.synthetic_eligible_unselected",
+      "eligible": true,
+      "selected": false,
+      "required": false,
+      "eligibilityReasonCode": "OPTIONAL_FOR_JURISDICTION",
+      "neverRun": true,
+      "latestRunId": null,
+      "latestExecutionStatus": null,
+      "lastAttemptAt": null,
+      "lastSuccessAt": null,
+      "sourceUpdatedAt": null,
+      "freshness": { "state": "unknown", "ageDays": null, "slaDays": null, "asOf": null },
+      "reducedCoverage": false,
+      "blocking": false,
+      "availableActions": [],
+      "retryAction": null
+    },
+    {
+      "connectorId": "synthetic-media-parser",
+      "labelKey": "dd.connector.synthetic_media_parser",
+      "eligible": true,
+      "selected": true,
+      "required": false,
+      "eligibilityReasonCode": "CASE_SELECTED",
+      "neverRun": false,
+      "latestRunId": "connector-run-unavailable-004",
+      "latestExecutionStatus": "unavailable",
+      "lastAttemptAt": "2026-08-08T08:30:00+04:00",
+      "lastSuccessAt": null,
+      "sourceUpdatedAt": null,
+      "freshness": { "state": "unknown", "ageDays": null, "slaDays": 1, "asOf": null },
+      "reducedCoverage": true,
+      "blocking": false,
+      "availableActions": [],
+      "retryAction": {
+        "actionCode": "retry_connector",
+        "messageKey": "dd.action.retry_connector",
+        "params": { "connectorRunId": "connector-run-unavailable-004" },
+        "stage": "sources",
+        "method": "POST",
+        "route": "/due-diligence/cases/case-synthetic-georgian-001/connector-runs/connector-run-unavailable-004/retry",
+        "blocking": false,
+        "requiresCsrf": true,
+        "requiresIdempotency": true
+      }
+    }
+  ],
+  "page": { "nextCursor": null, "hasMore": false, "limit": 50 },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

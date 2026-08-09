@@ -1,0 +1,30 @@
+[
+  {
+    "caseId": "case-synthetic-legacy-active",
+    "subject": "Synthetic Legacy Organization",
+    "subjectGeorgian": "სატესტო ძველი ორგანიზაცია",
+    "subjectEnglish": "Synthetic Legacy Organization",
+    "subjectType": "Organization",
+    "status": "Active",
+    "owner": "Synthetic Owner",
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-02T00:00:00Z",
+    "ddWorkflowVersion": null,
+    "ddWorkflowSchemaVersion": null,
+    "projectionJson": null
+  },
+  {
+    "caseId": "case-synthetic-legacy-review",
+    "subject": "Synthetic Review Subject",
+    "subjectGeorgian": "სატესტო განხილვის სუბიექტი",
+    "subjectEnglish": "Synthetic Review Subject",
+    "subjectType": "Person",
+    "status": "Review",
+    "owner": null,
+    "createdAt": "2025-02-01T00:00:00Z",
+    "updatedAt": "2025-02-02T00:00:00Z",
+    "ddWorkflowVersion": null,
+    "ddWorkflowSchemaVersion": null,
+    "projectionJson": null
+  }
+]

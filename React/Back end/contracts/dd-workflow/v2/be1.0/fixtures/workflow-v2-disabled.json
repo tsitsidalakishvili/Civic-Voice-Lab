@@ -1,0 +1,13 @@
+{
+  "detail": "The v2 due-diligence workflow is not enabled.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_WORKFLOW_V2_DISABLED",
+    "message": "The v2 due-diligence workflow is not enabled.",
+    "requestId": "request-synthetic-404-dd_workflow_v2_disabled",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

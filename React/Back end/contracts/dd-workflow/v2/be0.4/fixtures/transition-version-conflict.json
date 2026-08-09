@@ -1,0 +1,38 @@
+{
+  "detail": "The workflow changed. Reload the current transition options.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_WORKFLOW_VERSION_CONFLICT",
+    "message": "The workflow changed. Reload the current transition options.",
+    "requestId": "request-synthetic-version-conflict",
+    "retryable": true,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 11,
+      "actualWorkflowVersion": 12,
+      "blockers": [
+        {
+          "code": "DD_SOURCE_COVERAGE_LIMITED",
+          "stage": "sources",
+          "severity": "warning",
+          "blocking": true,
+          "messageKey": "dd.blocker.source_coverage_limited",
+          "params": { "connectorCount": 2 },
+          "remediation": null,
+          "waiverPolicy": "allowed"
+        }
+      ],
+      "allowedTransitions": [
+        {
+          "transitionCode": "complete_sources_with_waivers",
+          "messageKey": "dd.transition.complete_sources_with_waivers",
+          "params": {},
+          "toStage": "investigation",
+          "availability": "requires_waivers",
+          "requiredWaiverCodes": ["DD_SOURCE_COVERAGE_LIMITED", "DD_SOURCE_STALE_SECONDARY"],
+          "requiredAttestations": ["preparedBy"]
+        }
+      ]
+    }
+  }
+}

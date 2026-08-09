@@ -1,0 +1,20 @@
+{
+  "detail": "All required waivers must be supplied atomically.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_TRANSITION_BLOCKED",
+    "message": "All required waivers must be supplied atomically.",
+    "requestId": "request-synthetic-409-dd_transition_blocked",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 2,
+      "actualWorkflowVersion": 2,
+      "blockers": [],
+      "allowedTransitions": [],
+      "missingWaiverCodes": [
+        "DD_PRIOR_SCREENING_REVIEW_PENDING"
+      ]
+    }
+  }
+}

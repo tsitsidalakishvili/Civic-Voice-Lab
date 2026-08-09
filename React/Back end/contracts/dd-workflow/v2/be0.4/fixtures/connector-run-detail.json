@@ -1,0 +1,38 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "connectorRun": {
+    "connectorRunId": "connector-run-error-after-success-006",
+    "retryOfConnectorRunId": "connector-run-prior-success-000",
+    "connectorId": "synthetic-flaky-source",
+    "status": "error",
+    "resultCount": null,
+    "coverage": { "jurisdictions": ["GE"], "from": null, "to": null, "queryScope": "synthetic entity refresh", "complete": null },
+    "attemptedAt": "2026-08-08T08:50:00+04:00",
+    "lastSuccessAt": "2026-06-15T08:00:00+04:00",
+    "sourceUpdatedAt": "2026-06-14T00:00:00+04:00",
+    "freshness": { "state": "stale", "ageDays": 55, "slaDays": 30, "asOf": "2026-08-08T08:50:00+04:00" },
+    "partialReason": null,
+    "failure": { "code": "UPSTREAM_TIMEOUT", "messageKey": "dd.connector.error.upstream_timeout", "params": { "attempt": 3 }, "retryable": true, "stage": "request" },
+    "retryAction": {
+      "actionCode": "retry_connector",
+      "messageKey": "dd.action.retry_connector",
+      "params": { "connectorRunId": "connector-run-error-after-success-006" },
+      "stage": "sources",
+      "method": "POST",
+      "route": "/due-diligence/cases/case-synthetic-georgian-001/connector-runs/connector-run-error-after-success-006/retry",
+      "blocking": true,
+      "requiresCsrf": true,
+      "requiresIdempotency": true
+    },
+    "blocking": true,
+    "reducedCoverage": true,
+    "workflowVersionObserved": 12
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

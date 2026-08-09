@@ -1,0 +1,46 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "items": [
+    {
+      "caseId": "case-synthetic-georgian-001",
+      "workflowVersion": 12,
+      "stage": "sources",
+      "lifecycleStatus": "active",
+      "subject": { "displayName": "სატესტო ორგანიზაცია", "masked": false, "omitted": false, "category": "organization" },
+      "owner": { "actorId": "actor-synthetic-owner", "displayName": "Synthetic Analyst", "teamId": "team-synthetic-research" },
+      "lastActivityAt": "2026-08-08T10:00:00+04:00",
+      "nextAction": {
+        "actionCode": "open_case",
+        "messageKey": "dd.action.open_case",
+        "params": { "caseId": "case-synthetic-georgian-001" },
+        "stage": "sources",
+        "method": "GET",
+        "route": "/due-diligence/cases/case-synthetic-georgian-001",
+        "blocking": false,
+        "requiresCsrf": false,
+        "requiresIdempotency": false
+      },
+      "sla": { "deadline": "2026-08-31T17:00:00+04:00", "state": "on_track", "remainingHours": 536 },
+      "blockerSummary": { "total": 3, "blocking": 2, "nonWaivable": 1 }
+    },
+    {
+      "caseId": "case-synthetic-masked-002",
+      "workflowVersion": 4,
+      "stage": "identity",
+      "lifecycleStatus": "active",
+      "subject": { "displayName": "S••••••c Subject", "masked": true, "omitted": false, "category": "person" },
+      "owner": null,
+      "lastActivityAt": "2026-08-07T12:00:00+04:00",
+      "nextAction": null,
+      "sla": { "deadline": null, "state": "none", "remainingHours": null },
+      "blockerSummary": { "total": 1, "blocking": 1, "nonWaivable": 1 }
+    }
+  ],
+  "page": { "nextCursor": "cursor-synthetic-case-002", "hasMore": true, "limit": 2 },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": ["items[1].subject.displayName"]
+  }
+}

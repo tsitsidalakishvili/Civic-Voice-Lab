@@ -1,0 +1,6 @@
+{
+  "expectedWorkflowVersion": 2,
+  "decision": "link_existing",
+  "rationale": "Synthetic analyst confirmed a case relationship; no entity or case merge is performed.",
+  "attestation": { "attested": true }
+}

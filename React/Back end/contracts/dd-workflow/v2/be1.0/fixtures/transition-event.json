@@ -1,0 +1,54 @@
+{
+  "eventId": "event-synthetic-transition",
+  "eventType": "workflow_transitioned",
+  "caseId": "case-synthetic-be1",
+  "workflowVersion": 3,
+  "actor": {
+    "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+    "method": "oidc_session",
+    "statementCode": "case_prepared",
+    "attestedAt": "2026-08-09T12:15:00Z"
+  },
+  "purposeId": "dd-investigation",
+  "createdAt": "2026-08-09T12:15:00Z",
+  "payload": {
+    "transitionCode": "complete_identity",
+    "fromStage": "identity",
+    "toStage": "sources",
+    "waiverIds": ["waiver-synthetic-1", "waiver-synthetic-2"]
+  },
+  "transitionId": "event-synthetic-transition",
+  "transitionCode": "complete_identity",
+  "fromStage": "identity",
+  "toStage": "sources",
+  "waivers": [
+    {
+      "waiverId": "waiver-synthetic-1",
+      "blockerCode": "DD_DUPLICATE_REVIEW_PENDING",
+      "reason": "Synthetic documented exception for contract validation.",
+      "actor": {
+        "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+        "method": "oidc_session",
+        "statementCode": "blocker_waived",
+        "attestedAt": "2026-08-09T12:15:00Z"
+      },
+      "createdAt": "2026-08-09T12:15:00Z",
+      "expiresAt": null,
+      "active": true
+    },
+    {
+      "waiverId": "waiver-synthetic-2",
+      "blockerCode": "DD_PRIOR_SCREENING_REVIEW_PENDING",
+      "reason": "Synthetic time-limited exception for contract validation.",
+      "actor": {
+        "actor": { "actorId": "actor-synthetic-investigator", "displayName": "Synthetic Investigator" },
+        "method": "oidc_session",
+        "statementCode": "blocker_waived",
+        "attestedAt": "2026-08-09T12:15:00Z"
+      },
+      "createdAt": "2026-08-09T12:15:00Z",
+      "expiresAt": "2026-08-16T12:00:00Z",
+      "active": true
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "detail": "This legacy mutation is disabled while the v2 workflow is active.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_LEGACY_MUTATION_DISABLED",
+    "message": "This legacy mutation is disabled while the v2 workflow is active.",
+    "requestId": "request-synthetic-409-dd_legacy_mutation_disabled",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "replacementAction": "decision_draft_be4"
+    }
+  }
+}

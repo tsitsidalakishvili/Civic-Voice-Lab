@@ -14,25 +14,79 @@ import {
   IconUser,
   IconUsers,
 } from '@tabler/icons-react'
-import { getApiBaseUrl, getJson, requestJson } from '../../services/api'
+import { downloadFile, getJson, requestJson } from '../../services/api'
 import { CivicStatGrid, InfoBox } from '../../ui'
 import { DdAnalysisResultPanels } from './DdAnalysisResultPanels.jsx'
+import { DdFullCheckPanel } from './DdFullCheckPanel.jsx'
 import { normalizeStoredReportToAnalysisResult } from './duediligenceNormalize.js'
 import { InvestigationGraph } from './InvestigationGraph.jsx'
 import { FollowTheMoneyWorkspace } from './FollowTheMoneyWorkspace.jsx'
 
-const PRIMARY_REPORT_SECTIONS = [
-  'executive summary',
-  'source coverage',
-  'risk assessment',
-  'key findings',
-  'recommended actions',
-  'limitations',
-]
+function getReportSectionHighlights(section) {
+  const heading = String(section.heading || '')
+  const paragraphs = (section.paragraphs || []).map((item) => String(item).trim()).filter(Boolean)
+  const bullets = (section.bullets || []).map((item) => String(item).trim()).filter(Boolean)
+  const paragraphPoints = paragraphs.flatMap((paragraph) =>
+    paragraph.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean),
+  )
+  const genericCopy = /^(supporting dossier detail|no additional detail|not available)$/i
+  const preferNarrative = /executive summary|source coverage|risk assessment|limitations/i.test(heading)
+  const ordered = preferNarrative
+    ? [paragraphPoints[0], ...bullets, ...paragraphPoints.slice(1)]
+    : [...bullets, ...paragraphPoints]
+  const candidates = [...new Set(ordered.filter((point) => point && !genericCopy.test(point)))]
+
+  return candidates.slice(0, 3).map((text) => {
+    const explicitLead = text.match(/^([^:]{3,48}):\s+(.+)$/)
+    return {
+      label: getReportPointLabel(text, heading),
+      text: explicitLead ? explicitLead[2] : text,
+    }
+  })
+}
+
+function getReportPointLabel(point, heading) {
+  const value = `${heading} ${point}`.toLowerCase()
+  const explicitLead = String(point).match(/^([^:]{3,48}):\s+(.+)$/)
+
+  if (explicitLead) return explicitLead[1]
+  if (/confirm|verify|check against|identity/.test(value)) return 'Verification needed'
+  if (/recommended|review first|record a|next step|escalat/.test(value)) return 'Analyst action'
+  if (/risk|score|triage|assessment/.test(value)) return 'Assessment'
+  if (/limit|rate limit|language|transliteration|false positive|miss relevant/.test(value)) return 'Coverage limitation'
+  if (/source|wikipedia|media|news|declaration|registry/.test(value)) return 'Source coverage'
+  if (/family|relative|spouse|related part/.test(value)) return 'Related parties'
+  if (/property|asset|vehicle|ownership/.test(value)) return 'Declared assets'
+  if (/income|career|position|employment|role/.test(value)) return 'Career and income'
+  if (/contract|financial|business|company/.test(value)) return 'Financial links'
+  if (/found|signal|match|concern/.test(value)) return 'Review signal'
+
+  return 'Main point'
+}
+
+function getReportCoverageNotice(warning) {
+  const value = String(warning || '')
+
+  if (/interpressnews|extractable matches/i.test(value)) {
+    return {
+      title: 'Interpressnews coverage unavailable',
+      message: 'The source could not be extracted during this scan. This does not mean that no matching coverage exists.',
+    }
+  }
+
+  if (/llm report failed|httperror|fallback report/i.test(value)) {
+    return {
+      title: 'AI synthesis unavailable',
+      message: 'A structured fallback report was generated successfully. Review the source evidence before relying on the synthesis.',
+    }
+  }
+
+  return { title: 'Coverage limitation', message: value }
+}
 
 function ReportSection({ section, index }) {
   const heading = section.heading || `Section ${index + 1}`
-  const isPrimary = PRIMARY_REPORT_SECTIONS.some((label) => heading.toLowerCase().includes(label))
+  const highlights = getReportSectionHighlights(section)
   const content = (
     <div>
       {(section.paragraphs || []).map((paragraph, paragraphIndex) => (
@@ -51,27 +105,36 @@ function ReportSection({ section, index }) {
     </div>
   )
 
-  if (!isPrimary) {
-    return (
-      <details className="dd-report-section dd-report-section--supporting">
-        <summary>
-          <span className="dd-report-section__number">{String(index + 1).padStart(2, '0')}</span>
-          <span>
-            <strong>{heading}</strong>
-            <small>Supporting dossier detail</small>
-          </span>
-        </summary>
-        <div className="dd-report-section__body">{content}</div>
-      </details>
-    )
-  }
-
   return (
-    <section className="dd-report-section">
+    <section className="dd-report-section dd-report-section--digest">
       <span className="dd-report-section__number">{String(index + 1).padStart(2, '0')}</span>
-      <div>
+      <div className="dd-report-section__content">
         <h3>{heading}</h3>
-        {content}
+        {highlights.length ? (
+          <div className="dd-report-section__summary" aria-label={`${heading} main points`}>
+            <span className="dd-report-section__summary-label">At a glance</span>
+            <ol className="dd-report-section__highlights">
+            {highlights.map((point, pointIndex) => (
+              <li key={`${heading}-highlight-${pointIndex}`}>
+                <span className="dd-report-section__point-index">{pointIndex + 1}</span>
+                <span>
+                  <strong>{point.label}</strong>
+                  <span>{point.text}</span>
+                </span>
+              </li>
+            ))}
+            </ol>
+          </div>
+        ) : (
+          <p className="dd-report-section__empty">No material detail was provided for this section.</p>
+        )}
+        <details className="dd-report-section__details">
+          <summary>
+            <span className="dd-report-section__see">See details</span>
+            <span className="dd-report-section__hide">Hide details</span>
+          </summary>
+          <div className="dd-report-section__body">{content}</div>
+        </details>
       </div>
     </section>
   )
@@ -141,7 +204,14 @@ export function DueDiligencePage({
   const [subjectGeorgian, setSubjectGeorgian] = useState('')
   const [subjectEnglish, setSubjectEnglish] = useState('')
   const [caseStatus, setCaseStatus] = useState('Draft')
-  const [caseNotice, setCaseNotice] = useState('')
+  const [caseNotice, setCaseNoticeMessage] = useState('')
+  // `.module-alert` is the red error style, so a confirmation shown through it
+  // reads as a failure. Carry the tone alongside the message.
+  const [caseNoticeTone, setCaseNoticeTone] = useState('error')
+  const setCaseNotice = (message, tone = 'error') => {
+    setCaseNoticeMessage(message)
+    if (message) setCaseNoticeTone(tone)
+  }
   const [caseCreating, setCaseCreating] = useState(false)
   const [caseSaving, setCaseSaving] = useState(false)
   const [caseDeleting, setCaseDeleting] = useState(false)
@@ -188,7 +258,7 @@ export function DueDiligencePage({
   const [useOpenSanctions, setUseOpenSanctions] = useState(true)
   const [useNews, setUseNews] = useState(true)
   const [useDeclarations, setUseDeclarations] = useState(true)
-  const [useDemo, setUseDemo] = useState(true)
+  const [useDemo, setUseDemo] = useState(false)
   const [ddAppUrl, setDdAppUrl] = useState(
     () => localStorage.getItem('ddAppUrl') || '',
   )
@@ -442,7 +512,7 @@ export function DueDiligencePage({
     setSubjectEnglish('')
     setCaseStatus('Draft')
     setCaseOwner('')
-    setCaseNotice('Case selection cleared. You can start a new case.')
+    setCaseNotice('Case selection cleared. You can start a new case.', 'info')
   }
 
   const handleCreateCase = async () => {
@@ -482,7 +552,7 @@ export function DueDiligencePage({
       setCaseSubject('')
       setCaseSubjectType('Person')
       setNewCaseOwner('')
-      setCaseNotice('Case created and selected.')
+      setCaseNotice('Case created and selected.', 'success')
     } catch (err) {
       setCaseNotice(err.message || 'Unable to create case.')
     } finally {
@@ -517,7 +587,7 @@ export function DueDiligencePage({
       setStartMode('Analysis')
       setCaseStatus(payload.status || 'Draft')
       setCaseOwner(payload.owner || '')
-      setCaseNotice('Case updated.')
+      setCaseNotice('Case updated.', 'success')
     } catch (err) {
       setCaseNotice(err.message || 'Unable to update case.')
     } finally {
@@ -632,7 +702,7 @@ export function DueDiligencePage({
       setDecisionRationale('')
       setDecisionNotice('Decision saved. Case moved to Decided.')
       setCaseStatus('Decided')
-      setCaseNotice('Case status updated to Decided.')
+      setCaseNotice('Case status updated to Decided.', 'success')
       loadCases()
     } catch (err) {
       setDecisionError(err.message || 'Unable to save decision.')
@@ -858,6 +928,18 @@ export function DueDiligencePage({
     }
   }
 
+  // A plain <a href> cannot send X-FS-Purpose-Id, so the PDF export answered 403.
+  // downloadFile() attaches the purpose header and streams the blob instead.
+  const handleDownloadReportPdf = async (reportId) => {
+    if (!reportId) return
+    setReportLoadError('')
+    try {
+      await downloadFile(`/due-diligence/reports/${reportId}/pdf`, `due-diligence-${reportId}.pdf`)
+    } catch (err) {
+      setReportLoadError(err.message || 'Unable to download the PDF report.')
+    }
+  }
+
   const handleOpenReportFromHistory = async (reportId) => {
     if (!reportId) return
     setArchivedReportLoading(true)
@@ -906,7 +988,7 @@ export function DueDiligencePage({
       setSubjectType(payload.subjectType || 'Person')
       setCaseStatus(payload.status || 'Draft')
       setCaseOwner(payload.owner || '')
-      setCaseNotice('Subject saved to case.')
+      setCaseNotice('Subject saved to case.', 'success')
       loadCases()
     } catch (err) {
       setCaseNotice(err.message || 'Unable to update case subject.')
@@ -1203,7 +1285,7 @@ export function DueDiligencePage({
       setCases((prev) => prev.map((item) => (item.caseId === activeCaseId ? payload : item)))
       setActiveCase(payload)
       setCaseStatus(payload.status || 'Archived')
-      setCaseNotice('Case archived.')
+      setCaseNotice('Case archived.', 'success')
     } catch (err) {
       setCaseNotice(err.message || 'Unable to archive case.')
     } finally {
@@ -1221,7 +1303,7 @@ export function DueDiligencePage({
       await requestJson(`/due-diligence/cases/${activeCaseId}`, { method: 'DELETE' })
       setCases((prev) => prev.filter((item) => item.caseId !== activeCaseId))
       handleClearCase()
-      setCaseNotice('Case deleted.')
+      setCaseNotice('Case deleted.', 'success')
     } catch (err) {
       setCaseNotice(err.message || 'Unable to delete case.')
     } finally {
@@ -1411,7 +1493,9 @@ export function DueDiligencePage({
             type="button"
             onClick={() => {
               handleClearCase()
-              applyActiveTab('sources')
+              // The intake form only renders on the overview tab, so sending the
+              // analyst to 'sources' here left them with no way to open a case.
+              applyActiveTab('overview')
             }}
           >
             <IconPlus size={16} />
@@ -1463,7 +1547,7 @@ export function DueDiligencePage({
                 {caseCreating ? 'Creating…' : 'Create and open case'}
               </button>
             </div>
-            {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+            {caseNotice ? <div className={`module-alert module-alert--${caseNoticeTone}`} role={caseNoticeTone === 'error' ? 'alert' : 'status'}>{caseNotice}</div> : null}
           </div>
 
           <div className="sidebar-card dd-case-list-card">
@@ -1597,11 +1681,21 @@ export function DueDiligencePage({
               caseId={activeCaseId}
               activeStage={activeTab}
               reportId={analysisResult?.reportId || selectedHistoryReportId}
+              subjectName={subjectName}
+              subjectType={subjectType}
             />
           ) : null}
 
           {activeTab === 'overview' && (
             <div className="stack">
+              {/* Simple path: one button, one consolidated result. The six-stage
+                  workspace below/behind it is untouched. */}
+              <DdFullCheckPanel
+                caseId={activeCaseId}
+                subjectLabel={getCaseDisplayName(activeCase) || subjectName}
+                onCompleted={loadCases}
+              />
+
               <Card className="module-card module-card__wide dd-pipeline-card">
                 <Group justify="space-between" align="center" wrap="wrap">
                   <div>
@@ -1750,7 +1844,7 @@ export function DueDiligencePage({
                       <IconArrowRight size={16} />
                     </button>
                   </div>
-                  {caseNotice ? <div className="module-alert">{caseNotice}</div> : null}
+                  {caseNotice ? <div className={`module-alert module-alert--${caseNoticeTone}`} role={caseNoticeTone === 'error' ? 'alert' : 'status'}>{caseNotice}</div> : null}
                 </div>
               ) : null}
             </div>
@@ -2241,25 +2335,33 @@ export function DueDiligencePage({
                         <p>{aiReport.mode?.startsWith?.('ai:') ? 'AI-assisted synthesis' : 'Structured synthesis'} for <strong>{aiReport.subject}</strong></p>
                       </div>
                       {analysisResult?.reportId ? (
-                        <a
+                        <button
                           className="button-secondary"
-                          href={`${getApiBaseUrl()}/due-diligence/reports/${analysisResult.reportId}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
+                          type="button"
+                          onClick={() => handleDownloadReportPdf(analysisResult.reportId)}
                         >
                           Download PDF
-                        </a>
+                        </button>
                       ) : null}
                     </div>
                     <div className="module-alert module-alert--success dd-report-status">
-                      {aiReport.mode?.startsWith?.('ai:') ? 'AI-generated' : 'Structured'} report for{' '}
+                      {aiReport.mode?.startsWith?.('ai:') ? 'AI-assisted' : 'Structured fallback'} report for{' '}
                       <strong>{aiReport.subject}</strong> on <strong>{aiReport.topic}</strong>
                     </div>
                     {aiReport.warnings?.length ? (
-                      <div className="module-alert">
-                        {[...new Set(aiReport.warnings)].map((warning, idx) => (
-                          <div key={`${warning}-${idx}`}>{warning}</div>
-                        ))}
+                      <div className="dd-report-coverage-notices" aria-label="Report coverage notices">
+                        {[...new Set(aiReport.warnings)].map((warning, idx) => {
+                          const notice = getReportCoverageNotice(warning)
+                          return (
+                            <div className="dd-report-coverage-notice" key={`${warning}-${idx}`}>
+                              <IconAlertTriangle size={18} aria-hidden="true" />
+                              <div>
+                                <strong>{notice.title}</strong>
+                                <p>{notice.message}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     ) : null}
                     {aiReport.sections?.length ? (
@@ -2390,14 +2492,13 @@ export function DueDiligencePage({
                               >
                                 {archivedReportLoading ? 'Loading…' : 'Review'}
                               </button>
-                              <a
+                              <button
                                 className="button-secondary"
-                                href={`${getApiBaseUrl()}/due-diligence/reports/${row.reportId}/pdf`}
-                                target="_blank"
-                                rel="noreferrer"
+                                type="button"
+                                onClick={() => handleDownloadReportPdf(row.reportId)}
                               >
                                 PDF
-                              </a>
+                              </button>
                             </div>
                           </article>
                         ))

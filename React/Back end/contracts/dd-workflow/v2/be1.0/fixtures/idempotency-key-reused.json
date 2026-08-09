@@ -1,0 +1,11 @@
+{
+  "detail": "The idempotency key was already used with a different request.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_IDEMPOTENCY_KEY_REUSED",
+    "message": "The idempotency key was already used with a different request.",
+    "requestId": "request-synthetic-idempotency",
+    "retryable": false,
+    "details": { "workflowContractVersion": "dd-workflow.v2" }
+  }
+}

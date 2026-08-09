@@ -10,6 +10,7 @@ from ..routes_crm import router as crm_router
 from ..routes_data_hub import router as data_hub_router
 from ..routes_deliberation_extra import router as delib_extra_router
 from ..routes_due_diligence import router as due_diligence_router
+from ..dd_workflow_v2 import router as dd_workflow_v2_router
 from ..investigation_ftm import router as investigation_ftm_router
 from ..investigation_governance import router as investigation_governance_router
 from ..investigation_social import router as investigation_social_router
@@ -26,6 +27,7 @@ router.include_router(translation_router)
 router.include_router(deliberation_router)
 router.include_router(delib_extra_router, prefix="/deliberation", tags=["deliberation"])
 router.include_router(crm_router, prefix="/crm", tags=["crm"])
+router.include_router(dd_workflow_v2_router, prefix="/due-diligence", tags=["due-diligence-workflow-v2"])
 router.include_router(due_diligence_router, prefix="/due-diligence", tags=["due-diligence"])
 router.include_router(investigation_ftm_router, prefix="/due-diligence", tags=["due-diligence-investigation"])
 router.include_router(investigation_governance_router, prefix="/due-diligence", tags=["due-diligence-governance"])

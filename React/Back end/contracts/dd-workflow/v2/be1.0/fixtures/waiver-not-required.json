@@ -1,0 +1,20 @@
+{
+  "detail": "A waiver was supplied for a blocker that is not required by this transition.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_WAIVER_NOT_REQUIRED",
+    "message": "A waiver was supplied for a blocker that is not required by this transition.",
+    "requestId": "request-synthetic-409-dd_waiver_not_required",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2",
+      "expectedWorkflowVersion": 2,
+      "actualWorkflowVersion": 2,
+      "blockers": [],
+      "allowedTransitions": [],
+      "blockerCodes": [
+        "DD_SYNTHETIC_EXTRA_WAIVER"
+      ]
+    }
+  }
+}

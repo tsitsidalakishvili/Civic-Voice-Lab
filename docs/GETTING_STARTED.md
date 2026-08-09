@@ -40,16 +40,18 @@ Set `VITE_API_BASE_URL=http://localhost:8010` in `React/Front end/.env.developme
 | `DELIBERATION_NEO4J_DATABASE` | Target database |
 | `CORS_ORIGINS` | Exact comma-separated frontend origins |
 | `FS_AUTH_ENABLED=1` | Enables API authentication; default is enabled |
-| `FS_AUTH_MODE` | `bearer` or `api_key` |
-| `FS_AUTH_TOKEN` or `FS_AUTH_API_KEY` | Matching server-side secret |
+| `FS_AUTH_MODE` | `bearer`, `api_key`, `password`, or configured organization OIDC mode |
+| `FS_AUTH_TOKEN` / `FS_AUTH_API_KEY` | Matching secret for bearer/API-key modes only |
 | `FS_AUTH_PUBLIC_RULES` | Explicit `METHOD:/path` public allowlist |
 | `VITE_API_BASE_URL` | Public backend origin used at frontend build time |
 
-Never deploy with authentication enabled but its selected secret empty. Use a secret manager, rotate secrets, and use distinct values per environment.
+Never deploy with incomplete credentials for the selected authentication mode. Use a secret manager, rotate secrets, use distinct values per environment, and follow [PRIVATE_DEPLOYMENT.md](PRIVATE_DEPLOYMENT.md).
 
 ## Optional settings by capability
 
-- Access gate: `FS_ALLOWED_EMAILS`.
+- Small-team password sessions: `FS_ACCESS_USERS_FILE`, `FS_SESSION_SECRET`, cookie/CSRF settings, and the ignored access-user file managed by `tools/manage_access_users.py`.
+- Organization OIDC: provider, issuer, client ID/secret, redirect URI, Google hosted-domain or Entra tenant restrictions, and exact allowed-email JSON. Do not enable Google and Entra simultaneously.
+- Compliance: purpose enforcement and field masking default on; retention execution remains a separate controlled switch.
 - Translation: `FS_TRANSLATION_ENABLED`, `FS_TRANSLATION_WORKER_URL`, `FS_TRANSLATION_EN_KA_MODEL`, `FS_TRANSLATION_KA_EN_MODEL`, size limits.
 - AI/data chat/sentiment/due diligence: `OPENAI_API_KEY` or capability-specific compatible URL/key/model settings. Send only data approved for that provider.
 - Geocoding: `GOOGLE_MAPS_API_KEY`, geocoding strategy, location hint, timeout and per-request limit.
@@ -69,7 +71,7 @@ npm run build
 npm run test -- --run
 ```
 
-If authentication is enabled, call protected endpoints with `Authorization: Bearer <token>` or the configured API-key header. A healthy API returns `status: ok`; `degraded` means the server is up but Neo4j is unavailable or misconfigured.
+Bearer/API-key modes use their configured header. Password and OIDC modes use the backend login flow, Secure HttpOnly session cookie, and CSRF header for protected mutations. A healthy API returns `status: ok`; `degraded` means the server is up but Neo4j is unavailable or misconfigured.
 
 ## Common failures
 
@@ -78,4 +80,3 @@ If authentication is enabled, call protected endpoints with `Authorization: Bear
 - **503 from API:** inspect `/healthz`; verify Neo4j URI, credentials, database, TLS/firewall, and Aura allowlists.
 - **Connector unavailable:** check its capability endpoint where available and verify credentials, permission acknowledgement, egress, and kill switch.
 - **Translation unavailable:** run the worker at the configured URL or disable translation explicitly.
-

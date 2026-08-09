@@ -1,0 +1,41 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "connector": {
+    "connectorId": "synthetic-never-run-required",
+    "labelKey": "dd.connector.synthetic_never_run_required",
+    "eligible": true,
+    "selected": true,
+    "required": true,
+    "eligibilityReasonCode": "POLICY_REQUIRED",
+    "neverRun": true,
+    "latestRunId": null,
+    "latestExecutionStatus": null,
+    "lastAttemptAt": null,
+    "lastSuccessAt": null,
+    "sourceUpdatedAt": null,
+    "freshness": { "state": "unknown", "ageDays": null, "slaDays": 7, "asOf": null },
+    "reducedCoverage": true,
+    "blocking": true,
+    "availableActions": [
+      {
+        "actionCode": "start_connector",
+        "messageKey": "dd.action.start_connector",
+        "params": { "connectorId": "synthetic-never-run-required" },
+        "stage": "sources",
+        "method": "POST",
+        "route": "/due-diligence/cases/case-synthetic-georgian-001/connectors/synthetic-never-run-required/runs",
+        "blocking": true,
+        "requiresCsrf": true,
+        "requiresIdempotency": true
+      }
+    ],
+    "retryAction": null
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

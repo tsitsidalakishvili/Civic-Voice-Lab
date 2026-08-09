@@ -11,6 +11,7 @@ This directory is the canonical documentation set for the current product under 
 | Understand components and data flow | [Architecture](ARCHITECTURE.md) |
 | Integrate with the backend | [API guide](API_GUIDE.md) and live `/docs` |
 | Deploy, monitor, back up, or recover | [Operations](OPERATIONS.md) |
+| Configure a private production deployment | [Private deployment baseline](PRIVATE_DEPLOYMENT.md) |
 | Handle access, privacy, and investigations safely | [Security and privacy](SECURITY_PRIVACY.md) |
 | Test, review, and contribute changes | [Contributing](CONTRIBUTING.md) |
 | Find repository locations | [Project structure](PROJECT_STRUCTURE.md) |
@@ -29,12 +30,11 @@ Each weekly review should:
 4. Run link/path checks and applicable product tests.
 5. Record unresolved gaps under **Known gaps** rather than inventing behavior.
 
-Last repository review: **2026-08-07**
+Last repository review: **2026-08-09**
 
 ## Known gaps
 
 - A formal production SLA, RTO, and RPO have not been approved; recommended starting targets are identified in the operations guide.
-- Data retention periods and lawful bases require owner/legal approval.
+- Default retention execution remains disabled until approved retention policies and legal holds are configured and tested.
 - Production hosting, alert destinations, and secret-manager ownership must be recorded by the operator without committing secrets.
 - The live OpenAPI schema is the authoritative endpoint-level request/response reference; stable versioned API contracts are not yet published.
-

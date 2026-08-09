@@ -1,0 +1,13 @@
+{
+  "detail": "The proposed processing purpose does not match the authorized request purpose.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_PURPOSE_MISMATCH",
+    "message": "The proposed processing purpose does not match the authorized request purpose.",
+    "requestId": "request-synthetic-403-dd_purpose_mismatch",
+    "retryable": false,
+    "details": {
+      "workflowContractVersion": "dd-workflow.v2"
+    }
+  }
+}

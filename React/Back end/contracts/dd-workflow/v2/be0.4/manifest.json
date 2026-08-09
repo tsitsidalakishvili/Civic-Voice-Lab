@@ -1,0 +1,58 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "fixtureVersion": "dd-workflow.v2-be0.4",
+  "schemaStatus": "read_fixture_frozen",
+  "runtimeBehaviorChanged": false,
+  "compatibility": {
+    "complianceContract": "fs-compliance.v1",
+    "investigationSourceContract": "1.0"
+  },
+  "schema": "contract.schema.json",
+  "openapi": "openapi.json",
+  "fixtures": [
+    { "path": "fixtures/workflow-schema.json", "schemaRef": "#/$defs/WorkflowSchemaResponse" },
+    { "path": "fixtures/case-detail.json", "schemaRef": "#/$defs/CaseDetailResponse" },
+    { "path": "fixtures/cases-list.json", "schemaRef": "#/$defs/CaseListResponse" },
+    { "path": "fixtures/queue.json", "schemaRef": "#/$defs/QueueResponse" },
+    { "path": "fixtures/workflow.json", "schemaRef": "#/$defs/WorkflowResponse" },
+    { "path": "fixtures/transition-version-conflict.json", "schemaRef": "#/$defs/StandardErrorResponse" },
+    { "path": "fixtures/connectors-list.json", "schemaRef": "#/$defs/ConnectorStateListResponse" },
+    { "path": "fixtures/connector-state-detail.json", "schemaRef": "#/$defs/ConnectorStateDetailResponse" },
+    { "path": "fixtures/connector-runs-list.json", "schemaRef": "#/$defs/ConnectorRunListResponse" },
+    { "path": "fixtures/connector-run-detail.json", "schemaRef": "#/$defs/ConnectorRunDetailResponse" },
+    { "path": "fixtures/assessment.json", "schemaRef": "#/$defs/AssessmentResponse" },
+    { "path": "fixtures/assessment-with-triage.json", "schemaRef": "#/$defs/AssessmentResponse" },
+    { "path": "fixtures/reports-list.json", "schemaRef": "#/$defs/ReportListResponse" },
+    { "path": "fixtures/report-detail.json", "schemaRef": "#/$defs/ReportDetailResponse" }
+  ],
+  "draftMutationFamilies": [
+    { "milestone": "draft-be1+", "families": ["transitions", "duplicate decisions", "intake mutations"], "executable": false },
+    { "milestone": "draft-be2+", "families": ["connector starts", "connector retries", "async operation state"], "executable": false },
+    { "milestone": "draft-be3+", "families": ["findings", "identity review", "hypotheses", "notes"], "executable": false },
+    { "milestone": "draft-be4+", "families": ["decision drafts", "decision submission", "report snapshot creation"], "executable": false },
+    { "milestone": "draft-be5+", "families": ["monitoring", "archive", "deletion preview and execution"], "executable": false }
+  ],
+  "freezeAlgorithm": "sha256(sorted(path + NUL + sha256(file_bytes) + LF))",
+  "freezeFiles": [
+    "README.md",
+    "contract.schema.json",
+    "manifest.json",
+    "openapi.json",
+    "fixtures/assessment-with-triage.json",
+    "fixtures/assessment.json",
+    "fixtures/case-detail.json",
+    "fixtures/cases-list.json",
+    "fixtures/connector-run-detail.json",
+    "fixtures/connector-runs-list.json",
+    "fixtures/connector-state-detail.json",
+    "fixtures/connectors-list.json",
+    "fixtures/queue.json",
+    "fixtures/report-detail.json",
+    "fixtures/reports-list.json",
+    "fixtures/transition-version-conflict.json",
+    "fixtures/workflow-schema.json",
+    "fixtures/workflow.json",
+    "tests/requirements.txt",
+    "tests/test_contract.py"
+  ]
+}

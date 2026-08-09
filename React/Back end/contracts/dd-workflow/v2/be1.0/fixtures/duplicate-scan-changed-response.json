@@ -1,0 +1,383 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "mutationContractVersion": "dd-workflow.v2-be1.0",
+  "caseId": "4e004123-c7ac-4d59-9293-c0188fb99021",
+  "workflowVersion": 2,
+  "idempotentReplay": false,
+  "case": {
+    "caseId": "4e004123-c7ac-4d59-9293-c0188fb99021",
+    "workflowVersion": 2,
+    "stage": "intake",
+    "lifecycleStatus": "active",
+    "migrationNeedsReview": false,
+    "archivedFromStage": null,
+    "intake": {
+      "aliases": [
+        {
+          "language": "ka",
+          "script": "Geor",
+          "type": "official",
+          "value": "სატესტო ორგანიზაცია"
+        },
+        {
+          "language": "ka-Latn",
+          "script": "Latn",
+          "type": "transliteration",
+          "value": "Satesto Organizatsia"
+        }
+      ],
+      "conflictDeclaration": {
+        "details": null,
+        "status": "declared_none",
+        "attestedBy": {
+          "actor": {
+            "actorId": "actor-synthetic-investigator",
+            "displayName": "Synthetic Investigator"
+          },
+          "method": "oidc_session",
+          "statementCode": "case_prepared",
+          "attestedAt": "2026-08-09T12:00:00+00:00"
+        },
+        "attestedAt": "2026-08-09T12:00:00+00:00"
+      },
+      "dateRange": {
+        "from": "2024-01-01",
+        "to": "2026-08-01"
+      },
+      "deadline": "2026-08-31 17:00:00+04:00",
+      "diligenceDepth": "enhanced",
+      "identifiers": [],
+      "intendedDecision": "inform_only",
+      "jurisdictions": [
+        "GE"
+      ],
+      "lawfulBasisRef": "basis-synthetic-approved",
+      "owner": {
+        "actorId": "actor-synthetic-investigator",
+        "displayName": "Synthetic Investigator",
+        "teamId": "team-synthetic"
+      },
+      "priorScreening": {
+        "refs": [],
+        "status": "none"
+      },
+      "processingPurposeId": "dd-investigation",
+      "purpose": "investigative_research",
+      "purposeDetails": "Synthetic workflow validation only.",
+      "requestor": {
+        "actorId": "actor-synthetic-requestor",
+        "displayName": "Synthetic Requestor",
+        "teamId": "team-synthetic"
+      },
+      "retentionClass": "dd-test-active",
+      "subjectCategory": "organization"
+    },
+    "duplicateCandidates": [
+      {
+        "caseId": "13623de9-54b7-451c-8bd5-a942bb0e7358",
+        "subjectDisplay": "ს••••••••ა",
+        "subjectMasked": true,
+        "confidence": 0.65,
+        "reasons": [
+          {
+            "code": "NORMALIZED_ALIAS_MATCH",
+            "field": "aliases",
+            "summary": "A normalized display alias matches; this never confirms identity by itself."
+          }
+        ],
+        "conflicts": [],
+        "state": "pending",
+        "analystDecision": null,
+        "actions": [
+          {
+            "actionCode": "open_existing",
+            "messageKey": "dd.action.open_existing",
+            "params": {
+              "caseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+            },
+            "stage": "identity",
+            "method": "GET",
+            "route": "/due-diligence/cases/13623de9-54b7-451c-8bd5-a942bb0e7358",
+            "blocking": false,
+            "requiresCsrf": false,
+            "requiresIdempotency": false
+          },
+          {
+            "actionCode": "continue_new",
+            "messageKey": "dd.action.continue_new",
+            "params": {
+              "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+            },
+            "stage": "identity",
+            "method": "POST",
+            "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+            "blocking": false,
+            "requiresCsrf": true,
+            "requiresIdempotency": true
+          },
+          {
+            "actionCode": "link_existing",
+            "messageKey": "dd.action.link_existing",
+            "params": {
+              "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+            },
+            "stage": "identity",
+            "method": "POST",
+            "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+            "blocking": false,
+            "requiresCsrf": true,
+            "requiresIdempotency": true
+          },
+          {
+            "actionCode": "dismiss_duplicate",
+            "messageKey": "dd.action.dismiss_duplicate",
+            "params": {
+              "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+            },
+            "stage": "identity",
+            "method": "POST",
+            "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+            "blocking": false,
+            "requiresCsrf": true,
+            "requiresIdempotency": true
+          }
+        ]
+      }
+    ],
+    "nextAction": {
+      "actionCode": "review_transition",
+      "messageKey": "dd.action.review_transition",
+      "params": {
+        "transitionCode": "complete_intake"
+      },
+      "stage": "intake",
+      "method": "GET",
+      "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/workflow",
+      "blocking": false,
+      "requiresCsrf": false,
+      "requiresIdempotency": false
+    },
+    "sla": {
+      "deadline": "2026-08-31T17:00:00+04:00",
+      "state": "on_track",
+      "remainingHours": 529
+    },
+    "blockerSummary": {
+      "total": 0,
+      "blocking": 0,
+      "nonWaivable": 0
+    }
+  },
+  "workflow": {
+    "contractVersion": "dd-workflow.v2",
+    "caseId": "4e004123-c7ac-4d59-9293-c0188fb99021",
+    "workflowVersion": 2,
+    "stage": "intake",
+    "lifecycleStatus": "active",
+    "migrationNeedsReview": false,
+    "completion": [
+      {
+        "stage": "intake",
+        "state": "incomplete",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "identity",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "sources",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "investigation",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "findings",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "review",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "decision",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "monitoring",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      },
+      {
+        "stage": "closed",
+        "state": "unknown",
+        "completedAt": null,
+        "actorAttestation": null
+      }
+    ],
+    "blockers": [],
+    "allowedTransitions": [
+      {
+        "transitionCode": "complete_intake",
+        "messageKey": "dd.transition.complete_intake",
+        "params": {},
+        "toStage": "identity",
+        "availability": "allowed",
+        "requiredWaiverCodes": [],
+        "requiredAttestations": [
+          "preparedBy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "coverage": {
+      "overall": null,
+      "connectors": {
+        "complete": 0,
+        "partial": 0,
+        "zeroResults": 0,
+        "unavailable": 0,
+        "permissionRequired": 0,
+        "error": 0
+      },
+      "identity": {
+        "state": "incomplete",
+        "resolved": 0,
+        "total": 1
+      },
+      "findings": {
+        "state": "unknown",
+        "resolved": 0,
+        "total": 0
+      },
+      "contradictionsOpen": 0
+    },
+    "_access": {
+      "purposeId": "dd-investigation",
+      "policy": "deny-by-default",
+      "omittedFields": [],
+      "maskedFields": []
+    }
+  },
+  "scanEvent": {
+    "eventId": "8f2302d6-e6d2-416b-a1da-d3f0a954b906",
+    "eventType": "duplicate_scan_completed",
+    "caseId": "4e004123-c7ac-4d59-9293-c0188fb99021",
+    "workflowVersion": 2,
+    "actor": {
+      "actor": {
+        "actorId": "actor-synthetic-investigator",
+        "displayName": "Synthetic Investigator"
+      },
+      "method": "oidc_session",
+      "statementCode": "identity_reviewed",
+      "attestedAt": "2026-08-09T12:00:00+00:00"
+    },
+    "purposeId": "dd-investigation",
+    "createdAt": "2026-08-09T12:00:00+00:00",
+    "payload": {
+      "candidateCount": 1,
+      "changed": true,
+      "leadOnly": true
+    },
+    "scanId": "8f2302d6-e6d2-416b-a1da-d3f0a954b906",
+    "scannedAt": "2026-08-09T12:00:00+00:00",
+    "candidateCount": 1,
+    "changed": true,
+    "leadOnly": true
+  },
+  "_access": {
+    "purposeId": "dd-investigation",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  },
+  "duplicateCandidates": [
+    {
+      "caseId": "13623de9-54b7-451c-8bd5-a942bb0e7358",
+      "subjectDisplay": "ს••••••••ა",
+      "subjectMasked": true,
+      "confidence": 0.65,
+      "reasons": [
+        {
+          "code": "NORMALIZED_ALIAS_MATCH",
+          "field": "aliases",
+          "summary": "A normalized display alias matches; this never confirms identity by itself."
+        }
+      ],
+      "conflicts": [],
+      "state": "pending",
+      "analystDecision": null,
+      "actions": [
+        {
+          "actionCode": "open_existing",
+          "messageKey": "dd.action.open_existing",
+          "params": {
+            "caseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+          },
+          "stage": "identity",
+          "method": "GET",
+          "route": "/due-diligence/cases/13623de9-54b7-451c-8bd5-a942bb0e7358",
+          "blocking": false,
+          "requiresCsrf": false,
+          "requiresIdempotency": false
+        },
+        {
+          "actionCode": "continue_new",
+          "messageKey": "dd.action.continue_new",
+          "params": {
+            "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+          },
+          "stage": "identity",
+          "method": "POST",
+          "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+          "blocking": false,
+          "requiresCsrf": true,
+          "requiresIdempotency": true
+        },
+        {
+          "actionCode": "link_existing",
+          "messageKey": "dd.action.link_existing",
+          "params": {
+            "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+          },
+          "stage": "identity",
+          "method": "POST",
+          "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+          "blocking": false,
+          "requiresCsrf": true,
+          "requiresIdempotency": true
+        },
+        {
+          "actionCode": "dismiss_duplicate",
+          "messageKey": "dd.action.dismiss_duplicate",
+          "params": {
+            "candidateCaseId": "13623de9-54b7-451c-8bd5-a942bb0e7358"
+          },
+          "stage": "identity",
+          "method": "POST",
+          "route": "/due-diligence/cases/4e004123-c7ac-4d59-9293-c0188fb99021/duplicate-candidates/13623de9-54b7-451c-8bd5-a942bb0e7358/decisions",
+          "blocking": false,
+          "requiresCsrf": true,
+          "requiresIdempotency": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-triage-boundary-100",
+  "assessment": {
+    "overallAssessment": "legacy_unclassified",
+    "confidence": 1,
+    "coverageCompleteness": 1,
+    "unresolvedIdentityCount": 0,
+    "materialFindingIds": ["finding-synthetic-001"],
+    "verifiedMaterialFindingCount": 1,
+    "contradictionCount": 0,
+    "unresolvedMaterialContradictionCount": 0,
+    "sources": { "stale": [], "unavailable": [], "permissionRequired": [] },
+    "requiredActions": [],
+    "triage": {
+      "score": 100,
+      "level": "high",
+      "automated": true,
+      "explanation": "Synthetic upper-bound compatibility example; triage is deprecated and never gates a decision.",
+      "deprecated": true
+    },
+    "policy": {
+      "policyId": "dd-coverage-default-provisional",
+      "policyVersion": 1,
+      "minimumCoverageThreshold": 0.75,
+      "materialityThreshold": "high",
+      "requiredConnectorIds": [],
+      "generatedAt": "2026-08-08T09:05:00+04:00"
+    },
+    "generatedAt": "2026-08-08T09:05:00+04:00",
+    "workflowVersion": 3
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

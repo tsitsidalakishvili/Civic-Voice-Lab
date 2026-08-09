@@ -73,7 +73,16 @@ export function PlatformAccessGate({ state = 'unauthenticated', message = '', on
         ) : null}
         {showPassword ? (
           <form className="access-gate__form" onSubmit={submit}>
-            <label>Email<input required type="email" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            <label>
+              {import.meta.env.DEV ? 'Email or local username' : 'Email'}
+              <input
+                required
+                type={import.meta.env.DEV ? 'text' : 'email'}
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+              />
+            </label>
             <label>Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
             <button className="button" type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
           </form>

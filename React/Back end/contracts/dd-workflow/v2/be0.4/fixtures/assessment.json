@@ -1,0 +1,70 @@
+{
+  "contractVersion": "dd-workflow.v2",
+  "caseId": "case-synthetic-georgian-001",
+  "assessment": {
+    "overallAssessment": "insufficient_coverage",
+    "confidence": null,
+    "coverageCompleteness": 0.5,
+    "unresolvedIdentityCount": 1,
+    "materialFindingIds": [],
+    "verifiedMaterialFindingCount": 0,
+    "contradictionCount": 1,
+    "unresolvedMaterialContradictionCount": 1,
+    "sources": {
+      "stale": [
+        {
+          "connectorId": "synthetic-capped-source",
+          "connectorRunId": "connector-run-partial-stale-003",
+          "labelKey": "dd.connector.synthetic_capped_source",
+          "target": { "type": "connector_run", "id": "connector-run-partial-stale-003" }
+        }
+      ],
+      "unavailable": [
+        {
+          "connectorId": "synthetic-media-parser",
+          "connectorRunId": "connector-run-unavailable-004",
+          "labelKey": "dd.connector.synthetic_media_parser",
+          "target": { "type": "connector_run", "id": "connector-run-unavailable-004" }
+        }
+      ],
+      "permissionRequired": [
+        {
+          "connectorId": "synthetic-permission-source",
+          "connectorRunId": "connector-run-permission-005",
+          "labelKey": "dd.connector.synthetic_permission_source",
+          "target": { "type": "connector_run", "id": "connector-run-permission-005" }
+        }
+      ]
+    },
+    "requiredActions": [
+      {
+        "actionCode": "view_sources",
+        "messageKey": "dd.action.resolve_source_coverage",
+        "params": { "caseId": "case-synthetic-georgian-001" },
+        "stage": "sources",
+        "method": "GET",
+        "route": "/due-diligence/cases/case-synthetic-georgian-001/connectors",
+        "blocking": true,
+        "requiresCsrf": false,
+        "requiresIdempotency": false
+      }
+    ],
+    "triage": null,
+    "policy": {
+      "policyId": "dd-coverage-default-provisional",
+      "policyVersion": 1,
+      "minimumCoverageThreshold": 0.75,
+      "materialityThreshold": "high",
+      "requiredConnectorIds": ["synthetic-company-registry", "synthetic-never-run-required"],
+      "generatedAt": "2026-08-08T09:00:00+04:00"
+    },
+    "generatedAt": "2026-08-08T09:00:00+04:00",
+    "workflowVersion": 12
+  },
+  "_access": {
+    "purposeId": "dd-investigation-synthetic",
+    "policy": "deny-by-default",
+    "omittedFields": [],
+    "maskedFields": []
+  }
+}

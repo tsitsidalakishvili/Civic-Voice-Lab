@@ -1,0 +1,11 @@
+{
+  "detail": "This identifier type is prohibited for due-diligence intake.",
+  "error": {
+    "contractVersion": "fs-compliance.v1",
+    "code": "DD_IDENTIFIER_TYPE_PROHIBITED",
+    "message": "This identifier type is prohibited for due-diligence intake.",
+    "requestId": "request-synthetic-identifier",
+    "retryable": false,
+    "details": { "workflowContractVersion": "dd-workflow.v2", "identifierType": "national_personal_id" }
+  }
+}
