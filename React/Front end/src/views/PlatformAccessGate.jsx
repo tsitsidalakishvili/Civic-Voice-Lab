@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { loginWithCredentials } from '../services/sessionAuth'
+import React, { useEffect, useState } from 'react'
+import { fetchAuthCapabilities, loginWithCredentials, organizationLoginUrl } from '../services/sessionAuth'
 
 export function PlatformAccessGate({ state = 'unauthenticated', message = '', onRetry, onAuthenticated }) {
   const unauthorized = state === 'unauthorized'
@@ -9,6 +9,16 @@ export function PlatformAccessGate({ state = 'unauthenticated', message = '', on
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [loginError, setLoginError] = useState('')
+  const [capabilities, setCapabilities] = useState(null)
+  const [capabilitiesError, setCapabilitiesError] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+    fetchAuthCapabilities()
+      .then((result) => { if (mounted) setCapabilities(result) })
+      .catch(() => { if (mounted) setCapabilitiesError('The sign-in service could not be reached.') })
+    return () => { mounted = false }
+  }, [])
 
   const submit = async (event) => {
     event.preventDefault()
@@ -26,6 +36,20 @@ export function PlatformAccessGate({ state = 'unauthenticated', message = '', on
     }
   }
 
+  const blocked = unauthorized || unavailable
+  const showPassword = !blocked && capabilities?.passwordLogin === true
+  const showOrganization = !blocked && capabilities?.organizationLogin === true
+  const noMethod = !blocked && capabilities !== null && !showPassword && !showOrganization
+
+  const prompt = () => {
+    if (unauthorized) return 'You are signed in, but your organization account does not have access to this workspace.'
+    if (expired) return 'Your session ended or was revoked. Sign in again to continue securely.'
+    if (unavailable) return 'The private workspace remains locked while authentication is unavailable.'
+    if (showPassword) return 'Enter your approved email and password. The password is sent only to the secured backend and is never stored in this browser.'
+    if (showOrganization) return 'Sign in with your organization account to continue.'
+    return 'Checking which sign-in methods this server supports…'
+  }
+
   return (
     <main className="access-gate" aria-labelledby="access-title">
       <section className="access-gate__card">
@@ -33,20 +57,23 @@ export function PlatformAccessGate({ state = 'unauthenticated', message = '', on
         <h1 id="access-title">
           {unauthorized ? 'Access is not authorized' : unavailable ? 'Sign-in service unavailable' : 'Staff sign-in'}
         </h1>
-        <p className="muted">
-          {unauthorized
-            ? 'You are signed in, but your organization account does not have access to this workspace.'
-            : expired
-              ? 'Your session ended or was revoked. Sign in again to continue securely.'
-              : unavailable
-                ? 'The private workspace remains locked while authentication is unavailable.'
-                : 'Enter the temporary staff credential. The password is sent only to the secured backend and is never stored in this browser.'}
-        </p>
+        <p className="muted">{prompt()}</p>
         {message ? <div className="module-alert" role="alert">{message}</div> : null}
+        {capabilitiesError ? <div className="module-alert" role="alert">{capabilitiesError}</div> : null}
+        {noMethod ? (
+          <div className="module-alert" role="alert">
+            This server has no sign-in method configured. Check FS_AUTH_MODE on the backend.
+          </div>
+        ) : null}
         {loginError ? <div className="module-alert" role="alert">{loginError}</div> : null}
-        {!unauthorized && !unavailable ? (
+        {showOrganization ? (
+          <a className="button" href={organizationLoginUrl(`${window.location.pathname}${window.location.search}`)}>
+            Sign in with your organization account
+          </a>
+        ) : null}
+        {showPassword ? (
           <form className="access-gate__form" onSubmit={submit}>
-            <label>Username<input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            <label>Email<input required type="email" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <label>Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
             <button className="button" type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
           </form>
