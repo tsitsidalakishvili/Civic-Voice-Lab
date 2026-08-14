@@ -9,6 +9,12 @@ from unittest.mock import patch
 from starlette.requests import Request
 
 from deliberation.api.app.core.config import get_settings, validate_auth_startup
+from deliberation.api.app.core.auth_store import (
+    authorize_password_user,
+    create_auth_session,
+    load_auth_session,
+    revoke_auth_session,
+)
 from deliberation.api.app.core.oidc import PasswordLoginIn, password_login
 
 
@@ -119,6 +125,28 @@ class PasswordAuthTests(unittest.TestCase):
             self.assertIn("HttpOnly", cookie)
             self.assertIn("Secure", cookie)
             self.assertIn("SameSite=none", cookie)
+
+    def test_password_session_falls_back_when_graph_is_unavailable(self):
+        with patch.dict(os.environ, self.env, clear=True), patch(
+            "deliberation.api.app.core.auth_store._write",
+            side_effect=RuntimeError("synthetic graph outage"),
+        ), patch(
+            "deliberation.api.app.core.auth_store._read",
+            side_effect=RuntimeError("synthetic graph outage"),
+        ):
+            get_settings.cache_clear()
+            settings = get_settings()
+            principal = authorize_password_user(settings, "analyst@example.invalid")
+            raw_session, csrf_token, _ = create_auth_session(settings, principal)
+            loaded, reason = load_auth_session(settings, raw_session)
+
+            self.assertEqual(reason, "")
+            self.assertEqual(loaded["email"], "analyst@example.invalid")
+            self.assertEqual(loaded["csrfToken"], csrf_token)
+            self.assertTrue(revoke_auth_session(loaded["sessionIdHash"]))
+            revoked, reason = load_auth_session(settings, raw_session)
+            self.assertIsNone(revoked)
+            self.assertEqual(reason, "AUTH_SESSION_REVOKED")
 
 
 if __name__ == "__main__":
