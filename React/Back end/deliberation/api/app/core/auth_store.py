@@ -21,6 +21,31 @@ from .config import Settings
 _fallback_lock = RLock()
 _fallback_sessions: dict[str, dict[str, Any]] = {}
 _fallback_audit: deque[dict[str, Any]] = deque(maxlen=1000)
+_FALLBACK_SESSION_LIMIT = 2048
+
+
+def _fallback_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _prune_fallback_sessions_locked(now: datetime | None = None) -> None:
+    current = now or utc_now()
+    expired = [
+        session_hash
+        for session_hash, session in _fallback_sessions.items()
+        if session.get("revokedAt")
+        or (_fallback_datetime(session.get("idleExpiresAt")) or current) <= current
+        or (_fallback_datetime(session.get("absoluteExpiresAt")) or current) <= current
+    ]
+    for session_hash in expired:
+        _fallback_sessions.pop(session_hash, None)
+    while len(_fallback_sessions) >= _FALLBACK_SESSION_LIMIT:
+        _fallback_sessions.pop(next(iter(_fallback_sessions)))
 
 
 def utc_now() -> datetime:
@@ -377,6 +402,7 @@ def authorize_shared_credential(settings: Settings) -> dict[str, Any] | None:
             "caseScopes": ["*"],
             "purposeScopes": ["*"],
             "version": 1,
+            "validUntil": settings.shared_credential_expires_at,
         }
 
 
@@ -478,6 +504,7 @@ def create_auth_session(
         }:
             raise
         with _fallback_lock:
+            _prune_fallback_sessions_locked(now)
             _fallback_sessions[session_hash] = {
                 **params,
                 "lastSeenAt": params["issuedAt"],
@@ -487,7 +514,7 @@ def create_auth_session(
                 "allowlistVersion": params["sessionVersion"],
                 "allowlistStatus": "active",
                 "validFrom": None,
-                "validUntil": None,
+                "validUntil": principal.get("validUntil"),
             }
     session = {
         "sessionIdHash": session_hash,
@@ -535,7 +562,9 @@ def load_auth_session(settings: Settings, raw_session_id: str) -> tuple[dict[str
     if not rows:
         with _fallback_lock:
             fallback = _fallback_sessions.get(session_hash)
-            rows = [dict(fallback)] if fallback else []
+            fallback = dict(fallback) if fallback else None
+            _prune_fallback_sessions_locked()
+            rows = [fallback] if fallback else []
     if not rows:
         return None, "AUTH_SESSION_INVALID"
     row = rows[0]
@@ -562,6 +591,8 @@ def load_auth_session(settings: Settings, raw_session_id: str) -> tuple[dict[str
     valid_from = parse_dt(row.get("validFrom"))
     valid_until = parse_dt(row.get("validUntil"))
     if (valid_from and valid_from > now) or (valid_until and valid_until <= now):
+        with _fallback_lock:
+            _fallback_sessions.pop(session_hash, None)
         return None, "ACCESS_REVOKED"
     new_idle = min(
         now + timedelta(minutes=settings.session_idle_minutes),

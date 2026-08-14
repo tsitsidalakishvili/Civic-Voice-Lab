@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from starlette.requests import Request
 
+from deliberation.api.app.core import auth_store
 from deliberation.api.app.core.config import get_settings, validate_auth_startup
 from deliberation.api.app.core.auth_store import (
     authorize_password_user,
@@ -147,6 +148,42 @@ class PasswordAuthTests(unittest.TestCase):
             revoked, reason = load_auth_session(settings, raw_session)
             self.assertIsNone(revoked)
             self.assertEqual(reason, "AUTH_SESSION_REVOKED")
+
+    def test_shared_fallback_session_honors_credential_expiry_and_is_bounded(self):
+        with patch.dict(os.environ, self.env, clear=True), patch(
+            "deliberation.api.app.core.auth_store._write",
+            side_effect=RuntimeError("synthetic graph outage"),
+        ), patch(
+            "deliberation.api.app.core.auth_store._read",
+            side_effect=RuntimeError("synthetic graph outage"),
+        ), patch.object(auth_store, "_FALLBACK_SESSION_LIMIT", 2):
+            get_settings.cache_clear()
+            settings = get_settings()
+            principal = {
+                "allowlistId": "synthetic-shared",
+                "email": "",
+                "provider": "password",
+                "issuer": "fs:shared-credential",
+                "subject": "synthetic-subject",
+                "roles": ["admin"],
+                "caseScopes": ["*"],
+                "purposeScopes": ["*"],
+                "version": 1,
+                "validUntil": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+            }
+            raw_session, _, _ = create_auth_session(settings, principal)
+            loaded, reason = load_auth_session(settings, raw_session)
+            self.assertIsNone(loaded)
+            self.assertEqual(reason, "ACCESS_REVOKED")
+
+            principal["validUntil"] = (
+                datetime.now(timezone.utc) + timedelta(days=1)
+            ).isoformat()
+            sessions = [create_auth_session(settings, principal)[0] for _ in range(3)]
+            oldest, reason = load_auth_session(settings, sessions[0])
+            self.assertIsNone(oldest)
+            self.assertEqual(reason, "AUTH_SESSION_INVALID")
+            self.assertLessEqual(len(auth_store._fallback_sessions), 2)
 
 
 if __name__ == "__main__":
