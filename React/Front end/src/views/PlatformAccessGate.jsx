@@ -53,7 +53,7 @@ export function PlatformAccessGate({ state = 'unauthenticated', message = '', on
   return (
     <main className="access-gate" aria-labelledby="access-title">
       <section className="access-gate__card">
-        <p className="eyebrow">Freedom Square staff workspace</p>
+        <p className="eyebrow">Civic Voice Lab staff workspace</p>
         <h1 id="access-title">
           {unauthorized ? 'Access is not authorized' : unavailable ? 'Sign-in service unavailable' : 'Staff sign-in'}
         </h1>

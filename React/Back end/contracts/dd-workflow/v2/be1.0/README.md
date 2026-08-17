@@ -1,12 +1,12 @@
 # Due Diligence workflow BE1.0 contract
 
-This is corrected review candidate `dd-workflow.v2-be1.0-rc2` for the BE1 mutation boundary. It is additive to the immutable `dd-workflow.v2-be0.4` read contract. It does not activate v2, deploy code, migrate data, or authorize BE2+ behavior. The bytes remain a review candidate until frontend contract review accepts them; only then may the schema status be changed to frozen with a new aggregate hash.
+This is the frozen `dd-workflow.v2-be1.0` contract for the BE1 mutation boundary, accepted after RC2 frontend review. It is additive to the immutable `dd-workflow.v2-be0.4` read contract. Freezing the contract does not activate v2, deploy code, migrate data, authorize FE1 implementation or authorize BE2+ behavior.
 
 ## Status and runtime boundary
 
 - Read contract: `dd-workflow.v2`, fixture `dd-workflow.v2-be0.4`.
 - Mutation contract: `dd-workflow.v2-be1.0`.
-- Artifact candidate: `dd-workflow.v2-be1.0-rc2` with schema status `be1_review_candidate_rc2`.
+- Frozen artifact: `dd-workflow.v2-be1.0` with schema status `mutation_contract_frozen`.
 - Feature flag: `FS_DD_WORKFLOW_V2_ENABLED`; missing or false means every unique v2 route returns a sanitized 404 and the legacy behavior remains unchanged.
 - When the flag is on, legacy case creation, direct status PATCH, direct decision, archive and hard-delete writes are rejected before database mutation.
 - Every response is `Cache-Control: no-store` and carries `X-FS-DD-Contract-Version: dd-workflow.v2`.

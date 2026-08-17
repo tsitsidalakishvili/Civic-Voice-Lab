@@ -158,7 +158,7 @@ Required headers:
 
 - `Idempotency-Key`: 12-200 characters.
 - `X-FS-Operator-Id`: must be explicitly allowlisted.
-- Normal Freedom Square API authentication.
+- Normal Civic Voice Lab API authentication.
 
 ```json
 {

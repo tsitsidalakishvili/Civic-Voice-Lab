@@ -6,7 +6,7 @@ The running FastAPI application publishes the authoritative OpenAPI schema at `/
 
 Local base URL: `http://localhost:8010`. Bearer/API-key modes use `Authorization: Bearer <token>` or the configured API-key header. Password and OIDC modes establish a Secure HttpOnly session and require the configured CSRF header for protected mutations. Never put credentials in URLs, logs, screenshots, or repository files.
 
-Default public rules cover `/health`, `/healthz`, and `/platform/auth/status`. Any public intake/report endpoint must be deliberately added with the narrowest method and exact path supported by the middleware rules.
+The base public rules are `GET:/health`, `GET:/healthz`, and `GET:/platform/auth/status`. Password mode additionally needs `POST:/auth/login`; OIDC additionally needs its exact login and callback paths. `FS_AUTH_PUBLIC_RULES` replaces these defaults when set, so include every required authentication path if overriding it. Any public intake/report endpoint must be deliberately added with the narrowest method and exact path supported by the middleware rules.
 
 ## Route families
 

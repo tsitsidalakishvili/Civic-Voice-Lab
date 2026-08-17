@@ -30,7 +30,7 @@ Each weekly review should:
 4. Run link/path checks and applicable product tests.
 5. Record unresolved gaps under **Known gaps** rather than inventing behavior.
 
-Last repository review: **2026-08-09**
+Last repository review: **2026-08-17**
 
 ## Known gaps
 
@@ -38,3 +38,4 @@ Last repository review: **2026-08-09**
 - Default retention execution remains disabled until approved retention policies and legal holds are configured and tested.
 - Production hosting, alert destinations, and secret-manager ownership must be recorded by the operator without committing secrets.
 - The live OpenAPI schema is the authoritative endpoint-level request/response reference; stable versioned API contracts are not yet published.
+- Password-session fallback during a Neo4j outage is intentionally process-local and has no durable audit store; operators must reconcile the outage window after service restoration.

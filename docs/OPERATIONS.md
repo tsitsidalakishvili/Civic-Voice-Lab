@@ -4,9 +4,9 @@
 
 The documented production shape is a static frontend (for example Vercel) and a Python web service (for example Render) connected to managed Neo4j. Hosting vendors are replaceable; preserve TLS, secret management, private administration, backups, logs, and health monitoring.
 
-Frontend: run `npm ci` and `npm run build` from `React/Front end`. Backend: install `requirements.txt` and run `python -m uvicorn app:app --host 0.0.0.0 --port $env:PORT` from `React/Back end`.
+Frontend: run `npm ci` and `npm run build` from `React/Front end`. The backend container is rooted at `React/Back end/deliberation/api`: install that directory's `requirements.txt` and run `python -m uvicorn app.main:app --host 0.0.0.0 --port $env:PORT`. For a source checkout launched from `React/Back end`, use `python -m uvicorn deliberation.api.app.main:app` instead.
 
-Set hosting roots exactly to `React/Front end` and `React/Back end`. Configure the frontend API URL at build or public runtime config, exact production CORS origins on the backend, and secrets in the host secret store.
+Set the frontend hosting root to `React/Front end` and use the backend API container directory above when using the supplied Dockerfile. Configure the frontend API URL at build time, exact production CORS origins on the backend, and secrets in the host secret store.
 
 ## Release checklist
 
@@ -31,6 +31,10 @@ Recommended initial targets, pending owner approval: 99.5% monthly availability,
 - Back up configuration metadata and source manifests, never plaintext secrets.
 - After restore, validate constraints, record counts, critical relationships, authentication, and representative workflows.
 
+## Password authentication during Neo4j outages
+
+When password authentication uses the local access-user file or approved shared credential, the backend can issue and validate a process-local fallback session if Neo4j is temporarily unavailable. The fallback is capped at 2,048 sessions and its minimized audit buffer at 1,000 events; both are lost when the process restarts. Normal idle, absolute, and credential-expiry checks still apply. Treat this as a short outage bridge only: restore Neo4j promptly, record the outage window, and reconcile any missing durable authentication audit evidence before closing the incident. OIDC sessions do not use this fallback.
+
 ## Incident runbook
 
 1. Triage severity, impacted users/data, start time, and owner.
@@ -47,4 +51,3 @@ For a database outage, check `/healthz`, credentials, network allowlists, TLS, s
 - Weekly: documentation drift, dependency/security alerts, failed jobs/connectors, error trends, public endpoints, and backup completion.
 - Monthly: access review, secret age, restore evidence, storage/retention, dependency upgrades, and unused integrations.
 - Quarterly: disaster-recovery test, threat-model review, privacy/retention review, and incident tabletop.
-

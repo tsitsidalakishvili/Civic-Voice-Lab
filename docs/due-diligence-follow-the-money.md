@@ -2,7 +2,7 @@
 
 ## Product thesis
 
-Freedom Square Due Diligence is not a scorecard that tries to declare a person corrupt. It is a sourced data-integration and investigation workspace that helps an analyst connect public officials, relatives, companies, assets, contracts, payments, jurisdictions, documents, and screening records.
+Civic Voice Lab Due Diligence is not a scorecard that tries to declare a person corrupt. It is a sourced data-integration and investigation workspace that helps an analyst connect public officials, relatives, companies, assets, contracts, payments, jurisdictions, documents, and screening records.
 
 The system produces leads. An investigator verifies or rejects them. A report is a downstream publication of the verified work.
 
@@ -17,6 +17,16 @@ This direction follows the ideas presented in Friedrich Lindenberg's NODES 2023 
 5. **Review leads** — Accept, reject, or defer name matches and graph-generated hypotheses.
 6. **Findings** — Record conclusions separately from the source facts that support them.
 7. **Publish** — Generate a report with complete evidence lineage and known limitations.
+
+## Current workspace flow
+
+The authenticated Due Diligence workspace opens on an overview and groups the analyst flow into three destinations:
+
+1. **Evidence** — run baseline collection, inspect source coverage/freshness, review normalized entities, and assess possible identity matches.
+2. **Investigation** — explore FollowTheMoney paths and connected evidence.
+3. **Outcome** — curate findings, review saved briefs and source audits, record a case decision, and create a publication snapshot when ready.
+
+Baseline collection is automated triage, not a case decision. It distinguishes sources that returned evidence from sources that require operator setup and requires the analyst to review coverage and identity matches before promoting a signal to a finding. The former shell tabs are normalized to these destinations for in-application handoffs; they do not change the API contract.
 
 ## Three representations
 

@@ -79,7 +79,7 @@ const fullCheckResponse = {
 }
 
 const runCheck = () =>
-  fireEvent.click(screen.getByRole('button', { name: /run full check/i }))
+  fireEvent.click(screen.getByRole('button', { name: /run baseline collection/i }))
 
 describe('DdFullCheckPanel', () => {
   beforeEach(() => {
@@ -89,16 +89,17 @@ describe('DdFullCheckPanel', () => {
 
   it('disables the run button until a case is selected', () => {
     renderWithProviders(<DdFullCheckPanel caseId="" />)
-    expect(screen.getByRole('button', { name: /run full check/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /run baseline collection/i })).toBeDisabled()
     expect(screen.getByText('Select or create a case first.')).toBeInTheDocument()
   })
 
-  it('renders the consolidated risk headline after a successful run', async () => {
+  it('keeps coverage primary and automated triage secondary after a successful run', async () => {
     renderWithProviders(<DdFullCheckPanel caseId="case-1" subjectLabel="Test Subject" />)
     runCheck()
 
-    expect(await screen.findByText('Low risk - 4 hits across 8 sources')).toBeInTheDocument()
-    expect(screen.getByText(/3 of 8 sources returned data\./)).toBeInTheDocument()
+    expect(await screen.findByText('3 of 8 sources returned evidence')).toBeInTheDocument()
+    expect(screen.getByText(/Low triage · 12\/100/)).toBeInTheDocument()
+    expect(screen.getByText('Automated triage — not a decision')).toBeInTheDocument()
     expect(requestJson).toHaveBeenCalledWith('/due-diligence/cases/case-1/full-check', {
       method: 'POST',
       payload: {},
@@ -148,7 +149,7 @@ describe('DdFullCheckPanel', () => {
 
     expect(await screen.findByText('503 Service Unavailable')).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /run full check/i })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: /run baseline collection/i })).toBeEnabled(),
     )
   })
 })

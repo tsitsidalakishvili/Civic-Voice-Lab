@@ -613,7 +613,8 @@ function AppShell_() {
             </Collapse>
           </Stack>
         ) : (
-          <div className="module-view">
+          <div className={`module-view${activeModuleId === 'due-diligence' ? ' module-view--wide' : ''}`}>
+            {activeModuleId !== 'due-diligence' ? (
             <aside className="module-view__sidebar" data-tour="module-sidebar">
               <div className="module-view__card">
                 <span className="module-view__eyebrow">{t('app.activeModule')}</span>
@@ -653,6 +654,7 @@ function AppShell_() {
                 </div>
               ) : null}
             </aside>
+            ) : null}
             <div className="module-panel" data-tour="module-content">
               {activeModuleId !== 'due-diligence' ? (
                 <PageHeader

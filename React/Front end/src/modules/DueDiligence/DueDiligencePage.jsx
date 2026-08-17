@@ -140,19 +140,94 @@ function ReportSection({ section, index }) {
   )
 }
 
+function DdSectionExpander({ title, summary, meta, defaultOpen = false, children, className = '' }) {
+  return (
+    <details className={`dd-section-expander ${className}`.trim()} defaultOpen={defaultOpen}>
+      <summary>
+        <span className="dd-section-expander__heading">
+          <strong>{title}</strong>
+          {summary ? <small>{summary}</small> : null}
+        </span>
+        {meta ? <span className="dd-section-expander__meta">{meta}</span> : null}
+        <span className="dd-section-expander__toggle" aria-hidden="true">
+          <span className="dd-section-expander__open-label">Open</span>
+          <span className="dd-section-expander__close-label">Close</span>
+        </span>
+      </summary>
+      <div className="dd-section-expander__body">{children}</div>
+    </details>
+  )
+}
+
+const DD_EVIDENCE_VIEWS = [
+  { id: 'checks', label: 'Baseline check', detail: 'Run the standard source scan.' },
+  { id: 'sources', label: 'Sources', detail: 'Coverage, freshness, and connectors.' },
+  { id: 'entities', label: 'Entities', detail: 'Inspect normalized records and provenance.' },
+  { id: 'resolve', label: 'Identity review', detail: 'Review possible matches without merging silently.' },
+]
+
+const DD_OUTCOME_VIEWS = [
+  { id: 'findings', label: 'Findings', detail: 'Accept, reject, or research claims.' },
+  { id: 'reports', label: 'Reports', detail: 'Read saved briefs and source audits.' },
+  { id: 'decision', label: 'Decision', detail: 'Record a defensible case outcome.' },
+  { id: 'publish', label: 'Publish', detail: 'Create an evidence snapshot when ready.' },
+]
+
+const DD_EVIDENCE_ALIASES = new Set(['checks', 'media', 'sources', 'advanced', 'entities', 'resolve'])
+const DD_INVESTIGATION_ALIASES = new Set(['follow-the-money', 'graph'])
+const DD_REVIEW_ALIASES = new Set(['findings', 'reports', 'decision', 'publish'])
+
+function normalizeDdDestination(value) {
+  if (DD_EVIDENCE_ALIASES.has(value)) {
+    const tool = value === 'media' || value === 'advanced' ? 'sources' : value
+    return { destination: 'evidence', tool }
+  }
+  if (DD_INVESTIGATION_ALIASES.has(value)) {
+    return { destination: 'investigation', tool: 'follow-the-money' }
+  }
+  if (DD_REVIEW_ALIASES.has(value)) return { destination: 'outcome', tool: value }
+  if (value === 'evidence' || value === 'investigation' || value === 'outcome') return { destination: value, tool: null }
+  return { destination: 'overview', tool: null }
+}
+
+function DdToolPicker({ title, tools, value, onChange }) {
+  return (
+    <section className="dd-tool-picker" aria-label={title}>
+      <strong className="dd-tool-picker__label">{title}</strong>
+      <div className="dd-tool-picker__choices">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            type="button"
+            className={tool.id === value ? 'is-active' : ''}
+            onClick={() => onChange(tool.id)}
+            aria-pressed={tool.id === value}
+            aria-label={`${tool.label}. ${tool.detail}`}
+          >
+            <strong>{tool.label}</strong>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export function DueDiligencePage({
   t,
   activeTabOverride,
   onTabChange,
-  showTabs = true,
-  showIntro = true,
 }) {
-  const translate = t || ((key, vars) => key)
+  void t
   const [activeTab, setActiveTab] = useState('overview')
+  const [evidenceView, setEvidenceView] = useState('checks')
+  const [outcomeView, setOutcomeView] = useState('findings')
   const applyActiveTab = (nextTab) => {
     if (!nextTab) return
-    setActiveTab(nextTab)
-    if (onTabChange) onTabChange(nextTab)
+    const normalized = normalizeDdDestination(nextTab)
+    if (normalized.destination === 'evidence' && normalized.tool) setEvidenceView(normalized.tool)
+    if (normalized.destination === 'outcome' && normalized.tool) setOutcomeView(normalized.tool)
+    setActiveTab(normalized.destination)
+    if (onTabChange) onTabChange(normalized.destination)
   }
   const getCaseDisplayName = (item) =>
     item?.subjectGeorgian || item?.subjectEnglish || item?.subject || ''
@@ -163,7 +238,7 @@ export function DueDiligencePage({
       .find((value) => value !== primary)
     return secondary || ''
   }
-  const [summary, setSummary] = useState(null)
+  const [, setSummary] = useState(null)
   const [crmSummary, setCrmSummary] = useState(null)
   const [competitors, setCompetitors] = useState([])
   const [error, setError] = useState('')
@@ -195,6 +270,7 @@ export function DueDiligencePage({
   const [casesError, setCasesError] = useState('')
   const [activeCaseId, setActiveCaseId] = useState('')
   const [activeCase, setActiveCase] = useState(null)
+  const [caseWorkspaceSummary, setCaseWorkspaceSummary] = useState(null)
   const [caseSubjectGeorgian, setCaseSubjectGeorgian] = useState('')
   const [caseSubjectEnglish, setCaseSubjectEnglish] = useState('')
   const [caseSubject, setCaseSubject] = useState('')
@@ -213,15 +289,10 @@ export function DueDiligencePage({
     if (message) setCaseNoticeTone(tone)
   }
   const [caseCreating, setCaseCreating] = useState(false)
+  const [newCaseOpen, setNewCaseOpen] = useState(false)
+  const [caseWorkspaceMode, setCaseWorkspaceMode] = useState('queue')
   const [caseSaving, setCaseSaving] = useState(false)
   const [caseDeleting, setCaseDeleting] = useState(false)
-  const [caseTasks, setCaseTasks] = useState([])
-  const [tasksLoading, setTasksLoading] = useState(false)
-  const [taskLabel, setTaskLabel] = useState('')
-  const [taskAssignee, setTaskAssignee] = useState('')
-  const [taskDueDate, setTaskDueDate] = useState('')
-  const [taskError, setTaskError] = useState('')
-  const [taskSaving, setTaskSaving] = useState(false)
   const [decisionOutcome, setDecisionOutcome] = useState('Approve')
   const [decisionRationale, setDecisionRationale] = useState('')
   const [decisionSaving, setDecisionSaving] = useState(false)
@@ -253,12 +324,12 @@ export function DueDiligencePage({
   const [aiReportError, setAiReportError] = useState('')
   const [aiReport, setAiReport] = useState(null)
   const [metaInfo, setMetaInfo] = useState(null)
-  const [useWikidata, setUseWikidata] = useState(false)
-  const [useWikipedia, setUseWikipedia] = useState(true)
-  const [useOpenSanctions, setUseOpenSanctions] = useState(true)
-  const [useNews, setUseNews] = useState(true)
-  const [useDeclarations, setUseDeclarations] = useState(true)
-  const [useDemo, setUseDemo] = useState(false)
+  const [useWikidata] = useState(false)
+  const [useWikipedia] = useState(true)
+  const [useOpenSanctions] = useState(true)
+  const [useNews] = useState(true)
+  const [useDeclarations] = useState(true)
+  const [useDemo] = useState(false)
   const [ddAppUrl, setDdAppUrl] = useState(
     () => localStorage.getItem('ddAppUrl') || '',
   )
@@ -291,10 +362,15 @@ export function DueDiligencePage({
   }
 
   useEffect(() => {
-    if (activeTabOverride && activeTabOverride !== activeTab) {
-      setActiveTab(activeTabOverride)
+    if (!activeTabOverride) return
+    const normalized = normalizeDdDestination(activeTabOverride)
+    if (normalized.destination === 'evidence' && normalized.tool) setEvidenceView(normalized.tool)
+    if (normalized.destination === 'outcome' && normalized.tool) setOutcomeView(normalized.tool)
+    if (normalized.destination !== activeTab) setActiveTab(normalized.destination)
+    if (activeTabOverride !== normalized.destination && onTabChange) {
+      onTabChange(normalized.destination)
     }
-  }, [activeTabOverride, activeTab])
+  }, [activeTabOverride, activeTab, onTabChange])
 
   const parseCsvText = (text) => {
     const rows = []
@@ -443,25 +519,6 @@ export function DueDiligencePage({
       })
   }
 
-  const loadCaseTasks = (caseId) => {
-    if (!caseId) {
-      setCaseTasks([])
-      return
-    }
-    setTasksLoading(true)
-    setTaskError('')
-    getJson(`/due-diligence/cases/${caseId}/tasks`)
-      .then((payload) => {
-        setCaseTasks(Array.isArray(payload) ? payload : [])
-      })
-      .catch((err) => {
-        setTaskError(err.message || 'Unable to load case tasks.')
-      })
-      .finally(() => {
-        setTasksLoading(false)
-      })
-  }
-
   const refreshActiveCase = (caseId, nextCases = cases) => {
     if (!caseId) {
       setActiveCase(null)
@@ -496,16 +553,24 @@ export function DueDiligencePage({
   }
 
   const handleSelectCase = (caseId) => {
-    setActiveCaseId(caseId || '')
-    setCaseNotice('')
     if (!caseId) {
-      setActiveCase(null)
+      handleClearCase()
       return
     }
+    setCaseWorkspaceMode('existing')
+    setActiveCaseId(caseId)
+    setCaseNotice('')
+    setAnalysisResult(null)
+    setAiReport(null)
+    setMediaResult(null)
+    setSelectedHistoryReportId('')
+    setReportHistory([])
     refreshActiveCase(caseId)
+    applyActiveTab('overview')
   }
 
   const handleClearCase = () => {
+    setCaseWorkspaceMode('queue')
     setActiveCaseId('')
     setActiveCase(null)
     setSubjectGeorgian('')
@@ -552,7 +617,11 @@ export function DueDiligencePage({
       setCaseSubject('')
       setCaseSubjectType('Person')
       setNewCaseOwner('')
+      setNewCaseOpen(false)
+      setCaseWorkspaceMode('new')
       setCaseNotice('Case created and selected.', 'success')
+      setEvidenceView('checks')
+      applyActiveTab('evidence')
     } catch (err) {
       setCaseNotice(err.message || 'Unable to create case.')
     } finally {
@@ -624,58 +693,6 @@ export function DueDiligencePage({
       return ''
     } finally {
       setCaseCreating(false)
-    }
-  }
-
-  const handleCreateTask = async () => {
-    if (!activeCaseId) {
-      setTaskError('Select a case first.')
-      return
-    }
-    if (!taskLabel.trim()) {
-      setTaskError('Task title is required.')
-      return
-    }
-    setTaskSaving(true)
-    setTaskError('')
-    try {
-      const payload = await requestJson(`/due-diligence/cases/${activeCaseId}/tasks`, {
-        method: 'POST',
-        payload: {
-          label: taskLabel.trim(),
-          assignee: taskAssignee.trim(),
-          dueDate: taskDueDate || null,
-          status: 'Open',
-        },
-      })
-      setCaseTasks((prev) => [payload, ...prev])
-      setTaskLabel('')
-      setTaskAssignee('')
-      setTaskDueDate('')
-      loadCases()
-    } catch (err) {
-      setTaskError(err.message || 'Unable to create task.')
-    } finally {
-      setTaskSaving(false)
-    }
-  }
-
-  const handleUpdateTaskStatus = async (taskId, nextStatus) => {
-    if (!activeCaseId || !taskId) return
-    try {
-      const payload = await requestJson(
-        `/due-diligence/cases/${activeCaseId}/tasks/${taskId}`,
-        {
-          method: 'PATCH',
-          payload: { status: nextStatus },
-        },
-      )
-      setCaseTasks((prev) =>
-        prev.map((item) => (item.taskId === taskId ? payload : item)),
-      )
-      loadCases()
-    } catch (err) {
-      setTaskError(err.message || 'Unable to update task.')
     }
   }
 
@@ -839,13 +856,11 @@ export function DueDiligencePage({
       }
       const warningsText = (result?.warnings || []).join(' ').toLowerCase()
       const hasWikipediaWarning = warningsText.includes('wikipedia request failed')
-      const hasWikidataWarning = warningsText.includes('wikidata request failed')
       const hasOpenSanctionsWarning =
         warningsText.includes('opensanctions') &&
         (warningsText.includes('failed') ||
           warningsText.includes('not configured') ||
           warningsText.includes('api key'))
-      const hasNewsWarning = warningsText.includes('gdelt news request failed')
       const hasDeclarationWarning =
         warningsText.includes('declaration') &&
         (warningsText.includes('failed') || warningsText.includes('not configured'))
@@ -921,7 +936,7 @@ export function DueDiligencePage({
       }
       const history = await getJson(`/due-diligence/reports?${params.toString()}`)
       setReportHistory(Array.isArray(history) ? history : [])
-    } catch (err) {
+    } catch {
       setReportHistory([])
     } finally {
       setHistoryLoading(false)
@@ -940,7 +955,7 @@ export function DueDiligencePage({
     }
   }
 
-  const handleOpenReportFromHistory = async (reportId) => {
+  const handleOpenReportFromHistory = async (reportId, navigateToReport = true) => {
     if (!reportId) return
     setArchivedReportLoading(true)
     setReportLoadError('')
@@ -951,13 +966,47 @@ export function DueDiligencePage({
       setAiReport(normalized?.aiReport || null)
       setMediaResult(normalized?.media || null)
       setSelectedHistoryReportId(reportId)
-      applyActiveTab('reports')
+      if (navigateToReport) applyActiveTab('reports')
     } catch (err) {
       setReportLoadError(err.message || 'Unable to load report.')
     } finally {
       setArchivedReportLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (
+      caseWorkspaceMode !== 'existing'
+      || !activeCaseId
+      || historyLoading
+      || analysisResult
+      || !reportHistory.length
+    ) return
+
+    let cancelled = false
+    const reportId = reportHistory[0].reportId
+    setArchivedReportLoading(true)
+    setReportLoadError('')
+    getJson(`/due-diligence/reports/${reportId}`)
+      .then((raw) => {
+        if (cancelled) return
+        const normalized = normalizeStoredReportToAnalysisResult(raw)
+        setAnalysisResult(normalized)
+        setAiReport(normalized?.aiReport || null)
+        setMediaResult(normalized?.media || null)
+        setSelectedHistoryReportId(reportId)
+      })
+      .catch((err) => {
+        if (!cancelled) setReportLoadError(err.message || 'Unable to load the latest saved report.')
+      })
+      .finally(() => {
+        if (!cancelled) setArchivedReportLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [caseWorkspaceMode, activeCaseId, historyLoading, reportHistory, analysisResult])
 
   const handleSaveSubjectToCase = async () => {
     if (!activeCaseId) {
@@ -1008,6 +1057,24 @@ export function DueDiligencePage({
     }
     loadReportHistory(subjectName.trim(), '')
   }, [subjectName, activeCaseId])
+
+  useEffect(() => {
+    if (!activeCaseId) {
+      setCaseWorkspaceSummary(null)
+      return
+    }
+    let current = true
+    getJson(`/due-diligence/cases/${activeCaseId}/workspace`, { forceRefresh: true })
+      .then((payload) => {
+        if (current) setCaseWorkspaceSummary(payload)
+      })
+      .catch(() => {
+        if (current) setCaseWorkspaceSummary(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [activeCaseId, reportHistory.length])
 
   useEffect(() => {
     if (!cases.length) return
@@ -1079,14 +1146,6 @@ export function DueDiligencePage({
     const base = ddAppUrl.includes('?') ? `${ddAppUrl}&` : `${ddAppUrl}?`
     return `${base}${params.toString()}`
   }, [ddAppUrl, subjectName, subjectType, startMode, useWikidata, useWikipedia, useOpenSanctions, useNews, useDeclarations])
-
-  const subjectStatus = subjectName.trim()
-    ? internalChecksRan
-      ? crmMatches.length + competitorMatches.length > 0
-        ? 'Known'
-        : 'New'
-      : 'Not checked'
-    : '-'
 
   const gmailUrl = useMemo(() => {
     const subjectLine = encodeURIComponent(
@@ -1428,36 +1487,36 @@ export function DueDiligencePage({
   }
 
   const caseStatusOptions = ['Draft', 'Active', 'Review', 'Decided', 'Closed', 'Archived']
-  const taskStatusOptions = ['Open', 'In Progress', 'Blocked', 'Done']
-
-  const duePulseStats = useMemo(
-    () => [
-      {
-        label: 'Watchlist',
-        value: summary?.competitors ?? '-',
-        icon: <IconShieldCheck size={18} />,
-        badge: 'Tracked',
-      },
-      {
-        label: 'Network matches',
-        value: crmMatches.length,
-        icon: <IconUsers size={18} />,
-        note: 'Internal signals',
-      },
-      {
-        label: 'Reports run',
-        value: reportHistory.length,
-        icon: <IconFileSearch size={18} />,
-        note: 'DD history',
-      },
-      {
-        label: 'Watchlist hits',
-        value: competitorMatches.length,
-        icon: <IconAlertTriangle size={18} />,
-        badge: 'Review',
-      },
-    ],
-    [competitorMatches.length, crmMatches.length, reportHistory.length, summary?.competitors],
+  const renderCaseRow = (row) => (
+    <button
+      className={`dd-case-row${activeCaseId === row.caseId ? ' is-active' : ''}`}
+      type="button"
+      key={row.caseId}
+      onClick={() => handleSelectCase(row.caseId)}
+    >
+      <span className="dd-case-row__subject">
+        {getCaseDisplayName(row) || '-'}
+        {getCaseSecondaryName(row) ? (
+          <small className="muted">{getCaseSecondaryName(row)}</small>
+        ) : null}
+      </span>
+      <span className="dd-status-chip">{row.status || 'Draft'}</span>
+      <span className={`dd-risk-chip is-${String(row.lastRiskLevel || 'unknown').toLowerCase()}`}>
+        {row.lastRiskLevel || 'Unrated'}
+      </span>
+      <span className="dd-case-row__date"><IconClock size={13} /> {formatDateTime(row.updatedAt || row.createdAt)}</span>
+      <IconArrowRight className="dd-case-row__arrow" size={17} />
+    </button>
+  )
+  const contentTab = activeTab === 'evidence'
+    ? evidenceView
+    : activeTab === 'investigation'
+      ? 'follow-the-money'
+      : activeTab === 'outcome'
+        ? outcomeView
+        : activeTab
+  const showExistingCaseReview = Boolean(
+    contentTab === 'overview' && activeCaseId,
   )
   return (
     <section className="module dd-workspace">
@@ -1493,6 +1552,8 @@ export function DueDiligencePage({
             type="button"
             onClick={() => {
               handleClearCase()
+              setCaseWorkspaceMode('new')
+              setNewCaseOpen(true)
               // The intake form only renders on the overview tab, so sending the
               // analyst to 'sources' here left them with no way to open a case.
               applyActiveTab('overview')
@@ -1504,14 +1565,44 @@ export function DueDiligencePage({
         </div>
       </div>
 
+      <nav className="dd-flow-nav" aria-label="Due diligence workflow">
+        {[
+          { id: 'overview', label: 'Overview', detail: activeCaseId ? 'Case summary and next actions' : 'Choose an investigation' },
+          { id: 'evidence', label: 'Evidence', detail: 'Sources, entities, and identity review' },
+          { id: 'investigation', label: 'Investigation', detail: 'Trace and explain connections' },
+          { id: 'outcome', label: 'Outcome', detail: 'Findings, report, and decision' },
+        ].map((stage) => (
+          <button
+            key={stage.id}
+            type="button"
+            className={activeTab === stage.id ? 'is-active' : ''}
+            onClick={() => applyActiveTab(stage.id)}
+            disabled={!activeCaseId && stage.id !== 'overview'}
+            aria-current={activeTab === stage.id ? 'step' : undefined}
+          >
+            <strong>{stage.label}</strong>
+            <small>{stage.detail}</small>
+          </button>
+        ))}
+      </nav>
+
       <div className="dd-workspace__body">
-        {activeTab === 'overview' ? (
+        {contentTab === 'overview' && !showExistingCaseReview ? (
         <aside className="dd-case-rail">
-          <div className="sidebar-card dd-intake-card">
-            <span className="dd-card-kicker">New investigation</span>
-            <h3>Open a case</h3>
-            <p className="muted">Create one durable record for the subject, evidence, and decision.</p>
-            <div className="dd-case-form">
+          <details
+            className="sidebar-card dd-intake-card dd-intake-card--collapsible"
+            open={newCaseOpen}
+            onToggle={(event) => setNewCaseOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <span>
+                <span className="dd-card-kicker">New investigation</span>
+                <strong>Open a case</strong>
+                <small>Create a record only when you need a new investigation.</small>
+              </span>
+              <IconPlus size={17} aria-hidden="true" />
+            </summary>
+            <div className="dd-case-form dd-intake-card__body">
               <input
                 className="input"
                 placeholder="Georgian name"
@@ -1548,7 +1639,7 @@ export function DueDiligencePage({
               </button>
             </div>
             {caseNotice ? <div className={`module-alert module-alert--${caseNoticeTone}`} role={caseNoticeTone === 'error' ? 'alert' : 'status'}>{caseNotice}</div> : null}
-          </div>
+          </details>
 
           <div className="sidebar-card dd-case-list-card">
             <div className="card-header">
@@ -1569,29 +1660,15 @@ export function DueDiligencePage({
               ) : cases.length === 0 ? (
                 <div className="table-row empty">No cases yet.</div>
               ) : (
-                cases.map((row) => (
-                  <button
-                    className={`dd-case-row${
-                      activeCaseId === row.caseId ? ' is-active' : ''
-                    }`}
-                    type="button"
-                    key={row.caseId}
-                    onClick={() => handleSelectCase(row.caseId)}
-                  >
-                    <span className="dd-case-row__subject">
-                      {getCaseDisplayName(row) || '-'}
-                      {getCaseSecondaryName(row) ? (
-                        <small className="muted">{getCaseSecondaryName(row)}</small>
-                      ) : null}
-                    </span>
-                    <span className="dd-status-chip">{row.status || 'Draft'}</span>
-                    <span className={`dd-risk-chip is-${String(row.lastRiskLevel || 'unknown').toLowerCase()}`}>
-                      {row.lastRiskLevel || 'Unrated'}
-                    </span>
-                    <span className="dd-case-row__date"><IconClock size={13} /> {formatDateTime(row.updatedAt || row.createdAt)}</span>
-                    <IconArrowRight className="dd-case-row__arrow" size={17} />
-                  </button>
-                ))
+                <>
+                  {cases.slice(0, 4).map(renderCaseRow)}
+                  {cases.length > 4 ? (
+                    <details className="dd-case-list__more">
+                      <summary>Show {cases.length - 4} more cases</summary>
+                      <div>{cases.slice(4).map(renderCaseRow)}</div>
+                    </details>
+                  ) : null}
+                </>
               )}
             </div>
             <div className="dd-case-list__footer">
@@ -1613,80 +1690,121 @@ export function DueDiligencePage({
         </aside>
         ) : null}
 
-        <div className="dd-workspace__main">
-          {activeTab === 'overview' ? <CivicStatGrid
-            title="Risk intelligence pulse"
-            description="Signals across watchlist, network matches, and internal checks."
-            items={duePulseStats}
-          /> : null}
-
-          {showIntro ? (
-            <div className="module-card module-card__wide section-intro">
-              <div className="card-header">
-                <div>
-                  <h3>{translate('dueDiligence.header.title')}</h3>
-                  <p className="muted">{translate('dueDiligence.header.subtitle')}</p>
-                </div>
-                <div className="pill">Due Diligence</div>
-              </div>
-            </div>
-          ) : null}
-
+        <div className={`dd-workspace__main dd-workspace__main--${activeTab}`}>
           {error ? <div className="module-alert">{error}</div> : null}
 
-          {activeTab === 'overview' ? <details className="dashboard-detail dd-pipeline-stats">
-            <summary>Risk pipeline stats</summary>
-            <div className="dashboard-detail__body">
-              <div className="module-header__meta">
-                <div className="module-header__metric">
-                  <span>Watchlist</span>
-                  <strong>{summary?.competitors ?? '-'}</strong>
-                </div>
-                <div className="module-header__metric">
-                  <span>Network People</span>
-                  <strong>{crmSummary?.total_people ?? '-'}</strong>
-                </div>
-                <div className="module-header__metric">
-                  <span>Supporters</span>
-                  <strong>{crmSummary?.supporters ?? '-'}</strong>
-                </div>
-              </div>
-            </div>
-          </details> : null}
+          {activeTab === 'evidence' ? (
+            <DdToolPicker
+              title="Evidence workspace"
+              description="Collect, normalize, and verify the records attached to this case."
+              tools={DD_EVIDENCE_VIEWS}
+              value={evidenceView}
+              onChange={setEvidenceView}
+            />
+          ) : null}
 
-          {showTabs ? (
-            <div className="subtabs">
-              {[
-                { id: 'sources', label: 'Sources' },
-                { id: 'entities', label: 'Entities' },
-                { id: 'resolve', label: 'Resolve' },
-                { id: 'follow-the-money', label: 'Follow the money' },
-                { id: 'findings', label: 'Findings' },
-                { id: 'publish', label: 'Publish' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={tab.id === activeTab ? 'subtab active' : 'subtab'}
-                  onClick={() => applyActiveTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          {activeTab === 'outcome' ? (
+            <DdToolPicker
+              title="Outcome workspace"
+              description="Review claims before relying on them, then prepare a defensible output."
+              tools={DD_OUTCOME_VIEWS}
+              value={outcomeView}
+              onChange={setOutcomeView}
+            />
+          ) : null}
+
+          {showExistingCaseReview ? (
+            <div className="dd-case-cockpit" aria-busy={historyLoading || archivedReportLoading}>
+              <main className="dd-case-cockpit__main">
+                <header className="dd-case-cockpit__title">
+                  <div>
+                    <span className="dd-card-kicker">Latest case summary</span>
+                    <h3>{aiReport?.reportTitle || `Investigation overview for ${subjectName}`}</h3>
+                    <p>Reviewed evidence stays separate from leads, hypotheses, and automated triage.</p>
+                  </div>
+                  <span className="dd-status-chip">{caseStatus}</span>
+                </header>
+
+                {reportLoadError ? <div className="module-alert">{reportLoadError}</div> : null}
+                {historyLoading || archivedReportLoading ? (
+                  <div className="table-row empty">Loading the latest case summary…</div>
+                ) : aiReport ? (
+                  <div className="dd-case-cockpit__points">
+                    {(aiReport.sections || []).flatMap((section) =>
+                      getReportSectionHighlights(section).map((point) => ({ ...point, heading: section.heading })),
+                    ).slice(0, 5).map((point, idx) => (
+                      <article key={`${point.heading}-${point.label}-${idx}`}>
+                        <span>{point.label}</span>
+                        <strong>{point.text}</strong>
+                        <small>{point.heading}</small>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dd-review-empty">
+                    <IconFileSearch size={24} aria-hidden="true" />
+                    <div><strong>No completed investigation yet</strong><p>Run the baseline check to create the first sourced case summary.</p></div>
+                  </div>
+                )}
+
+                {(aiReport?.warnings || analysisResult?.warnings || []).length ? (
+                  <div className="dd-case-cockpit__limitations">
+                    <IconAlertTriangle size={17} aria-hidden="true" />
+                    <div><strong>Coverage limitations</strong><p>{[...new Set(aiReport?.warnings || analysisResult?.warnings || [])].map((warning) => getReportCoverageNotice(warning).message).join(' ')}</p></div>
+                  </div>
+                ) : null}
+
+                <div className="dd-case-cockpit__footer">
+                  <button className="button" type="button" onClick={() => applyActiveTab(aiReport ? 'findings' : 'checks')}>
+                    {aiReport ? 'Review findings' : 'Run baseline check'} <IconArrowRight size={15} />
+                  </button>
+                  {aiReport ? <button className="button-secondary" type="button" onClick={() => applyActiveTab('reports')}>Open full report</button> : null}
+                  {analysisResult?.summary?.risk_score != null ? <span className="dd-triage-note">Automated triage: {analysisResult.summary.risk_score}/100 · not a decision</span> : null}
+                </div>
+              </main>
+
+              <aside className="dd-case-cockpit__side">
+                <section>
+                  <span className="dd-card-kicker">Case truth</span>
+                  <h3>What needs attention</h3>
+                  <div className="dd-case-cockpit__counts">
+                    <div><strong>{caseWorkspaceSummary?.counts?.datasets ?? '—'}</strong><span>Datasets</span></div>
+                    <div><strong>{caseWorkspaceSummary?.counts?.evidence ?? '—'}</strong><span>Evidence</span></div>
+                    <div><strong>{caseWorkspaceSummary?.counts?.unresolvedCandidates ?? '—'}</strong><span>Identity reviews</span></div>
+                    <div><strong>{caseWorkspaceSummary?.counts?.openFindings ?? '—'}</strong><span>Open findings</span></div>
+                  </div>
+                </section>
+                <section>
+                  <span className="dd-card-kicker">Next action</span>
+                  {(caseWorkspaceSummary?.blockers || []).length ? (
+                    <ul className="dd-case-cockpit__blockers">
+                      {caseWorkspaceSummary.blockers.slice(0, 3).map((blocker) => <li key={blocker}>{blocker}</li>)}
+                    </ul>
+                  ) : (
+                    <p className="muted">No workflow blocker is currently reported.</p>
+                  )}
+                  <button className="button-secondary" type="button" onClick={() => applyActiveTab('sources')}>Check source coverage</button>
+                </section>
+                <section>
+                  <span className="dd-card-kicker">Saved output</span>
+                  <strong>{reportHistory.length} report{reportHistory.length === 1 ? '' : 's'}</strong>
+                  <small>Latest activity {formatDateTime(activeCase?.updatedAt || activeCase?.createdAt)}</small>
+                </section>
+              </aside>
             </div>
           ) : null}
 
-          {workflowSteps.some((step) => step.id === activeTab) ? (
+          {workflowSteps.some((step) => step.id === contentTab) ? (
             <FollowTheMoneyWorkspace
               caseId={activeCaseId}
-              activeStage={activeTab}
+              activeStage={contentTab}
               reportId={analysisResult?.reportId || selectedHistoryReportId}
               subjectName={subjectName}
               subjectType={subjectType}
             />
           ) : null}
 
-          {activeTab === 'overview' && (
+          {contentTab === 'legacy-overview' && !showExistingCaseReview && (
             <div className="stack">
               {/* Simple path: one button, one consolidated result. The six-stage
                   workspace below/behind it is untouched. */}
@@ -1696,37 +1814,42 @@ export function DueDiligencePage({
                 onCompleted={loadCases}
               />
 
-              <Card className="module-card module-card__wide dd-pipeline-card">
-                <Group justify="space-between" align="center" wrap="wrap">
-                  <div>
-                    <Text fw={600}>Analysis pipeline</Text>
-                    <Text size="sm" c="dimmed">
-                      Progress across internal checks and external sources.
-                    </Text>
-                  </div>
-                  <RingProgress
-                    size={86}
-                    thickness={8}
-                    roundCaps
-                    sections={[{ value: analysisProgress, color: 'civic' }]}
-                    label={
-                      <Text size="sm" fw={600} ta="center">
-                        {analysisProgress}%
+              <DdSectionExpander
+                title="Analysis progress"
+                summary="Internal checks and external-source collection."
+                meta={`${analysisProgress}%`}
+                defaultOpen={analysisProgress > 0 && analysisProgress < 100}
+              >
+                <Card className="module-card module-card__wide dd-pipeline-card">
+                  <Group justify="space-between" align="center" wrap="wrap">
+                    <div>
+                      <Text fw={600}>Analysis pipeline</Text>
+                      <Text size="sm" c="dimmed">
+                        Progress across internal checks and external sources.
                       </Text>
-                    }
-                  />
-                </Group>
-              </Card>
+                    </div>
+                    <RingProgress
+                      size={86}
+                      thickness={8}
+                      roundCaps
+                      sections={[{ value: analysisProgress, color: 'civic' }]}
+                      label={
+                        <Text size="sm" fw={600} ta="center">
+                          {analysisProgress}%
+                        </Text>
+                      }
+                    />
+                  </Group>
+                </Card>
+              </DdSectionExpander>
 
               {activeCaseId ? (
+                <DdSectionExpander
+                  title="Case details"
+                  summary="Subject identity, ownership, status, and administrative actions."
+                  meta={caseStatus}
+                >
                   <div className="module-card dd-case-profile">
-                  <div className="card-header">
-                    <div>
-                        <span className="dd-card-kicker">Case record</span>
-                        <h3>Subject and ownership</h3>
-                        <p className="muted">Keep the identity used for source matching precise and reviewable.</p>
-                    </div>
-                  </div>
                   <div className="metric-row">
                     <span>Case ID</span>
                     <strong>{activeCaseId}</strong>
@@ -1845,12 +1968,33 @@ export function DueDiligencePage({
                     </button>
                   </div>
                   {caseNotice ? <div className={`module-alert module-alert--${caseNoticeTone}`} role={caseNoticeTone === 'error' ? 'alert' : 'status'}>{caseNotice}</div> : null}
-                </div>
+                  </div>
+                </DdSectionExpander>
               ) : null}
             </div>
           )}
 
-          {activeTab === 'checks' && (
+          {contentTab === 'checks' ? (
+            <div className="dd-baseline-workspace">
+              <DdFullCheckPanel
+                caseId={activeCaseId}
+                subjectLabel={getCaseDisplayName(activeCase) || subjectName}
+                onCompleted={loadCases}
+              />
+              <aside className="dd-baseline-workspace__guidance">
+                <span className="dd-card-kicker">Evidence first</span>
+                <h3>One baseline collection</h3>
+                <p>Collect available records, then inspect source coverage before treating any match as a finding.</p>
+                <ul>
+                  <li>A source error or unavailable parser is not a zero-result search.</li>
+                  <li>Name-only matches stay unresolved until an analyst reviews them.</li>
+                  <li>Automated triage supports prioritization; it is never the decision.</li>
+                </ul>
+              </aside>
+            </div>
+          ) : null}
+
+          {contentTab === 'legacy-checks' && (
             <div className="stack dd-investigation">
               <div className="module-card module-card__wide dd-investigation-hero">
                 <div className="card-header">
@@ -1933,7 +2077,7 @@ export function DueDiligencePage({
                     <p className="muted">Network + watchlist match signals.</p>
                   </div>
                 </div>
-                <details className="dashboard-detail" open>
+                <details className="dashboard-detail">
                   <summary>Network matches ({crmMatches.length})</summary>
                   <div className="dashboard-detail__body">
                     <div className="table">
@@ -1963,7 +2107,7 @@ export function DueDiligencePage({
                   </div>
                 </details>
 
-                <details className="dashboard-detail" open>
+                <details className="dashboard-detail">
                   <summary>Watchlist matches ({competitorMatches.length})</summary>
                   <div className="dashboard-detail__body">
                     <div className="table">
@@ -2059,7 +2203,7 @@ export function DueDiligencePage({
             </div>
           )}
 
-          {activeTab === 'media' && (
+          {contentTab === 'media' && (
             <div className="stack">
               <div className="module-card module-card__wide section-intro">
                 <div className="card-header">
@@ -2252,14 +2396,14 @@ export function DueDiligencePage({
               </div>
             </div>
           )}
-          {activeTab === 'graph' && (
+          {contentTab === 'graph' && (
             <InvestigationGraph
               caseId={activeCaseId}
               reportId={analysisResult?.reportId || selectedHistoryReportId}
             />
           )}
 
-          {activeTab === 'reports' && (
+          {contentTab === 'reports' && (
             <div className="stack dd-reports">
               <div className="module-card module-card__wide dd-report-hero">
                 <div className="card-header">
@@ -2510,7 +2654,7 @@ export function DueDiligencePage({
             </div>
           )}
 
-          {activeTab === 'decision' && (
+          {contentTab === 'decision' && (
             <div className="module-card dd-decision-card">
               <span className="dd-card-kicker">Step 4 · Decision</span>
               <h3>Record a defensible outcome</h3>
@@ -2551,7 +2695,7 @@ export function DueDiligencePage({
             </div>
           )}
 
-          {activeTab === 'advanced' && (
+          {contentTab === 'advanced' && (
             <div className="stack">
               <details className="dashboard-detail">
                 <summary>Configure subject context</summary>

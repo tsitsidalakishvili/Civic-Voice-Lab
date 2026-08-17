@@ -1,6 +1,6 @@
-# Freedom Square Platform
+# Civic Voice Lab Platform
 
-Freedom Square is a modular civic-operations platform for relationship management, campaigns, deliberation, due diligence, and connected-data analysis. The production application is a React/Vite single-page app backed by FastAPI and Neo4j.
+Civic Voice Lab is a modular civic-operations platform for relationship management, campaigns, deliberation, due diligence, and connected-data analysis. The production application is a React/Vite single-page app backed by FastAPI and Neo4j.
 
 ## Start here
 

@@ -25,7 +25,7 @@ python "React\Back end\tools\manage_access_users.py" add person@example.org
 
 The command asks for the password twice without displaying it. Upload the resulting ignored `React/Back end/access_users.local.json` as the Render Secret File. Never commit or send this file through chat or email.
 
-An empty `FS_AUTH_PUBLIC_RULES` uses the private defaults: only health checks and authentication status are public. Any future public form must be enabled route-by-route after privacy, consent, minimisation, rate-limiting, and abuse controls are reviewed.
+An empty `FS_AUTH_PUBLIC_RULES` selects the password-mode defaults: `GET:/health`, `GET:/healthz`, `GET:/platform/auth/status`, and `POST:/auth/login`. Keep it empty for this private baseline. Any future public form must be enabled route-by-route after privacy, consent, minimisation, rate-limiting, and abuse controls are reviewed.
 
 ## Vercel frontend
 
@@ -33,11 +33,10 @@ Set:
 
 ```text
 VITE_API_BASE_URL=https://<your-render-service>
-VITE_AUTH_ENABLED=true
-VITE_AUTH_MODE=password
+VITE_PUBLIC_BUSINESS_ROUTES_ENABLED=false
 ```
 
-Do **not** define passwords, password hashes, the access-user file, or session secrets in Vercel. Vite variables are shipped to every visitor. Authentication uses the backend and an HttpOnly session cookie.
+`VITE_AUTH_ENABLED` and `VITE_AUTH_MODE` are not read by the current frontend and should not be configured. Set `VITE_PUBLIC_BUSINESS_ROUTES_ENABLED=true` only when intentionally exposing a public UI route and after adding the corresponding narrow backend public rule; the browser flag never authorizes an API request. Do **not** define passwords, password hashes, the access-user file, or session secrets in Vercel. Vite variables are shipped to every visitor. Authentication uses the backend and an HttpOnly session cookie.
 
 ## Verification before resuming
 

@@ -4,7 +4,7 @@ Research date: 2026-08-07
 
 ## Decision
 
-Freedom Square should use the maintained OpenSanctions data standards and
+Civic Voice Lab should use the maintained OpenSanctions data standards and
 matching libraries as a toolkit, not deploy the historical Aleph monolith and
 not replace the evidence model already stored in Neo4j.
 

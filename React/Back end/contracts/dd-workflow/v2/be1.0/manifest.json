@@ -2,8 +2,8 @@
   "contractVersion": "dd-workflow.v2",
   "readFixtureVersion": "dd-workflow.v2-be0.4",
   "mutationContractVersion": "dd-workflow.v2-be1.0",
-  "artifactVersion": "dd-workflow.v2-be1.0-rc2",
-  "schemaStatus": "be1_review_candidate_rc2",
+  "artifactVersion": "dd-workflow.v2-be1.0",
+  "schemaStatus": "mutation_contract_frozen",
   "runtimeFeatureFlag": "FS_DD_WORKFLOW_V2_ENABLED",
   "runtimeDefaultEnabled": false,
   "compatibility": {

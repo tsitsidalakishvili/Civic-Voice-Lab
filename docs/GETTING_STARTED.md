@@ -17,7 +17,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.auth.example .env.auth
-python -m uvicorn app:app --reload --host 127.0.0.1 --port 8010
+python -m uvicorn deliberation.api.app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
 Frontend:
@@ -34,10 +34,11 @@ Set `VITE_API_BASE_URL=http://localhost:8010` in `React/Front end/.env.developme
 
 | Variable | Purpose |
 | --- | --- |
-| `DELIBERATION_NEO4J_URI` | Neo4j connection URI |
-| `DELIBERATION_NEO4J_USER` or `DELIBERATION_NEO4J_USERNAME` | Database identity |
-| `DELIBERATION_NEO4J_PASSWORD` | Database secret |
-| `DELIBERATION_NEO4J_DATABASE` | Target database |
+| `DELIBERATION_DB_MODE=sandbox` | Selects Neo4j Sandbox and disables Aura fallback |
+| `NEO4J_SANDBOX_URI` | Sandbox Bolt URI from its connection card |
+| `NEO4J_SANDBOX_USER` | Sandbox identity (normally `neo4j`) |
+| `NEO4J_SANDBOX_PASSWORD` | Temporary Sandbox password |
+| `NEO4J_SANDBOX_DATABASE` | Target database (normally `neo4j`) |
 | `CORS_ORIGINS` | Exact comma-separated frontend origins |
 | `FS_AUTH_ENABLED=1` | Enables API authentication; default is enabled |
 | `FS_AUTH_MODE` | `bearer`, `api_key`, `password`, or configured organization OIDC mode |
@@ -49,7 +50,7 @@ Never deploy with incomplete credentials for the selected authentication mode. U
 
 ## Optional settings by capability
 
-- Small-team password sessions: `FS_ACCESS_USERS_FILE`, `FS_SESSION_SECRET`, cookie/CSRF settings, and the ignored access-user file managed by `tools/manage_access_users.py`.
+- Small-team password sessions: `FS_ACCESS_USERS_FILE`, `FS_SESSION_SECRET`, cookie/CSRF settings, and the ignored access-user file managed by `tools/manage_access_users.py`. During a Neo4j outage, sessions created from the local access-user file (or approved shared credential) can use a bounded, single-process fallback. It retains only hashed session identifiers and minimized audit metadata, observes normal credential and session expiry, and is cleared on backend restart; it is not durable-session or audit storage.
 - Organization OIDC: provider, issuer, client ID/secret, redirect URI, Google hosted-domain or Entra tenant restrictions, and exact allowed-email JSON. Do not enable Google and Entra simultaneously.
 - Compliance: purpose enforcement and field masking default on; retention execution remains a separate controlled switch.
 - Translation: `FS_TRANSLATION_ENABLED`, `FS_TRANSLATION_WORKER_URL`, `FS_TRANSLATION_EN_KA_MODEL`, `FS_TRANSLATION_KA_EN_MODEL`, size limits.
@@ -77,6 +78,6 @@ Bearer/API-key modes use their configured header. Password and OIDC modes use th
 
 - **Frontend “Failed to fetch”:** verify `VITE_API_BASE_URL`, backend availability, and exact `CORS_ORIGINS`.
 - **401/403:** confirm auth mode, client header, secret, access gate, and public-rule syntax.
-- **503 from API:** inspect `/healthz`; verify Neo4j URI, credentials, database, TLS/firewall, and Aura allowlists.
+- **503 from API:** inspect `/healthz`; verify the Sandbox has not expired and its URI, credentials, database, and TLS/firewall settings are correct.
 - **Connector unavailable:** check its capability endpoint where available and verify credentials, permission acknowledgement, egress, and kill switch.
 - **Translation unavailable:** run the worker at the configured URL or disable translation explicitly.

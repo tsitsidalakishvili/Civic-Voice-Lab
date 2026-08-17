@@ -73,7 +73,7 @@ export function ApifyFacebookConnector({ caseId, onImported }) {
   const activeRun = useMemo(() => runs.find((run) => !['completed', 'failed', 'start-failed'].includes(run.status)), [runs])
 
   return <section className="social-connector">
-    <header className="social-connector__header"><div><span className="dd-card-kicker">Discovery source · public content</span><h3><IconBrandFacebook size={19}/> Facebook public-group evidence</h3><p>Import verified output through the Freedom Square backend. Display names are source aliases—not confirmed people—and absence of a result is not evidence.</p></div><button className="button-secondary" type="button" onClick={load} disabled={loading}><IconRefresh size={14}/>{loading ? 'Checking…' : 'Refresh'}</button></header>
+    <header className="social-connector__header"><div><span className="dd-card-kicker">Discovery source · public content</span><h3><IconBrandFacebook size={19}/> Facebook public-group evidence</h3><p>Import verified output through the Civic Voice Lab backend. Display names are source aliases—not confirmed people—and absence of a result is not evidence.</p></div><button className="button-secondary" type="button" onClick={load} disabled={loading}><IconRefresh size={14}/>{loading ? 'Checking…' : 'Refresh'}</button></header>
     {error?<div className="module-alert"><IconAlertTriangle size={15}/>{error}</div>:null}
     <div className="social-connector__policy"><IconShieldLock size={17}/><span><strong>No Facebook or Apify credentials are collected here.</strong> Public groups only. No private groups, member lists, cookies, discovery mode, or direct browser calls. Raw records are not retained.</span></div>
 

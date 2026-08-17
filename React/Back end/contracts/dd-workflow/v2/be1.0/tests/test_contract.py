@@ -273,7 +273,7 @@ class OpenApiBoundaryTests(unittest.TestCase):
                 self.assertIn("#/components/parameters/PurposeId", refs, (method, path))
                 self.assertIn("#/components/parameters/IdempotencyKey", refs, (method, path))
                 self.assertIn("#/components/parameters/CsrfToken", refs, (method, path))
-                self.assertEqual("be1-review-candidate-rc2", operation["x-contract-status"])
+                self.assertEqual("be1-mutation-contract-frozen", operation["x-contract-status"])
 
     def test_security_and_replay_semantics_are_explicit(self):
         boundary = OPENAPI["x-security-boundary"]
@@ -351,8 +351,8 @@ class OpenApiBoundaryTests(unittest.TestCase):
 class FreezeAndPrivacyTests(unittest.TestCase):
     def test_manifest_and_freeze_hash(self):
         self.assertEqual("dd-workflow.v2-be1.0", MANIFEST["mutationContractVersion"])
-        self.assertEqual("dd-workflow.v2-be1.0-rc2", MANIFEST["artifactVersion"])
-        self.assertEqual("be1_review_candidate_rc2", MANIFEST["schemaStatus"])
+        self.assertEqual("dd-workflow.v2-be1.0", MANIFEST["artifactVersion"])
+        self.assertEqual("mutation_contract_frozen", MANIFEST["schemaStatus"])
         expected = (ROOT / "FREEZE.sha256").read_text(encoding="ascii").strip()
         self.assertRegex(expected, r"^[0-9a-f]{64}$")
         self.assertEqual(expected, aggregate_hash(ROOT, MANIFEST["freezeFiles"]))

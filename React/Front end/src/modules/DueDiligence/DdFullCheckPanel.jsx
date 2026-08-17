@@ -71,8 +71,8 @@ function FullCheckSourceRow({ source }) {
 }
 
 /**
- * One-click due diligence: press a single button, read a single consolidated
- * result. Sits alongside the six-stage workspace rather than replacing it.
+ * One baseline collection: press a single button, then review coverage and
+ * evidence before promoting any signal into a finding.
  */
 export function DdFullCheckPanel({ caseId, subjectLabel, onCompleted }) {
   const [running, setRunning] = useState(false)
@@ -118,21 +118,20 @@ export function DdFullCheckPanel({ caseId, subjectLabel, onCompleted }) {
   const sources = result?.sources || []
   const riskLevel = summary.riskLevel || 'Unknown'
   const sourcesChecked = Number(summary.sourcesChecked ?? sources.length) || 0
-  const totalHits = Number(summary.totalHits) || 0
   const sourcesWithData = Number(summary.sourcesWithData) || 0
   const needsSetup = Number(summary.sourcesRequiringConfiguration) || 0
-  const headline = `${riskLevel} risk - ${hitLabel(totalHits)} across ${sourcesChecked} sources`
+  const headline = `${sourcesWithData} of ${sourcesChecked} sources returned evidence`
 
   return (
     <div className="module-card module-card__wide dd-full-check">
       <div className="card-header">
         <div>
-          <span className="dd-card-kicker">One-click check</span>
-          <h3>Run full check</h3>
+          <span className="dd-card-kicker">Baseline collection</span>
+          <h3>Collect available evidence</h3>
           <p className="muted">
-            Checks every available source for{' '}
-            {subjectLabel ? <strong>{subjectLabel}</strong> : 'the selected case'} in one
-            go and returns a single summary. No setup needed.
+            Checks approved sources for{' '}
+            {subjectLabel ? <strong>{subjectLabel}</strong> : 'the selected case'} and
+            keeps unavailable sources distinct from confirmed zero results.
           </p>
         </div>
       </div>
@@ -145,7 +144,7 @@ export function DdFullCheckPanel({ caseId, subjectLabel, onCompleted }) {
           disabled={!caseId || running}
         >
           <IconPlayerPlay size={16} />
-          {running ? 'Running full check...' : 'Run full check'}
+          {running ? 'Collecting evidence…' : 'Run baseline collection'}
         </button>
         {!caseId ? (
           <span className="muted">Select or create a case first.</span>
@@ -155,7 +154,7 @@ export function DdFullCheckPanel({ caseId, subjectLabel, onCompleted }) {
             open.
           </span>
         ) : (
-          <span className="muted">All sources, one button, one result.</span>
+          <span className="muted">Review source coverage and identity matches after collection.</span>
         )}
       </div>
 
@@ -175,10 +174,10 @@ export function DdFullCheckPanel({ caseId, subjectLabel, onCompleted }) {
               <span>/100</span>
             </div>
             <div>
-              <span className="dd-card-kicker">Consolidated result</span>
+              <span className="dd-card-kicker">Automated triage — not a decision</span>
               <h3>{headline}</h3>
               <p>
-                {`${sourcesWithData} of ${sourcesChecked} sources returned data.`}
+                {`${riskLevel} triage · ${Number(summary.riskScore) || 0}/100. `}
                 {needsSetup
                   ? ` ${needsSetup} ${needsSetup === 1 ? 'source needs' : 'sources need'} setup by your operator.`
                   : ''}

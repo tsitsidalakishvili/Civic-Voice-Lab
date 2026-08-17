@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Freedom Square brings civic and organizational workflows into one connected workspace. It supports teams that need to organize people, design outreach, collect structured public input, investigate entities and evidence, and analyze relationships. Because these workflows can involve sensitive personal and political data, least-privilege access and human review are core operating requirements.
+Civic Voice Lab brings civic and organizational workflows into one connected workspace. It supports teams that need to organize people, design outreach, collect structured public input, investigate entities and evidence, and analyze relationships. Because these workflows can involve sensitive personal and political data, least-privilege access and human review are core operating requirements.
 
 ## Product modules
 

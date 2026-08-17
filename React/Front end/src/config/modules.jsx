@@ -147,15 +147,9 @@ export const buildModuleSections = (t) => ({
       // Land on the screen that can actually start work. The previous default,
       // 'sources', dropped every user into stage one of the expert workflow.
       defaultTab: 'overview',
-      sections: [
-        { label: t('nav.dd.start'), type: 'tab', value: 'overview', hint: t('nav.dd.startHint') },
-        { label: t('nav.dd.evidence'), type: 'tab', value: 'checks', hint: t('nav.dd.evidenceHint') },
-        { label: t('nav.dd.report'), type: 'tab', value: 'graph', hint: t('nav.dd.reportHint') },
-        { label: t('nav.dd.decision'), type: 'tab', value: 'decision', hint: t('nav.dd.decisionHint') },
-        { label: t('nav.dd.history'), type: 'tab', value: 'reports', hint: t('nav.dd.historyHint') },
-        { label: t('nav.dd.media'), type: 'tab', value: 'sources', hint: t('nav.dd.mediaHint') },
-        { label: t('nav.dd.advanced'), type: 'tab', value: 'advanced', hint: t('nav.dd.advancedHint') },
-      ],
+      // DD owns one contextual workflow inside the workspace. Keeping this
+      // empty prevents a second, competing navigation system in the app shell.
+      sections: [],
     },
   'data-hub': {
     title: t('module.dataHub'),
